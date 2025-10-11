@@ -85,3 +85,6 @@ select.slim{padding:6px 8px;font-size:13px;}
 .member-pick{display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:8px;border:1px solid #1d3c30;border-radius:10px;background:#0b1412;}
 .member-pick label{margin:0;}
 .member-pick .role{min-width:140px;}
+/* CER list readability */
+.col-riparto { white-space: normal; line-height: 1.25; }
+.col-quota   { font-weight: 700; }
