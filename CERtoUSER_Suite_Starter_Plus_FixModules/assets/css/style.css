@@ -116,3 +116,38 @@ select.slim{padding:6px 8px;font-size:13px;}
 }
 .row-prog{display:block;}
 .row-prog .card{margin-top:8px;}
+/* ===== OVERRIDE SPECIFICO PER LISTE CRM e CER ===== */
+
+/* CRM: 6 colonne fisse (Cliente, POD, Comune, Cabina, Ruolo, Azioni) */
+#customers-list { display: grid; gap: 10px; }
+#customers-list .row{
+  display: grid;
+  grid-template-columns:
+    minmax(260px, 2fr)   /* Cliente */
+    minmax(180px, 1.2fr) /* POD */
+    minmax(140px, 1fr)   /* Comune */
+    minmax(140px, 1fr)   /* Cabina */
+    minmax(120px, .9fr)  /* Ruolo */
+    auto;                /* Azioni */
+  gap: 10px; align-items: center;
+}
+#customers-list .row.header > div{ border-bottom:1px solid #1d3c30; padding-bottom:6px; }
+
+/* CER: 6 colonne (Denominazione, Cabina, Comune, Riparto, Quota, Azioni) */
+#cer-list { display: grid; gap: 10px; }
+#cer-list .row{
+  display: grid;
+  grid-template-columns:
+    minmax(260px, 2fr)   /* Denominazione (con CF) */
+    minmax(160px, 1fr)   /* Cabina */
+    minmax(160px, 1fr)   /* Comune */
+    minmax(220px, 1.5fr) /* Riparto (può andare su 2 righe) */
+    minmax(100px, .8fr)  /* Quota */
+    auto;                /* Azioni */
+  gap: 10px; align-items: center;
+}
+#cer-list .row.header > div{ border-bottom:1px solid #1d3c30; padding-bottom:6px; }
+
+/* Azioni leggibili e su una riga quando c'è spazio */
+#customers-list .row .actions,
+#cer-list .row .actions { display:flex; gap:8px; flex-wrap:wrap; }
