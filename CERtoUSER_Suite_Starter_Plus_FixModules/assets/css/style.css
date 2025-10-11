@@ -42,7 +42,6 @@ input,select,textarea{background:#0b1412;color:var(--txt);border:1px solid #1e41
 .table{display:grid;gap:8px;margin-top:8px;}
 .row{
   display:grid;
-  /* colonne: Nome | POD | Comune | Cabina | Ruolo | Azioni */
   grid-template-columns: 1.6fr 1.1fr .9fr .9fr .8fr auto;
   gap:8px; align-items:center;
 }
@@ -75,7 +74,7 @@ input,select,textarea{background:#0b1412;color:var(--txt);border:1px solid #1e41
 .flex-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 select.slim{padding:6px 8px;font-size:13px;}
 
-/* Colonne dedicate (leggibilità) */
+/* Colonne dedicate */
 .col-name{white-space:normal;line-height:1.25;}
 .col-name strong{font-size:15px;}
 .col-name small{font-size:12px;color:var(--muted);}
