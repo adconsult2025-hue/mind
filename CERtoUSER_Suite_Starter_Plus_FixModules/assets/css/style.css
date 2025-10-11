@@ -151,3 +151,51 @@ select.slim{padding:6px 8px;font-size:13px;}
 /* Azioni leggibili e su una riga quando c'è spazio */
 #customers-list .row .actions,
 #cer-list .row .actions { display:flex; gap:8px; flex-wrap:wrap; }
+/* ====== OVERRIDES FINALI PER LISTE CRM & CER ====== */
+
+/* Tipografia compatta per le tabelle */
+#customers-list .row, #cer-list .row { font-size: 14px; }
+#customers-list .row.header, #cer-list .row.header { font-size: 14px; }
+
+/* Pulsanti più piccoli e sempre visibili */
+#customers-list .actions .btn, #cer-list .actions .btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 12px;
+}
+
+/* CRM: 6 colonne fisse (Cliente | POD | Comune | Cabina | Ruolo | Azioni) */
+#customers-list { display: grid; gap: 10px; }
+#customers-list .row,
+#customers-list .row.header {
+  display: grid;
+  grid-template-columns:
+    minmax(240px, 2fr)   /* Cliente */
+    minmax(160px, 1.2fr) /* POD */
+    minmax(120px, 1fr)   /* Comune */
+    minmax(120px, 1fr)   /* Cabina */
+    minmax(110px, .8fr)  /* Ruolo */
+    auto;                /* Azioni */
+  gap: 10px; align-items: center;
+}
+#customers-list .row > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#customers-list .row .col-name { white-space: normal; line-height: 1.25; }
+#customers-list .row .actions { display:flex; gap:8px; flex-wrap:wrap; }
+
+/* CER: 6 colonne (Denominazione | Cabina | Comune | Riparto | Quota | Azioni) */
+#cer-list { display: grid; gap: 10px; }
+#cer-list .row,
+#cer-list .row.header {
+  display: grid;
+  grid-template-columns:
+    minmax(240px, 2fr)   /* Denominazione */
+    minmax(140px, 1fr)   /* Cabina */
+    minmax(140px, 1fr)   /* Comune */
+    minmax(220px, 1.6fr) /* Riparto */
+    minmax(90px, .7fr)   /* Quota */
+    auto;                /* Azioni */
+  gap: 10px; align-items: center;
+}
+#cer-list .row > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#cer-list .row .col-name, #cer-list .row .col-riparto { white-space: normal; line-height: 1.25; }
+#cer-list .row .actions { display:flex; gap:8px; flex-wrap:wrap; }
