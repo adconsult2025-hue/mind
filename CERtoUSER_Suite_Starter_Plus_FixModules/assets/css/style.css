@@ -88,3 +88,31 @@ select.slim{padding:6px 8px;font-size:13px;}
 /* CER list readability */
 .col-riparto { white-space: normal; line-height: 1.25; }
 .col-quota   { font-weight: 700; }
+/* Liste CRM — maggiore leggibilità */
+.table{display:grid;gap:10px;margin-top:10px;}
+.row{
+  display:grid;
+  grid-template-columns:
+    minmax(260px, 2fr)   /* Cliente */
+    minmax(180px, 1.2fr) /* POD   */
+    minmax(140px, 1fr)   /* Comune*/
+    minmax(140px, 1fr)   /* Cabina*/
+    minmax(120px, .9fr)  /* Ruolo */
+    auto;                /* Azioni*/
+  gap:10px; align-items:center;
+}
+.table .row.header{font-weight:800;letter-spacing:.2px;opacity:.95;}
+.table .row.header>div{border-bottom:1px solid #1d3c30;padding-bottom:6px;}
+.table .row>div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+.col-name{white-space:normal;line-height:1.25;}
+.col-name strong{font-size:16px;}
+.col-name small{font-size:12px;color:var(--muted);}
+.col-comune,.col-cabina,.col-ruolo{color:#eaf7f2;}
+
+.badge-pod{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  letter-spacing:.2px;padding:5px 12px;background:#0e1a21;color:#bfe3ff;border:1px solid #1f3a4a;
+}
+.row-prog{display:block;}
+.row-prog .card{margin-top:8px;}
