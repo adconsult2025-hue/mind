@@ -105,3 +105,33 @@ select.slim { padding:6px 8px; font-size: 13px; }
 /* Riga espansa del cronoprogramma sotto la riga cliente */
 .row-prog { display: block; }
 .row-prog .card { margin-top: 6px; }
+/* === Leggibilità elenco clienti === */
+.row {
+  grid-template-columns: 1.6fr 1.1fr .9fr .9fr .8fr auto; /* più spazio a Nome e POD */
+}
+
+.table .row > div {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table .row.header { font-weight: 800; letter-spacing: .2px; }
+
+/* Nome: permetti wrap su due righe */
+.col-name { white-space: normal; line-height: 1.25; }
+.col-name strong { font-size: 15px; }
+.col-name small  { font-size: 12px; color: var(--muted); }
+
+/* POD in monospace + pill più visibile */
+.badge-pod {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  letter-spacing: .2px;
+  padding: 4px 10px;
+  background:#0e1a21;
+  color:#bfe3ff;
+  border: 1px solid #1f3a4a;
+}
+
+/* Migliora contrasto delle celle testo */
+.col-comune, .col-cabina, .col-ruolo { color: #eaf7f2; }
