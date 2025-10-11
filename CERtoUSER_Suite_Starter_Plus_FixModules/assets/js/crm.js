@@ -136,7 +136,6 @@ form.onsubmit = (e) => {
   saveCustomers(customers);
   form.reset();
   delete form.dataset.editing;
-  // se c'era un filtro attivo, svuotalo per non nascondere la nuova riga
   if (searchEl) searchEl.value = '';
   render();
 };
