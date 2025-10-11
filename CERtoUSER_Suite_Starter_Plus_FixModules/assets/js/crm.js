@@ -1,11 +1,12 @@
 import { allCustomers, saveCustomers, uid, progressCustomers, saveProgressCustomers } from './storage.js';
 
-const form = document.getElementById('form-customer');
-const listEl = document.getElementById('customers-list');
-const searchEl = document.getElementById('search');
+const form    = document.getElementById('form-customer');
+const listEl  = document.getElementById('customers-list');
+const searchEl= document.getElementById('search');
 
 let customers = allCustomers();
 
+/* ----- UI Helpers ----- */
 function rowHeader() {
   const r = document.createElement('div');
   r.className = 'row header';
@@ -56,20 +57,19 @@ function renderCustProgress(c){
   return wrap;
 }
 
+/* ----- Row ----- */
 function rowItem(c) {
   const r = document.createElement('div');
   r.className = 'row';
   r.innerHTML = `
     <div class="col-name" title="${c.nome}">
       <strong>${c.nome}</strong><br/>
-      <small>${c.tipo} — ${c.email || ''} ${c.tel ? ('· ' + c.tel) : ''}</small>
+      <small>${c.tipo||''} ${c.email?('— '+c.email):''} ${c.tel?('· '+c.tel):''}</small>
     </div>
-    <div class="col-pod">
-      <span class="badge badge-pod" title="${c.pod}">${c.pod}</span>
-    </div>
-    <div class="col-comune" title="${c.comune || ''}">${c.comune || ''}</div>
-    <div class="col-cabina" title="${c.cabina || ''}">${c.cabina || ''}</div>
-    <div class="col-ruolo"><span class="badge green">${c.ruolo || 'Consumer'}</span></div>
+    <div class="col-pod"><span class="badge badge-pod" title="${c.pod}">${c.pod}</span></div>
+    <div class="col-comune" title="${c.comune||''}">${c.comune||''}</div>
+    <div class="col-cabina" title="${c.cabina||''}">${c.cabina||''}</div>
+    <div class="col-ruolo"><span class="badge green">${c.ruolo||'Consumer'}</span></div>
     <div class="actions">
       <button class="btn ghost" data-edit="${c.id}">Modifica</button>
       <button class="btn ghost" data-prog="${c.id}">Cronoprogramma</button>
@@ -82,9 +82,16 @@ function rowItem(c) {
     customers = customers.filter(x => x.id !== c.id);
     saveCustomers(customers); render();
   };
-  r.querySelector('[data-edit]').onclick = () => editCustomer(c);
 
-  // Toggle cronoprogramma sotto la riga
+  r.querySelector('[data-edit]').onclick = () => {
+    for (const [k,v] of Object.entries(c)) {
+      const el = form.elements.namedItem(k);
+      if (el) el.value = v;
+    }
+    form.dataset.editing = c.id;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   r.querySelector('[data-prog]').onclick = () => {
     const next = r.nextElementSibling;
     if (next && next.classList.contains('row-prog')) { next.remove(); return; }
@@ -101,44 +108,51 @@ function rowItem(c) {
   return r;
 }
 
+/* ----- Render ----- */
 function render() {
-  const q = (searchEl.value||'').toLowerCase().trim();
+  const q = (searchEl?.value||'').toLowerCase().trim();
   listEl.innerHTML = '';
   listEl.appendChild(rowHeader());
   customers
-    .filter(c => !q || [c.nome, c.pod, c.comune, c.cabina, c.tipo].some(x => (x||'').toLowerCase().includes(q)))
+    .filter(c => !q || [c.nome,c.pod,c.comune,c.cabina,c.tipo,c.ruolo].some(x => (x||'').toLowerCase().includes(q)))
     .forEach(c => listEl.appendChild(rowItem(c)));
 }
 
-function editCustomer(c) {
-  for (const [k,v] of Object.entries(c)) {
-    const el = form.elements.namedItem(k);
-    if (el) el.value = v;
-  }
-  form.dataset.editing = c.id;
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
+/* ----- Submit ----- */
 form.onsubmit = (e) => {
   e.preventDefault();
-  const data = Object.fromEntries(new FormData(form).entries());
-  data.id = form.dataset.editing || uid('cust');
-  // POD univoco
-  const dup = customers.find(x => x.pod.trim().toUpperCase() === data.pod.trim().toUpperCase() && x.id !== data.id);
-  if (dup) { alert('POD già presente per il cliente: ' + dup.nome); return; }
-  data.pod = data.pod.trim().toUpperCase();
 
-  if (form.dataset.editing) {
-    customers = customers.map(x => x.id === data.id ? {...x, ...data} : x);
-  } else {
-    customers.push(data);
-  }
+  // lettura robusta dei campi
+  const get = (name) => (form.elements.namedItem(name)?.value || '').trim();
+
+  const data = {
+    id:    form.dataset.editing || uid('cust'),
+    tipo:  get('tipo') || 'Privato',
+    nome:  get('nome') || '(senza nome)',
+    pod:   get('pod').toUpperCase(),
+    cabina:get('cabina'),
+    comune:get('comune'),
+    email: get('email'),
+    tel:   get('tel') || get('telefono') || '',
+    ruolo: get('ruolo') || 'Consumer'
+  };
+
+  if (!data.pod) { alert('Inserisci il POD'); return; }
+  const dup = customers.find(x => x.pod === data.pod && x.id !== data.id);
+  if (dup) { alert('POD già presente per il cliente: ' + dup.nome); return; }
+
+  const idx = customers.findIndex(x => x.id === data.id);
+  if (idx >= 0) customers[idx] = {...customers[idx], ...data};
+  else customers.push(data);
+
   saveCustomers(customers);
+
   form.reset();
   delete form.dataset.editing;
-  if (searchEl) searchEl.value = '';
+  if (searchEl) searchEl.value = ''; // evita che il filtro nasconda la nuova riga
   render();
 };
 
+/* ----- Init ----- */
 searchEl && (searchEl.oninput = render);
 render();
