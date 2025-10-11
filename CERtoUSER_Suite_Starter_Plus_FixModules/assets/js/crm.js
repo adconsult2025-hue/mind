@@ -60,11 +60,16 @@ function rowItem(c) {
   const r = document.createElement('div');
   r.className = 'row';
   r.innerHTML = `
-    <div><strong>${c.nome}</strong><br/><small>${c.tipo} — ${c.email||''} ${c.tel?('· '+c.tel):''}</small></div>
-    <div><span class="badge blue">${c.pod}</span></div>
-    <div>${c.comune||''}</div>
-    <div>${c.cabina||''}</div>
-    <div><span class="badge green">${c.ruolo||'Consumer'}</span></div>
+    <div class="col-name" title="${c.nome}">
+      <strong>${c.nome}</strong><br/>
+      <small>${c.tipo} — ${c.email || ''} ${c.tel ? ('· ' + c.tel) : ''}</small>
+    </div>
+    <div class="col-pod">
+      <span class="badge badge-pod" title="${c.pod}">${c.pod}</span>
+    </div>
+    <div class="col-comune" title="${c.comune || ''}">${c.comune || ''}</div>
+    <div class="col-cabina" title="${c.cabina || ''}">${c.cabina || ''}</div>
+    <div class="col-ruolo"><span class="badge green">${c.ruolo || 'Consumer'}</span></div>
     <div class="actions">
       <button class="btn ghost" data-edit="${c.id}">Modifica</button>
       <button class="btn ghost" data-prog="${c.id}">Cronoprogramma</button>
@@ -131,8 +136,10 @@ form.onsubmit = (e) => {
   saveCustomers(customers);
   form.reset();
   delete form.dataset.editing;
+  // se c'era un filtro attivo, svuotalo per non nascondere la nuova riga
+  if (searchEl) searchEl.value = '';
   render();
 };
 
-searchEl.oninput = render;
+searchEl && (searchEl.oninput = render);
 render();
