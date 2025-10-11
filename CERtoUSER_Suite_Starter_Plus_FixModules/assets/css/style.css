@@ -91,3 +91,17 @@ input, select, textarea {
 .small-muted { color: var(--muted); font-size: 12px; }
 .flex-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 select.slim { padding:6px 8px; font-size: 13px; }
+/* Tabella elenco clienti: 6 colonne fisse */
+.table { display: grid; gap: 8px; margin-top: 8px; }
+.row { 
+  display: grid; 
+  grid-template-columns: 1.3fr .9fr .8fr .8fr .7fr auto; 
+  gap: 8px; 
+  align-items: center; 
+}
+.table .row.header { font-weight: 700; opacity: .9; }
+.table .row.header > div { border-bottom: 1px solid #1d3c30; padding-bottom: 6px; }
+
+/* Riga espansa del cronoprogramma sotto la riga cliente */
+.row-prog { display: block; }
+.row-prog .card { margin-top: 6px; }
