@@ -25,3 +25,9 @@ export function saveProgressCustomers(obj) { DB.set('progress_customers', obj); 
 
 export function progressCERs() { return DB.get('progress_cers', {}); }
 export function saveProgressCERs(obj) { DB.set('progress_cers', obj); }
+export function progressCustomers() { 
+  return JSON.parse(localStorage.getItem('progress_customers') || '{}'); 
+}
+export function saveProgressCustomers(obj) { 
+  localStorage.setItem('progress_customers', JSON.stringify(obj)); 
+}
