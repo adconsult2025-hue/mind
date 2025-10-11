@@ -1,6 +1,4 @@
-
 import { allCustomers, saveCustomers, uid, progressCustomers, saveProgressCustomers } from './storage.js';
-
 
 const form = document.getElementById('form-customer');
 const listEl = document.getElementById('customers-list');
@@ -8,73 +6,24 @@ const searchEl = document.getElementById('search');
 
 let customers = allCustomers();
 
-function render() {
-  const q = (searchEl.value||'').toLowerCase().trim();
-  const rows = [];
-  rows.push(rowHeader());
-  customers
-    .filter(c => !q || [c.nome, c.pod, c.comune, c.cabina, c.tipo].some(x => (x||'').toLowerCase().includes(q)))
-    .forEach(c => rows.push(rowItem(c)));
-  listEl.innerHTML = '';
-  rows.forEach(r => listEl.appendChild(r));
-}
-
 function rowHeader() {
   const r = document.createElement('div');
   r.className = 'row header';
-  r.innerHTML = '<div>Cliente</div><div>POD</div><div>Comune</div><div>Cabina</div><div>Ruolo</div><div>Azioni</div>';
+  r.innerHTML = `
+    <div>Cliente</div>
+    <div>POD</div>
+    <div>Comune</div>
+    <div>Cabina</div>
+    <div>Ruolo</div>
+    <div>Azioni</div>
+  `;
   return r;
 }
-
-function rowItem(c) {
-  const r = document.createElement('div');
-  r.className = 'row';
-  r.innerHTML = `\n    <div><strong>${c.nome}</strong><br/><small>${c.tipo} — ${c.email||''} ${c.tel?('· '+c.tel):''}</small></div>\n    <div><span class="badge blue">${c.pod}</span></div>\n    <div>${c.comune||''}</div>\n    <div>${c.cabina||''}</div>\n    <div><span class="badge green">${c.ruolo||'Consumer'}</span></div>\n    <div class="actions">\n      <button class="btn ghost" data-edit="${c.id}">Modifica</button>\n      <button class="btn ghost" data-prog="${c.id}">Cronoprogramma</button>\n      <button class="btn danger" data-del="${c.id}">Elimina</button>\n    </div>\n  `;
-  r.querySelector('[data-del]').onclick = () => {
-    if (!confirm('Eliminare il cliente?')) return;
-    customers = customers.filter(x => x.id !== c.id);
-    saveCustomers(customers); render();
-  };
-  r.querySelector('[data-edit]').onclick = () => editCustomer(c);
-  return r;
-}
-
-function editCustomer(c) {
-  for (const [k,v] of Object.entries(c)) {
-    const el = form.elements.namedItem(k);
-    if (el) el.value = v;
-  }
-  form.dataset.editing = c.id;
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-form.onsubmit = (e) => {
-  e.preventDefault();
-  const data = Object.fromEntries(new FormData(form).entries());
-  data.id = form.dataset.editing || uid('cust');
-  // enforce POD unique
-  const dup = customers.find(x => x.pod.trim().toUpperCase() === data.pod.trim().toUpperCase() && x.id !== data.id);
-  if (dup) { alert('POD già presente per il cliente: ' + dup.nome); return; }
-  data.pod = data.pod.trim().toUpperCase();
-
-  if (form.dataset.editing) {
-    customers = customers.map(x => x.id === data.id ? {...x, ...data} : x);
-  } else {
-    customers.push(data);
-  }
-  saveCustomers(customers);
-  form.reset();
-  delete form.dataset.editing;
-  render();
-};
-
-searchEl.oninput = render;
-render();
-
 
 function renderCustProgress(c){
   const store = progressCustomers();
   const st = store[c.id] || { p1:{a:false,b:false,c:false}, p2:{a:false,b:false,c:false}, p3:{a:false,b:false,c:false} };
+
   const wrap = document.createElement('div');
   wrap.className = 'progress';
   wrap.innerHTML = `
@@ -96,10 +45,10 @@ function renderCustProgress(c){
   `;
   wrap.querySelectorAll('input[type=checkbox]').forEach(cb=>{
     cb.onchange = () => {
-      const k = cb.dataset.k.split('.');
+      const [p,k] = cb.dataset.k.split('.');
       const cur = progressCustomers();
       const obj = cur[c.id] || { p1:{a:false,b:false,c:false}, p2:{a:false,b:false,c:false}, p3:{a:false,b:false,c:false} };
-      obj[k[0]][k[1]] = cb.checked;
+      obj[p][k] = cb.checked;
       cur[c.id] = obj;
       saveProgressCustomers(cur);
     };
@@ -107,17 +56,83 @@ function renderCustProgress(c){
   return wrap;
 }
 
-  // Add progress expander
-  const progBtn = r.querySelector('[data-prog]');
-  progBtn.onclick = () => {
-    const exists = r.nextElementSibling && r.nextElementSibling.classList.contains('row-prog');
-    if (exists) { r.nextElementSibling.remove(); return; }
-    const ph = document.createElement('div');
-    ph.className = 'row-prog';
-    ph.style.gridColumn = '1 / -1';
-    const wrap = document.createElement('div');
-    wrap.className = 'card soft';
-    wrap.appendChild(renderCustProgress(c));
-    ph.appendChild(wrap);
-    listEl.insertBefore(ph, r.nextSibling);
+function rowItem(c) {
+  const r = document.createElement('div');
+  r.className = 'row';
+  r.innerHTML = `
+    <div><strong>${c.nome}</strong><br/><small>${c.tipo} — ${c.email||''} ${c.tel?('· '+c.tel):''}</small></div>
+    <div><span class="badge blue">${c.pod}</span></div>
+    <div>${c.comune||''}</div>
+    <div>${c.cabina||''}</div>
+    <div><span class="badge green">${c.ruolo||'Consumer'}</span></div>
+    <div class="actions">
+      <button class="btn ghost" data-edit="${c.id}">Modifica</button>
+      <button class="btn ghost" data-prog="${c.id}">Cronoprogramma</button>
+      <button class="btn danger" data-del="${c.id}">Elimina</button>
+    </div>
+  `;
+
+  r.querySelector('[data-del]').onclick = () => {
+    if (!confirm('Eliminare il cliente?')) return;
+    customers = customers.filter(x => x.id !== c.id);
+    saveCustomers(customers); render();
   };
+  r.querySelector('[data-edit]').onclick = () => editCustomer(c);
+
+  // Toggle cronoprogramma sotto la riga
+  r.querySelector('[data-prog]').onclick = () => {
+    const next = r.nextElementSibling;
+    if (next && next.classList.contains('row-prog')) { next.remove(); return; }
+    const holder = document.createElement('div');
+    holder.className = 'row-prog';
+    holder.style.gridColumn = '1 / -1';
+    const card = document.createElement('div');
+    card.className = 'card soft';
+    card.appendChild(renderCustProgress(c));
+    holder.appendChild(card);
+    listEl.insertBefore(holder, r.nextSibling);
+  };
+
+  return r;
+}
+
+function render() {
+  const q = (searchEl.value||'').toLowerCase().trim();
+  listEl.innerHTML = '';
+  listEl.appendChild(rowHeader());
+  customers
+    .filter(c => !q || [c.nome, c.pod, c.comune, c.cabina, c.tipo].some(x => (x||'').toLowerCase().includes(q)))
+    .forEach(c => listEl.appendChild(rowItem(c)));
+}
+
+function editCustomer(c) {
+  for (const [k,v] of Object.entries(c)) {
+    const el = form.elements.namedItem(k);
+    if (el) el.value = v;
+  }
+  form.dataset.editing = c.id;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+form.onsubmit = (e) => {
+  e.preventDefault();
+  const data = Object.fromEntries(new FormData(form).entries());
+  data.id = form.dataset.editing || uid('cust');
+  // POD univoco
+  const dup = customers.find(x => x.pod.trim().toUpperCase() === data.pod.trim().toUpperCase() && x.id !== data.id);
+  if (dup) { alert('POD già presente per il cliente: ' + dup.nome); return; }
+  data.pod = data.pod.trim().toUpperCase();
+
+  if (form.dataset.editing) {
+    customers = customers.map(x => x.id === data.id ? {...x, ...data} : x);
+  } else {
+    customers.push(data);
+  }
+  saveCustomers(customers);
+  form.reset();
+  delete form.dataset.editing;
+  render();
+};
+
+searchEl.oninput = render;
+render();
