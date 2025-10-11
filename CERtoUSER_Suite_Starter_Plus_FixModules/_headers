@@ -1,0 +1,7 @@
+# Force UTF-8 and proper MIME
+/*
+  Content-Type: text/html; charset=utf-8
+/*.js
+  Content-Type: application/javascript; charset=utf-8
+/assets/*
+  Content-Type: text/plain; charset=utf-8

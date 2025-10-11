@@ -1,0 +1,93 @@
+/* CERtoUSER dark/green minimal */
+* { box-sizing: border-box; }
+:root {
+  --bg: #0b1211;
+  --card: #111a18;
+  --soft: #0f1514;
+  --txt: #e6f3ee;
+  --muted: #a5b5b1;
+  --accent: #14b85a;
+  --accent2: #1f9d64;
+  --danger: #e05656;
+  --shadow: 0 8px 24px rgba(0,0,0,.35);
+  --radius: 16px;
+}
+body.dark {
+  background: radial-gradient(1200px 800px at 10% 0%, #0e1715, #0b1211);
+  color: var(--txt);
+  font: 16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial;
+  padding: 0; margin: 0;
+}
+
+.app-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; position: sticky; top: 0; z-index: 5;
+  background: rgba(11,18,17,.8); backdrop-filter: blur(8px);
+  border-bottom: 1px solid #14382a;
+}
+.brand { display: flex; gap: 12px; align-items: center; }
+.logo { width: 40px; height: 40px; }
+.titles h1 { margin: 0; font-size: 20px; }
+.titles .subtitle { margin: 0; color: var(--muted); font-size: 12px; }
+.toolbar { display: flex; gap: 8px; }
+.btn {
+  background: linear-gradient(180deg, var(--accent), var(--accent2));
+  color: #02150b; font-weight: 700; text-decoration: none;
+  padding: 10px 14px; border-radius: 999px; box-shadow: var(--shadow);
+  border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+}
+.btn.ghost { background: transparent; color: var(--txt); border: 1px solid #1d3c30; }
+.btn.danger { background: #ad2e2e; color: #fff; }
+.btn:disabled { opacity: .6; cursor: default; }
+
+.container { max-width: 1180px; margin: 24px auto; padding: 0 16px; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
+@media (max-width: 980px) { .grid-2 { grid-template-columns: 1fr; } }
+.card {
+  background: var(--card);
+  border: 1px solid #14382a; border-radius: var(--radius);
+  padding: 18px; box-shadow: var(--shadow);
+}
+.card.soft { background: var(--soft); }
+.hero h2 { margin-top: 0; font-size: 24px; }
+label { display: grid; gap: 6px; margin-bottom: 12px; font-size: 14px; }
+input, select, textarea {
+  background: #0b1412; color: var(--txt);
+  border: 1px solid #1e4133; padding: 10px 12px; border-radius: 10px;
+}
+.search { min-width: 260px; }
+.row-between { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.table { display: grid; gap: 8px; margin-top: 8px; }
+.row { display: grid; grid-template-columns: 1.3fr .8fr .8fr .8fr .6fr auto; gap: 8px; align-items: center; }
+.row small { color: var(--muted); }
+.badge { padding: 4px 8px; border-radius: 999px; font-size: 12px; border: 1px solid #1d3c30; }
+.badge.green { background:#0e1d17; color:#8de0b1; }
+.badge.orange { background:#1c160e; color:#f1ca7a; }
+.badge.blue { background:#0e1a21; color:#8cc8ff; }
+.actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.note, .hint { color: var(--muted); font-size: 12px; }
+.footer { text-align: center; padding: 24px; color: var(--muted); }
+
+.members { display: grid; gap: 8px; }
+.member-pick { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px; align-items: center; padding: 8px; border: 1px solid #1d3c30; border-radius: 10px; background: #0b1412; }
+.member-pick label { margin: 0; }
+.member-pick .role { min-width: 140px; }
+
+.table .row.header { font-weight: 700; opacity: .8; }
+.table .row.header > div { border-bottom: 1px solid #1d3c30; padding-bottom: 6px; }
+.table .row > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+
+/* Progress / cronoprogramma */
+.progress {
+  display: grid; gap: 8px; margin-top: 8px;
+}
+.phase { background:#0b1412; border:1px dashed #1e4133; border-radius: 12px; padding: 10px; }
+.phase h4 { margin: 0 0 6px 0; font-size: 14px; }
+.chk { display:flex; align-items:center; gap:8px; padding:4px 0; }
+.chk input { transform: scale(1.1); }
+.sep { height:1px; background:#1d3c30; opacity:.5; margin:6px 0; }
+.small-muted { color: var(--muted); font-size: 12px; }
+.flex-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+select.slim { padding:6px 8px; font-size: 13px; }

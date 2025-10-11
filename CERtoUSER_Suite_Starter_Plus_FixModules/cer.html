@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>CER — CERtoUSER Suite</title>
+  <link rel="icon" href="assets/img/favicon.png">
+  <link rel="stylesheet" href="assets/css/style.css"/>
+  <script type="module" src="assets/js/storage.js"></script>
+  <script type="module" src="assets/js/docs.js"></script>
+  <script type="module" src="assets/js/cer.js"></script>
+</head>
+<body class="dark">
+  <header class="app-header">
+    <div class="brand">
+      <a href="index.html" class="brand-link">
+        <img src="assets/img/logo.svg" alt="CERtoUSER" class="logo"/>
+      </a>
+      <div class="titles">
+        <h1>Gestione CER</h1>
+        <p class="subtitle">Crea, configura e genera documenti</p>
+      </div>
+    </div>
+    <nav class="toolbar">
+      <a class="btn" href="crm.html">CRM</a>
+      <a class="btn" href="cer.html">CER</a>
+      <a class="btn ghost" href="index.html">HUB</a>
+    </nav>
+  </header>
+
+  <main class="container grid-2">
+    <section class="card">
+      <h2>Nuova CER</h2>
+      <form id="form-cer">
+        <div class="grid-2">
+          <label>Denominazione CER
+            <input type="text" name="nome" placeholder="CER Ponte Grande" required/>
+          </label>
+          <label>Cabina primaria
+            <input type="text" name="cabina" placeholder="CP-001" required/>
+          </label>
+          <label>Comune
+            <input type="text" name="comune" placeholder="Frosinone" required/>
+          </label>
+          <label>Codice Fiscale CER (se disponibile)
+            <input type="text" name="cf" placeholder="(opzionale)"/>
+          </label>
+          <label>Quota energia condivisa (%)
+            <input type="number" name="quota" min="1" max="100" value="60" required/>
+          </label>
+          <label>Riparti incentivi
+            <select name="riparto">
+              <option value="Produttore85_CER15">Produttore 85% / CER 15%</option>
+              <option value="Produttore70_CER30">Produttore 70% / CER 30%</option>
+              <option value="Personalizzato">Personalizzato (imposta sotto)</option>
+            </select>
+          </label>
+          <label>Trader eccedenze
+            <input type="text" name="trader" placeholder="Omnia Energia S.r.l."/>
+          </label>
+          <label>Note
+            <input type="text" name="note" placeholder="Es. modello franchising, regole particolari..."/>
+          </label>
+        </div>
+
+        <details class="card soft">
+          <summary>Riparti personalizzati</summary>
+          <div class="grid-3">
+            <label>Produttore %
+              <input type="number" name="rp_prod" min="0" max="100" value="85"/>
+            </label>
+            <label>Prosumer %
+              <input type="number" name="rp_pros" min="0" max="100" value="0"/>
+            </label>
+            <label>CER %
+              <input type="number" name="rp_cer" min="0" max="100" value="15"/>
+            </label>
+          </div>
+          <p class="hint">La somma deve essere 100%.</p>
+        </details>
+
+        <div class="card soft">
+          <h3>Seleziona membri (da CRM)</h3>
+          <div id="members-picker" class="members"></div>
+        </div>
+
+        <div class="actions">
+          <button class="btn" type="submit">Crea CER</button>
+          <button class="btn ghost" type="reset">Reset</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="row-between">
+        <h2>CER esistenti</h2>
+        <input id="search-cer" class="search" placeholder="Cerca per nome, cabina, comune..."/>
+      </div>
+      <div id="cer-list" class="table"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <small>© 2025 CERtoUSER</small>
+  </footer>
+</body>
+</html>

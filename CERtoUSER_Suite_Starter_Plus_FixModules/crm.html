@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>CRM — CERtoUSER Suite</title>
+  <link rel="icon" href="assets/img/favicon.png">
+  <link rel="stylesheet" href="assets/css/style.css"/>
+  <script type="module" src="assets/js/storage.js"></script>
+  <script type="module" src="assets/js/crm.js"></script>
+</head>
+<body class="dark">
+  <header class="app-header">
+    <div class="brand">
+      <a href="index.html" class="brand-link">
+        <img src="assets/img/logo.svg" alt="CERtoUSER" class="logo"/>
+      </a>
+      <div class="titles">
+        <h1>CRM</h1>
+        <p class="subtitle">Anagrafiche clienti & POD</p>
+      </div>
+    </div>
+    <nav class="toolbar">
+      <a class="btn" href="crm.html">CRM</a>
+      <a class="btn" href="cer.html">CER</a>
+      <a class="btn ghost" href="index.html">HUB</a>
+    </nav>
+  </header>
+
+  <main class="container grid-2">
+    <section class="card">
+      <h2>Nuovo cliente</h2>
+      <form id="form-customer">
+        <div class="grid-2">
+          <label>Tipo
+            <select name="tipo" required>
+              <option value="Privato">Privato</option>
+              <option value="P.IVA">P.IVA</option>
+              <option value="Ente">Ente</option>
+              <option value="Condominio">Condominio</option>
+            </select>
+          </label>
+          <label>Ragione sociale / Nome
+            <input type="text" name="nome" placeholder="Mario Rossi / Rossi S.r.l." required/>
+          </label>
+          <label>POD (univoco)
+            <input type="text" name="pod" placeholder="IT001E1234567890" required/>
+          </label>
+          <label>Cabina primaria
+            <input type="text" name="cabina" placeholder="CP-001"/>
+          </label>
+          <label>Comune
+            <input type="text" name="comune" placeholder="Frosinone"/>
+          </label>
+          <label>Email
+            <input type="email" name="email" placeholder="mail@cliente.it"/>
+          </label>
+          <label>Telefono
+            <input type="tel" name="tel" placeholder="+39..."/>
+          </label>
+          <label>Ruolo energetico
+            <select name="ruolo">
+              <option value="Consumer">Consumer</option>
+              <option value="Prosumer">Prosumer</option>
+              <option value="Produttore">Produttore</option>
+            </select>
+          </label>
+        </div>
+        <div class="actions">
+          <button class="btn" type="submit">Salva</button>
+          <button class="btn ghost" type="reset">Reset</button>
+        </div>
+      </form>
+      <p class="note">Regola: <strong>1 POD = 1 Cliente</strong> in questa demo. Duplicati non ammessi.</p>
+    </section>
+
+    <section class="card">
+      <div class="row-between">
+        <h2>Elenco clienti</h2>
+        <input id="search" class="search" placeholder="Cerca per nome, POD, comune..."/>
+      </div>
+      <div id="customers-list" class="table"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <small>© 2025 CERtoUSER</small>
+  </footer>
+</body>
+</html>
