@@ -1,6 +1,8 @@
+import { apiFetch } from './api.js?v=26';
+
 const API_BASE = '/api';
 
-const SAFE_MODE = typeof window !== 'undefined' && String(window.SAFE_MODE).toLowerCase() === 'true';
+const SAFE_MODE = typeof window !== 'undefined' && (window.__SAFE_MODE__ === true || String(window.SAFE_MODE).toLowerCase() === 'true');
 
 export const STATE = {
   currentClientId: null,
@@ -273,14 +275,22 @@ export async function advancePhase(cerId, phase, status, extra = {}) {
     due_date: extra.due_date !== undefined ? extra.due_date : (existing?.due_date || ''),
     notes: extra.notes !== undefined ? extra.notes : (existing?.notes || '')
   };
-  const data = await apiFetch(`${API_BASE}/workflows/advance`, {
+  const fallback = {
+    ...payload,
+    dryRun: true,
+    updatedAt: Date.now(),
+    updated_at: new Date().toISOString()
+  };
+  const response = await apiFetch(`${API_BASE}/workflows/advance`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    __safeFallback: fallback
   });
-  upsertWorkflowCache(targetCer, data);
+  const entry = response?.data ?? response;
+  upsertWorkflowCache(targetCer, entry);
   renderPhaseCards(workflowCache.get(targetCer), docsCache.get(targetCer) || new Map());
-  return data;
+  return response;
 }
 
 export function exportChecklistCSV(cerId) {
@@ -321,7 +331,7 @@ export async function openUploadDialog(cerId, phase) {
   const filename = window.prompt('Nome del documento da caricare (mock upload)?');
   if (filename === null) return;
   try {
-    const data = await apiFetch(`${API_BASE}/docs/upload`, {
+    const response = await apiFetch(`${API_BASE}/docs/upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ entity_type: 'cer', entity_id: target, phase: phaseNumber, filename })
@@ -330,7 +340,8 @@ export async function openUploadDialog(cerId, phase) {
     const group = docsCache.get(target) || new Map();
     const key = phaseNumber === null ? -1 : phaseNumber;
     const list = group.get(key) || [];
-    list.push(data);
+    const doc = response?.data ?? response;
+    list.push(doc);
     group.set(key, list);
     docsCache.set(target, group);
     renderPhaseCards(workflowCache.get(target) || new Map(), group);
@@ -380,12 +391,12 @@ function setupModals() {
       if (Number.isNaN(phaseId)) return;
       const entry = getPhaseState(activeCerId, phaseId) || {};
       try {
-        await advancePhase(activeCerId, phaseId, entry.status || 'todo', {
+        const res = await advancePhase(activeCerId, phaseId, entry.status || 'todo', {
           owner: phaseModal.owner?.value?.trim() || '',
           due_date: phaseModal.due?.value || '',
           notes: phaseModal.notes?.value || ''
         });
-        emit('cer:notify', 'Checklist aggiornata.');
+        emit('cer:notify', res?.dryRun ? 'SAFE MODE: operazione simulata, nessuna modifica salvata.' : 'Checklist aggiornata.');
         closePhaseModal();
       } catch (err) {
         emit('cer:notify', err.message || 'Errore salvataggio checklist');
@@ -507,17 +518,21 @@ function confirmAdvance(phaseId) {
   if (!phase) return;
   const ok = window.confirm(`Segnare come completata "${phase.title}"?`);
   if (!ok) return;
-  advancePhase(activeCerId, phaseId, 'done').then(() => {
-    emit('cer:notify', `${phase.title} contrassegnata come completata.`);
+  advancePhase(activeCerId, phaseId, 'done').then((res) => {
+    const message = res?.dryRun
+      ? 'SAFE MODE: operazione simulata, nessuna modifica salvata.'
+      : 'Checklist aggiornata.';
+    emit('cer:notify', message);
   }).catch(err => {
     emit('cer:notify', err.message || 'Errore durante l’aggiornamento della fase.');
   });
 }
 
 async function fetchWorkflows(cerId) {
-  const data = await apiFetch(`${API_BASE}/workflows?entity_type=cer&entity_id=${encodeURIComponent(cerId)}`);
+  const response = await apiFetch(`${API_BASE}/workflows?entity_type=cer&entity_id=${encodeURIComponent(cerId)}`);
+  const data = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
   const map = new Map();
-  (Array.isArray(data) ? data : []).forEach(item => {
+  data.forEach(item => {
     map.set(Number(item.phase), item);
   });
   workflowCache.set(cerId, map);
@@ -525,9 +540,10 @@ async function fetchWorkflows(cerId) {
 }
 
 async function loadDocs(cerId) {
-  const data = await apiFetch(`${API_BASE}/docs?entity_type=cer&entity_id=${encodeURIComponent(cerId)}`);
+  const response = await apiFetch(`${API_BASE}/docs?entity_type=cer&entity_id=${encodeURIComponent(cerId)}`);
+  const data = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
   const grouped = new Map();
-  (Array.isArray(data) ? data : []).forEach(doc => {
+  data.forEach(doc => {
     const phaseRaw = (doc.phase === null || doc.phase === undefined) ? -1 : Number(doc.phase);
     const phase = Number.isFinite(phaseRaw) ? phaseRaw : -1;
     if (!grouped.has(phase)) grouped.set(phase, []);
@@ -819,24 +835,6 @@ async function fetchJSON(url, options = {}) {
     throw err;
   }
   return payload;
-}
-
-async function apiFetch(url, options = {}) {
-  const res = await fetch(url, options);
-  let payload;
-  try {
-    payload = await res.json();
-  } catch (err) {
-    throw new Error('Risposta JSON non valida');
-  }
-  if (!res.ok || payload.ok === false) {
-    const error = payload.error || {};
-    const message = error.message || payload.error || 'Errore API';
-    const err = new Error(message);
-    err.details = error.details;
-    throw err;
-  }
-  return payload.data;
 }
 
 function getBadgeClass(status) {

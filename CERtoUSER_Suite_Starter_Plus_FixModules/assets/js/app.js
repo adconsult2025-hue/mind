@@ -2,6 +2,12 @@ export const BRAND_NAME = 'MIND';
 
 if (typeof window !== 'undefined') {
   window.BRAND_NAME = BRAND_NAME;
+  const safeModeFlag = (() => {
+    if (window.__SAFE_MODE__ === true) return true;
+    const raw = window.SAFE_MODE ?? window.__SAFE_MODE__;
+    return String(raw).toLowerCase() === 'true';
+  })();
+  window.__SAFE_MODE__ = safeModeFlag;
   let toastContainer;
   const SIMULATORI_MODULE = 'simulatori';
 
