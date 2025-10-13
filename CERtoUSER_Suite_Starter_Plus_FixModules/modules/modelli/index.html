@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MIND — Suite</title>
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/css/style.css?v=12"/>
+  <script type="module" src="/assets/js/app.js?v=12"></script>
+  <script type="module" src="/assets/js/models.js?v=12"></script>
+</head>
+<body class="dark">
+  <header class="app-header">
+    <div class="brand">
+      <a href="/" class="brand-link">
+        <img src="/assets/img/mind.svg" alt="MIND" class="logo"/>
+      </a>
+      <div class="titles">
+        <h1>Modelli documentali</h1>
+        <p class="subtitle">Versioning centralizzato e attivazione per i moduli MIND</p>
+      </div>
+    </div>
+    <nav class="toolbar">
+      <a class="btn" href="/modules/crm/">CRM</a>
+      <a class="btn" href="/modules/cer/">CER</a>
+      <a class="btn" href="/modules/modelli/">MODELLI</a>
+      <a class="btn" href="/modules/contratti/">CONTRATTI</a>
+      <a class="btn ghost" href="/">HUB</a>
+    </nav>
+  </header>
+
+  <main class="container wide">
+    <section class="card">
+      <div class="row-between">
+        <div>
+          <h2>Repository modelli</h2>
+          <p class="info-text">Gestisci caricamenti, versioni e stato attivo dei modelli utilizzati nei vari flussi.</p>
+        </div>
+        <div class="actions">
+          <button class="btn" id="btn-open-upload" type="button">Carica modello</button>
+        </div>
+      </div>
+
+      <div class="tabs filters mt-4">
+        <button class="tab-btn active" type="button" data-filter="all">Tutti</button>
+        <button class="tab-btn" type="button" data-filter="cer">CER</button>
+        <button class="tab-btn" type="button" data-filter="crm">CRM</button>
+        <button class="tab-btn" type="button" data-filter="ct3">CT3</button>
+        <button class="tab-btn" type="button" data-filter="contratti">Contratti</button>
+      </div>
+
+      <div class="table-wrap mt-4">
+        <table class="data-table" id="templates-table">
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Codice</th>
+              <th>Modulo</th>
+              <th>Versione</th>
+              <th>Stato</th>
+              <th class="nowrap">Azioni</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card soft mt-4">
+      <h2>Linee guida caricamento</h2>
+      <ul>
+        <li>I file rimangono esterni: la Suite genera un URL mock come <code>https://storage.mock/templates/&lt;code&gt;-v&lt;version&gt;.docx</code>.</li>
+        <li>Compila i placeholder principali per facilitare l'integrazione con CER e Contratti.</li>
+        <li>Ogni codice mantiene una sola versione attiva alla volta; le altre restano consultabili o eliminabili.</li>
+      </ul>
+    </section>
+  </main>
+
+  <div class="modal" id="upload-modal" aria-hidden="true">
+    <div class="modal-backdrop" data-dismiss="modal"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2>Carica nuovo modello</h2>
+        <button class="btn ghost" data-dismiss="modal" type="button">Chiudi</button>
+      </div>
+      <form id="upload-form" class="modal-body">
+        <label>Nome modello
+          <input type="text" name="name" placeholder="Regolamento CER 2025" required/>
+        </label>
+        <label>Codice univoco
+          <input type="text" name="code" placeholder="CER-REG-2025" required/>
+        </label>
+        <label>Modulo di destinazione
+          <select name="module" required>
+            <option value="cer">CER</option>
+            <option value="crm">CRM</option>
+            <option value="ct3">CT3</option>
+            <option value="contratti">Contratti</option>
+          </select>
+        </label>
+        <label>Placeholder supportati
+          <textarea name="placeholders" rows="4" placeholder="{{cliente.nome}}, {{cer.nome}}, {{oggi}}"></textarea>
+        </label>
+        <label>Contenuto modello (HTML o testo)
+          <textarea name="content" rows="6" placeholder="&lt;h1&gt;Accordo {{cer.nome}}&lt;/h1&gt;"></textarea>
+        </label>
+        <label>File di riferimento
+          <input type="file" name="file" accept=".doc,.docx,.html,.txt,.pdf"/>
+        </label>
+      </form>
+      <div class="modal-actions">
+        <button class="btn" id="btn-submit-upload" type="button">Salva versione</button>
+        <button class="btn ghost" data-dismiss="modal" type="button">Annulla</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <small>© 2025 MIND Suite</small>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<svg width="180" height="160" viewBox="0 0 180 160" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">MIND Suite logo</title>
+  <desc id="desc">Stylised head with abstract cogs and the word MIND underneath.</desc>
+  <defs>
+    <linearGradient id="grad-head" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#35c9c9"/>
+      <stop offset="100%" stop-color="#1aa0a8"/>
+    </linearGradient>
+    <linearGradient id="grad-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c067c5"/>
+      <stop offset="100%" stop-color="#7b3cc7"/>
+    </linearGradient>
+    <clipPath id="clip-head">
+      <path d="M52 20c37-22 88-3 99 40 9 35-7 73-45 77-8 1-16 0-24 2-7 2-16 8-22 14-3 3-8 2-10-2l-9-20c-1-2-3-3-5-4-21-9-33-31-28-54 4-19 17-35 37-43z"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#clip-head)" transform="translate(12 6)">
+    <rect x="0" y="0" width="140" height="140" rx="48" fill="url(#grad-head)"/>
+    <circle cx="52" cy="56" r="18" fill="rgba(11,17,20,0.35)"/>
+    <circle cx="90" cy="88" r="24" fill="rgba(11,17,20,0.25)"/>
+    <path d="M84 40a18 18 0 1 1 32 16" stroke="rgba(11,17,20,0.35)" stroke-width="6" fill="none" stroke-linecap="round"/>
+    <circle cx="94" cy="44" r="6" fill="#0b1114" opacity="0.65"/>
+    <circle cx="112" cy="60" r="5" fill="#0b1114" opacity="0.5"/>
+    <circle cx="66" cy="94" r="8" fill="url(#grad-accent)" opacity="0.85"/>
+  </g>
+  <path d="M126 70c10 11 14 28 9 43-7 20-25 32-46 33-9 0-18 2-25 6-6 3-14 10-19 16" stroke="url(#grad-accent)" stroke-width="6" stroke-linecap="round" fill="none"/>
+  <text x="90" y="150" font-family="'Inter', 'Segoe UI', sans-serif" font-size="40" font-weight="700" text-anchor="middle" fill="#e6f1f1" letter-spacing="0.25em">MIND</text>
+</svg>

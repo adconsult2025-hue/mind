@@ -3,22 +3,26 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>CERtoUSER Suite — Starter</title>
-  <link rel="icon" href="assets/img/favicon.png">
-  <link rel="stylesheet" href="assets/css/style.css?v=8"/>
+  <title>MIND — Suite</title>
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/css/style.css?v=12"/>
 </head>
 <body class="dark">
   <header class="app-header">
     <div class="brand">
-      <img src="/assets/img/logo.svg" alt="CERtoUSER" class="logo"/>
+      <a href="/" class="brand-link">
+        <img src="/assets/img/mind.svg" alt="MIND" class="logo"/>
+      </a>
       <div class="titles">
-        <h1>CERtoUSER Suite</h1>
-        <p class="subtitle">La tua energia condivisa — Starter</p>
+        <h1>MIND Suite</h1>
+        <p class="subtitle">Ecosistema operativo per comunità energetiche</p>
       </div>
     </div>
     <nav class="toolbar">
-      <a class="btn" href="crm.html">CRM</a>
-      <a class="btn" href="cer.html">CER</a>
+      <a class="btn" href="/modules/crm/">CRM</a>
+      <a class="btn" href="/modules/cer/">CER</a>
+      <a class="btn" href="/modules/modelli/">MODELLI</a>
+      <a class="btn" href="/modules/contratti/">CONTRATTI</a>
       <a class="btn ghost" href="#" onclick="alert('CT3.0: in arrivo.'); return false;">CT 3.0</a>
       <a class="btn ghost" href="#" onclick="alert('Simulatori: in arrivo.'); return false;">SIMULATORI</a>
       <a class="btn ghost" href="#" onclick="alert('Impianti: in arrivo.'); return false;">IMPIANTI</a>
@@ -27,20 +31,22 @@
 
   <main class="container">
     <section class="card hero">
-      <h2>Benvenuto!</h2>
-      <p>Questa è una versione <strong>starter</strong> totalmente statica. Puoi già:</p>
+      <h2>Benvenuto nella Suite MIND</h2>
+      <p>Questa versione <strong>starter</strong> riunisce CRM, configurazione CER e gestione documentale in un unico hub.</p>
       <ul>
-        <li>Gestire i <strong>Clienti</strong> (anagrafiche, POD, contatti) nel CRM;</li>
-        <li>Creare <strong>CER</strong> a partire dai clienti (Produttori/Prosumer/Consumer);</li>
-        <li>Generare <strong>Statuto</strong> e <strong>Regolamento</strong> della CER in formato <code>.doc</code>.</li>
+        <li>Gestire i <strong>Clienti</strong> e i POD direttamente dal modulo CRM.</li>
+        <li>Configurare <strong>CER</strong> con impianti, riparti e documentazione.</li>
+        <li>Centralizzare i <strong>Modelli</strong> documentali e attivarli per i vari moduli.</li>
+        <li>Generare <strong>Contratti</strong> dinamici con sostituzione automatica dei placeholder.</li>
       </ul>
-      <p>I dati sono salvati nel tuo browser (<em>localStorage</em>).</p>
-      <p class="note">Nota: i documenti sono <em>bozze</em> da far validare al consulente legale e/o notaio.</p>
+      <p>I dati demo rimangono in locale (<em>localStorage</em>) e gli upload vengono simulati con URL mock.</p>
+      <p class="note">I documenti generati sono <em>bozze</em> da far validare al consulente legale e/o notaio.</p>
     </section>
   </main>
 
   <footer class="footer">
-    <small>© 2025 CERtoUSER — Bozza demo locale. DM 7/12/2023 e regolazioni ARERA/GSE: verificare aggiornamenti.</small>
+    <small>© 2025 MIND Suite — Demo locale. DM 7/12/2023 e regolazioni ARERA/GSE: verificare aggiornamenti.</small>
   </footer>
+  <script type="module" src="/assets/js/app.js?v=12"></script>
 </body>
 </html>
