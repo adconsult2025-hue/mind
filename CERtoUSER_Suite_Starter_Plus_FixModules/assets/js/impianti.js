@@ -1,4 +1,4 @@
-import { safeGuardAction } from './safe.js';
+import { safeGuardAction, isDryRunResult } from './safe.js';
 
 const API_BASE = '/api';
 
@@ -313,6 +313,12 @@ async function submitProductionForm(event) {
     }));
     const payload = await res.json();
     if (!res.ok || payload.ok === false) throw new Error(payload.error?.message || 'Errore salvataggio produzione');
+    if (isDryRunResult(res, payload)) {
+      productionFeedback.textContent = 'SAFE MODE attivo: registrazione produzione simulata (nessun dato salvato).';
+      productionFeedback.classList.remove('error-text');
+      toast('SAFE MODE attivo: salvataggio produzione in dry-run.');
+      return;
+    }
     state.production.set(state.selectedPlantId, payload.data);
     // aggiorna entry in elenco
     const index = state.plants.findIndex(p => p.id === state.selectedPlantId);

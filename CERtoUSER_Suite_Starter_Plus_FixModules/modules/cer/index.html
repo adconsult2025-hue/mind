@@ -6,7 +6,78 @@
   <title>MIND — Suite</title>
   <link rel="icon" href="/assets/img/mind.png">
   <link rel="stylesheet" href="/assets/css/style.css?v=22"/>
-  <script>window.__SAFE_MODE__ = location.hostname.includes('preview') || location.hostname.includes('staging');</script>
+  <script>
+    (function(){
+      const watchers = [];
+      const parseFlag = (val) => {
+        if (typeof val === 'string') {
+          const normalized = val.trim().toLowerCase();
+          if (normalized === 'true' || normalized === '1') { return true; }
+          if (normalized === 'false' || normalized === '0' || normalized === '') { return false; }
+          return null;
+        }
+        if (typeof val === 'boolean') { return val; }
+        if (typeof val === 'number') {
+          if (val === 1) { return true; }
+          if (val === 0) { return false; }
+        }
+        return null;
+      };
+      const notify = (flag) => {
+        const safe = !!flag;
+        window.__SAFE_MODE__ = safe;
+        if (typeof window.CustomEvent === 'function') {
+          try {
+            window.dispatchEvent(new CustomEvent('safe-mode:change', { detail: { safeMode: safe } }));
+          } catch (err) {
+            console.warn('SAFE_MODE event dispatch failed', err);
+          }
+        }
+        watchers.slice().forEach((fn) => {
+          try { fn(safe); } catch (err) { console.error('SAFE_MODE watcher failed', err); }
+        });
+      };
+      window.__onSafeModeChange = (fn) => {
+        if (typeof fn === 'function') {
+          watchers.push(fn);
+          if (typeof window.__SAFE_MODE__ !== 'undefined') {
+            try { fn(window.__SAFE_MODE__); } catch (err) { console.error('SAFE_MODE watcher failed', err); }
+          }
+        }
+      };
+      const host = (location && location.hostname ? location.hostname.toLowerCase() : '');
+      const envValue = (typeof window !== 'undefined' && window._env_ && typeof window._env_.SAFE_MODE !== 'undefined')
+        ? window._env_.SAFE_MODE
+        : undefined;
+      const resolvedEnv = parseFlag(envValue);
+      const netlifyContext = (() => {
+        if (!host) { return null; }
+        if (host === 'localhost' || host === '127.0.0.1') { return false; }
+        if (host.endsWith('.netlify.app') || host.endsWith('.netlify.dev')) {
+          if (host.includes('--')) { return true; }
+        }
+        if (host.includes('preview') || host.includes('staging')) { return true; }
+        return null;
+      })();
+      notify(resolvedEnv ?? netlifyContext ?? false);
+      const syncServerFlag = async () => {
+        if (typeof fetch !== 'function') { return; }
+        try {
+          const res = await fetch('/.netlify/functions/safe-mode', { cache: 'no-store' });
+          if (!res.ok) { return; }
+          const json = await res.json();
+          const raw = (json && (json.safeMode !== undefined ? json.safeMode : (json.SAFE_MODE !== undefined ? json.SAFE_MODE : json.safe_mode)));
+          const serverFlag = parseFlag(raw);
+          if (serverFlag !== null && serverFlag !== window.__SAFE_MODE__) {
+            notify(serverFlag);
+          }
+        } catch (error) {
+          console.warn('SAFE_MODE sync failed', error);
+        }
+      };
+      syncServerFlag();
+    })();
+  </script>
   <script type="module" src="/assets/js/app.js?v=22"></script>
   <script type="module" src="/assets/js/storage.js?v=22"></script>
   <script type="module" src="/assets/js/docs.js?v=22"></script>
@@ -365,10 +436,30 @@
   </footer>
   <div id="envBanner" class="env-banner" hidden></div>
   <script>
-    (function(){ try{
-      const el=document.getElementById('envBanner');
-      if (window.__SAFE_MODE__) { el.hidden=false; el.classList.add('safe'); el.textContent='SAFE MODE attivo: tutte le operazioni di scrittura sono in DRY-RUN.'; }
-    }catch(e){}})();
+    (function(){
+      try {
+        const el = document.getElementById('envBanner');
+        if (!el) { return; }
+        const apply = (isSafe) => {
+          if (isSafe) {
+            el.hidden = false;
+            el.classList.add('safe');
+            el.textContent = 'SAFE MODE attivo: tutte le operazioni di scrittura sono in DRY-RUN.';
+          } else {
+            el.hidden = true;
+            el.classList.remove('safe');
+            el.textContent = '';
+          }
+        };
+        if (typeof window.__onSafeModeChange === 'function') {
+          window.__onSafeModeChange(apply);
+        } else {
+          apply(Boolean(window.__SAFE_MODE__));
+        }
+      } catch (error) {
+        console.warn('SAFE_MODE banner init failed', error);
+      }
+    })();
   </script>
 </body>
 </html>

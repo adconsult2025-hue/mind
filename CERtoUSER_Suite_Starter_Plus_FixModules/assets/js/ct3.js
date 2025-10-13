@@ -5,7 +5,7 @@ import {
   getFallbackPhases,
   getFallbackPresetDocs
 } from './ct3_rules.js?v=21';
-import { safeGuardAction } from './safe.js';
+import { safeGuardAction, isDryRunResult } from './safe.js';
 
 const API_BASE = '/api';
 const STORAGE_CLIENTS_KEY = 'customers';
@@ -506,6 +506,19 @@ async function saveCase() {
     }));
     const json = await res.json();
     if (!res.ok || !json?.ok) throw new Error(json?.error?.message || 'Salvataggio fallito');
+    if (isDryRunResult(res, json)) {
+      const fallbackId = state.caseId || 'dry-run-case';
+      const saved = enrichCase({ ...payload, id: fallbackId });
+      state.caseId = fallbackId;
+      state.currentCase = saved;
+      if (elements.caseSelector) elements.caseSelector.value = fallbackId;
+      if (elements.statusSelect) elements.statusSelect.value = saved.status || 'draft';
+      if (elements.phaseSelect) elements.phaseSelect.value = saved.checklist_state?.phase || 'F0';
+      populateFormFromCase(saved);
+      renderCaseMeta();
+      notify('SAFE MODE attivo: salvataggio pratica simulato (dry-run).');
+      return;
+    }
     const saved = enrichCase(json.data || {});
     state.caseId = saved.id;
     state.currentCase = saved;
@@ -534,6 +547,10 @@ async function handleStatusChange() {
     }));
     const json = await res.json();
     if (!res.ok || !json?.ok) throw new Error(json?.error?.message || 'Cambio stato non riuscito');
+    if (isDryRunResult(res, json)) {
+      notify('SAFE MODE attivo: cambio stato simulato (dry-run).');
+      return;
+    }
     notify('Stato pratica aggiornato.');
   } catch (err) {
     console.error(err);
@@ -559,7 +576,12 @@ async function runEligibility() {
     }));
     const json = await res.json();
     if (!res.ok || !json?.ok) throw new Error(json?.error?.message || 'Motore regole non disponibile');
-    response = json.data;
+    if (isDryRunResult(res, json)) {
+      notify('SAFE MODE attivo: verifica requisiti simulata con motore locale.');
+      response = fallbackEligibility(payload);
+    } else {
+      response = json.data;
+    }
   } catch (err) {
     console.warn('Motore regole indisponibile, uso fallback', err);
     response = fallbackEligibility(payload);
@@ -876,10 +898,26 @@ function handleUploadDoc(phaseId, doc) {
       }));
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error?.message || 'Upload fallito');
-      const uploaded = json.data;
+      let uploaded = json.data;
+      if (isDryRunResult(res, json)) {
+        uploaded = {
+          doc_id: `dry-run-${Date.now()}`,
+          phase: phaseId,
+          code: doc.code,
+          name: doc.name,
+          filename,
+          status: 'uploaded',
+          url: '#',
+          uploaded_at: new Date().toISOString(),
+          dryRun: true
+        };
+        notify('SAFE MODE attivo: caricamento documento simulato (dry-run).');
+      }
       registerUploadedDoc(uploaded, { phase: phaseId, code: doc.code, name: doc.name });
       renderDocumentTimeline();
-      notify('Documento caricato (mock).');
+      if (!uploaded?.dryRun) {
+        notify('Documento caricato (mock).');
+      }
     } catch (err) {
       console.error(err);
       notify(err.message || 'Upload non riuscito.');
@@ -902,9 +940,16 @@ async function markDocStatus(doc, status) {
     }));
     const json = await res.json();
     if (!res.ok || !json?.ok) throw new Error(json?.error?.message || 'Aggiornamento stato fallito');
-    registerUploadedDoc(json.data, { phase: doc.phase, code: doc.code, name: doc.name });
+    let updatedDoc = json.data;
+    if (isDryRunResult(res, json)) {
+      updatedDoc = { ...existing, status, updated_at: new Date().toISOString(), dryRun: true };
+      notify('SAFE MODE attivo: aggiornamento stato documento simulato.');
+    }
+    registerUploadedDoc(updatedDoc, { phase: doc.phase, code: doc.code, name: doc.name });
     renderDocumentTimeline();
-    notify(`Documento ${status === 'approved' ? 'approvato' : 'rifiutato'}.`);
+    if (!updatedDoc?.dryRun) {
+      notify(`Documento ${status === 'approved' ? 'approvato' : 'rifiutato'}.`);
+    }
   } catch (err) {
     console.error(err);
     notify(err.message || 'Impossibile aggiornare lo stato del documento.');
