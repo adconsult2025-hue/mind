@@ -398,12 +398,22 @@ async function renderPlantCrono(plantId) {
   }
   setCronoFeedback('Caricamento cronoprogramma…');
   try {
-    const [workflows, docs] = await Promise.all([
+    const [workflowRes, docsRes] = await Promise.all([
       apiFetch(`${API_BASE}/plants/workflows?plant_id=${encodeURIComponent(plantId)}`),
       apiFetch(`${API_BASE}/docs?entity_type=plant&entity_id=${encodeURIComponent(plantId)}`)
     ]);
-    state.workflows.set(plantId, Array.isArray(workflows) ? workflows : []);
-    state.docs.set(plantId, Array.isArray(docs) ? docs : []);
+    const workflows = Array.isArray(workflowRes?.data)
+      ? workflowRes.data
+      : Array.isArray(workflowRes)
+        ? workflowRes
+        : [];
+    const docs = Array.isArray(docsRes?.data)
+      ? docsRes.data
+      : Array.isArray(docsRes)
+        ? docsRes
+        : [];
+    state.workflows.set(plantId, workflows);
+    state.docs.set(plantId, docs);
     buildPlantCronoUI(plantId);
     setCronoFeedback('Cronoprogramma aggiornato.');
   } catch (err) {
