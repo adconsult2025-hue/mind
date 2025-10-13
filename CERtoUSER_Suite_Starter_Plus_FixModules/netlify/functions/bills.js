@@ -1,4 +1,5 @@
 const { billsStore, uid } = require('./_store');
+const { guard } = require('./_safe');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -30,7 +31,54 @@ function sanitizePod(value) {
   return cleaned;
 }
 
-exports.handler = async function handler(event) {
+function normalizeBillData(data = {}) {
+  const trim = (value) => (typeof value === 'string' ? value.trim() : value || '');
+  const toNumber = (value, digits = 2) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return 0;
+    return Number(num.toFixed(digits));
+  };
+
+  const kwhF1 = toNumber(data.kwh_f1);
+  const kwhF2 = toNumber(data.kwh_f2);
+  const kwhF3 = toNumber(data.kwh_f3);
+  const calculatedTotal = Number((kwhF1 + kwhF2 + kwhF3).toFixed(2));
+  const hasTotal = data.kwh_total !== undefined && data.kwh_total !== null;
+  const kwhTotal = hasTotal ? toNumber(data.kwh_total) : calculatedTotal;
+
+  const periodStart = data.period_start ? String(data.period_start).slice(0, 10) : '';
+  const periodEnd = data.period_end ? String(data.period_end).slice(0, 10) : '';
+  const period = data.period || (periodStart ? periodStart.slice(0, 7) : '');
+  const year = data.year || (period ? Number(period.split('-')[0]) : null);
+
+  return {
+    customer_name: trim(data.customer_name),
+    tax_code: trim(data.tax_code),
+    vat: trim(data.vat),
+    pod: sanitizePod(trim(data.pod)),
+    supply_address: trim(data.supply_address),
+    supplier: trim(data.supplier),
+    bill_number: trim(data.bill_number),
+    period_start: periodStart,
+    period_end: periodEnd,
+    period,
+    year,
+    issue_date: data.issue_date ? String(data.issue_date).slice(0, 10) : '',
+    due_date: data.due_date ? String(data.due_date).slice(0, 10) : '',
+    contracted_power_kw: toNumber(data.contracted_power_kw, 3),
+    tariff_code: trim(data.tariff_code),
+    kwh_f1: kwhF1,
+    kwh_f2: kwhF2,
+    kwh_f3: kwhF3,
+    kwh_total: kwhTotal,
+    kwh_total_calculated: calculatedTotal,
+    total_amount_eur: toNumber(data.total_amount_eur),
+    iva_rate: toNumber(data.iva_rate),
+    confidence: data.confidence || {}
+  };
+}
+
+exports.handler = guard(async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: headers(), body: '' };
   }
@@ -94,14 +142,12 @@ exports.handler = async function handler(event) {
           f3: 0.92
         }
       };
-      const kwhTotal = Number((stub.kwh_f1 + stub.kwh_f2 + stub.kwh_f3).toFixed(2));
-      stub.kwh_total = kwhTotal;
-      stub.pod = sanitizePod(stub.pod);
-      return response(200, { ok: true, data: stub });
+      const normalized = normalizeBillData(stub);
+      return response(200, { ok: true, data: normalized });
     }
 
     return response(405, { ok: false, error: 'Metodo non supportato' });
   } catch (error) {
     return response(500, { ok: false, error: error.message || 'Errore server' });
   }
-};
+});

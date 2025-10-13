@@ -1,3 +1,6 @@
+import { STATE as CRONO_STATE } from './cronoprogramma.js?v=26';
+import { apiFetch } from './api.js?v=26';
+
 const API_BASE = '/api';
 
 const PLANT_PHASES = [
@@ -148,6 +151,14 @@ function init() {
 
 document.addEventListener('DOMContentLoaded', init);
 
+window.addEventListener('cronoprogramma:doc-added', (event) => {
+  handlePlantDocEvent(event.detail);
+});
+
+window.addEventListener('cronoprogramma:doc-updated', (event) => {
+  handlePlantDocEvent(event.detail);
+});
+
 async function loadPlants(force = false) {
   try {
     setFeedback('Caricamento impianti…');
@@ -239,6 +250,7 @@ function renderPlantsTable() {
 
 function selectPlant(plantId) {
   state.selectedPlantId = plantId;
+  CRONO_STATE.currentPlantId = plantId;
   renderPlantsTable();
   loadPlantProduction(plantId);
   renderPlantCrono(plantId);
@@ -304,13 +316,19 @@ async function submitProductionForm(event) {
   try {
     productionFeedback.textContent = 'Invio in corso…';
     productionFeedback.classList.remove('error-text');
-    const res = await fetch(`${API_BASE}/plants/${encodeURIComponent(state.selectedPlantId)}/production`, {
+    const res = await safeGuardAction(() => fetch(`${API_BASE}/plants/${encodeURIComponent(state.selectedPlantId)}/production`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ date: dateValue, kwh: kwhValue })
-    });
+    }));
     const payload = await res.json();
     if (!res.ok || payload.ok === false) throw new Error(payload.error?.message || 'Errore salvataggio produzione');
+    if (isDryRunResult(res, payload)) {
+      productionFeedback.textContent = 'SAFE MODE attivo: registrazione produzione simulata (nessun dato salvato).';
+      productionFeedback.classList.remove('error-text');
+      toast('SAFE MODE attivo: salvataggio produzione in dry-run.');
+      return;
+    }
     state.production.set(state.selectedPlantId, payload.data);
     // aggiorna entry in elenco
     const index = state.plants.findIndex(p => p.id === state.selectedPlantId);
@@ -369,6 +387,7 @@ function clearPlantCrono() {
   if (!cronoContainer) return;
   cronoContainer.innerHTML = '';
   setCronoFeedback('Seleziona un impianto per consultare il cronoprogramma.');
+  CRONO_STATE.currentPlantId = '';
 }
 
 const PLANT_WORKFLOWS_API = `${API_BASE}/plant_workflows`;
@@ -393,6 +412,33 @@ async function renderPlantCrono(plantId) {
   } catch (err) {
     setCronoFeedback(err.message || 'Errore nel caricamento del cronoprogramma', true);
   }
+}
+
+function upsertPlantDoc(doc) {
+  const pid = String(doc.plant_id || doc.entity_id || '');
+  if (!pid) return;
+  const list = state.docs.get(pid) || [];
+  const index = list.findIndex(item => item.doc_id === doc.doc_id);
+  if (index >= 0) {
+    list[index] = { ...list[index], ...doc };
+  } else {
+    list.push(doc);
+  }
+  state.docs.set(pid, list);
+  if (pid === state.selectedPlantId) {
+    buildPlantCronoUI(pid);
+  }
+}
+
+function handlePlantDocEvent(detail) {
+  if (!detail || String(detail.entity_type || '') !== 'plant') return;
+  const normalized = {
+    ...detail,
+    plant_id: detail.entity_id || detail.plant_id,
+    entity_type: 'plant',
+    entity_id: String(detail.entity_id || detail.plant_id || '')
+  };
+  upsertPlantDoc(normalized);
 }
 
 function buildPlantCronoUI(plantId) {
@@ -427,7 +473,7 @@ function renderPhaseTemplate(phase, entry, docs) {
     <p class="info-text"><strong>Referente:</strong> ${owner}<br/><strong>Scadenza:</strong> ${due}</p>
     ${renderDocsTable(phase.id, docs)}
     <div class="actions">
-      <button class="btn ghost" type="button" data-action="upload-doc" data-phase="${phase.id}">Carica documento</button>
+      <button class="btn ghost" type="button" data-action="upload-doc" data-phase="${phase.id}" data-doc-upload data-entity="plant" data-entity-id="${state.selectedPlantId || ''}">Carica documento</button>
       <button class="btn ghost" type="button" data-action="advance-phase" data-phase="${phase.id}" data-status="in-review">${reviewLabel}</button>
       <button class="btn" type="button" data-action="advance-phase" data-phase="${phase.id}" data-status="done" ${completeDisabled}>Completa fase</button>
     </div>
@@ -455,11 +501,12 @@ function renderDocsTable(phaseId, docs) {
     .map(doc => {
       const statusInfo = getDocStatusInfo(doc.status);
       const openLink = doc.url ? `<a class="btn ghost" href="${escapeHtml(doc.url)}" target="_blank" rel="noopener">Apri</a>` : '';
+      const plantId = escapeHtml(doc.plant_id || state.selectedPlantId || '');
       const actions = `
         <div class="doc-actions">
           ${openLink}
-          <button class="btn ghost" type="button" data-action="mark-doc" data-status="approved" data-doc="${doc.doc_id}" data-phase="${phaseId}">Approva</button>
-          <button class="btn ghost" type="button" data-action="mark-doc" data-status="rejected" data-doc="${doc.doc_id}" data-phase="${phaseId}">Rifiuta</button>
+          <button class="btn ghost" type="button" data-action="mark-doc" data-status="approved" data-doc="${doc.doc_id}" data-phase="${phaseId}" data-doc-mark="${doc.doc_id}" data-entity="plant" data-entity-id="${plantId}">Approva</button>
+          <button class="btn ghost" type="button" data-action="mark-doc" data-status="rejected" data-doc="${doc.doc_id}" data-phase="${phaseId}" data-doc-mark="${doc.doc_id}" data-entity="plant" data-entity-id="${plantId}">Rifiuta</button>
         </div>
       `;
       return `
@@ -656,9 +703,10 @@ async function advancePlantPhase(plantId, phase, status) {
     await apiFetch(`${PLANT_WORKFLOWS_API}/advance`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plant_id: plantId, phase, status })
+      body: JSON.stringify(payload),
+      __safeFallback: fallback
     });
-    toast('Stato fase aggiornato.');
+    toast(res?.dryRun ? 'SAFE MODE: operazione simulata, nessuna modifica salvata.' : 'Checklist aggiornata.');
     await renderPlantCrono(plantId);
   } catch (err) {
     if (err.code === 'GATE_NOT_MET') {
@@ -726,25 +774,6 @@ function csvEscape(value) {
     return `"${str}"`;
   }
   return str;
-}
-
-async function apiFetch(url, options = {}) {
-  const res = await fetch(url, options);
-  let payload;
-  try {
-    payload = await res.json();
-  } catch (err) {
-    const error = new Error('Risposta JSON non valida');
-    error.code = 'INVALID_JSON';
-    throw error;
-  }
-  if (!res.ok || payload.ok === false) {
-    const error = new Error(payload.error?.message || 'Errore API');
-    error.code = payload.error?.code;
-    error.details = payload.error?.details;
-    throw error;
-  }
-  return payload.data;
 }
 
 function toast(message) {

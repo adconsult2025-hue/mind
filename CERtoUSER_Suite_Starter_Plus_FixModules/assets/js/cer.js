@@ -1,6 +1,6 @@
 import { allCustomers, allCER, saveCER, uid, progressCERs, saveProgressCERs } from './storage.js';
 import { saveDocFile, statutoTemplate, regolamentoTemplate, attoCostitutivoTemplate, adesioneTemplate, delegaGSETemplate, contrattoTraderTemplate, informativaGDPRTemplate } from './docs.js';
-import { initCronoprogrammaUI, renderCronoprogramma } from './cronoprogramma.js?v=18';
+import { STATE as CRONO_STATE, initCronoprogrammaUI, renderCronoprogramma } from './cronoprogramma.js?v=26';
 
 const API_BASE = '/api';
 
@@ -18,6 +18,8 @@ let formSubmitBtn;
 let docsCerSelect;
 let docsActions;
 let docsProgress;
+let cerDocsTable;
+let cerDocsEmpty;
 
 let cronSelect;
 let cronContainer;
@@ -34,6 +36,7 @@ let tabPanels = [];
 let customers = [];
 let cers = [];
 let cerTemplates = [];
+const cerDocsStore = new Map();
 
 const plantState = {
   period: currentPeriod(),
@@ -65,6 +68,28 @@ const modalEls = {
 };
 
 document.addEventListener('DOMContentLoaded', init);
+
+document.addEventListener('click', (event) => {
+  const btn = event.target.closest('[data-open-cer]');
+  if (!btn) return;
+  event.preventDefault();
+  const id = btn.getAttribute('data-open-cer');
+  if (!id) return;
+  const url = `/modules/cer/index.html?cer_id=${encodeURIComponent(id)}`;
+  if (window.location.href.includes(url)) {
+    loadCerDetail(id);
+    return;
+  }
+  window.location.href = url;
+});
+
+window.addEventListener('cronoprogramma:doc-added', (event) => {
+  handleCerDocEvent(event.detail);
+});
+
+window.addEventListener('cronoprogramma:doc-updated', (event) => {
+  handleCerDocEvent(event.detail);
+});
 
 function init() {
   form = document.getElementById('form-cer');
@@ -103,6 +128,12 @@ function init() {
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) loadCerTemplates();
   });
+
+  const params = new URLSearchParams(window.location.search);
+  const cerId = params.get('cer_id');
+  if (cerId) {
+    loadCerDetail(cerId);
+  }
 }
 
 async function loadCerTemplates() {
@@ -198,14 +229,22 @@ function bindCerForm() {
     cer.membri = picks;
     cer.impianti = plants;
 
-    cers.push(cer);
+    if (form.dataset.editing) {
+      cers = cers.map(existing => (existing.id === cer.id ? { ...existing, ...cer } : existing));
+    } else {
+      cers.push(cer);
+    }
     saveCER(cers);
-    form.reset();
-    updatePlantEmptyState();
-    updateCerValidationUI();
     renderCERList();
     refreshCerOptions();
-    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    if (form.dataset.editing) {
+      loadCerDetail(cer.id);
+    } else {
+      form.reset();
+      updatePlantEmptyState();
+      updateCerValidationUI();
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    }
   };
 }
 
@@ -243,6 +282,8 @@ function setupPlantForm() {
       plantFormList.innerHTML = '';
       updatePlantEmptyState();
       updateCerValidationUI();
+      delete form.dataset.editing;
+      CRONO_STATE.currentCerId = '';
     }, 0);
   });
   updatePlantEmptyState();
@@ -458,6 +499,7 @@ function renderCERList() {
         <div>${rip}<br/>${impBadge}</div>
         <div>${cer.quota}%</div>
         <div class="actions">
+          <button class="btn ghost" data-open-cer="${cer.id}">Scheda</button>
           <button class="btn ghost" data-docs="${cer.id}">Documenti</button>
           <button class="btn danger" data-del="${cer.id}">Elimina</button>
         </div>
@@ -474,10 +516,96 @@ function renderCERList() {
     });
 }
 
+function loadCerDetail(cerId) {
+  if (!form) return null;
+  const target = cers.find(cer => cer.id === cerId);
+  if (!target) {
+    toast('CER non trovata nella memoria locale.');
+    return null;
+  }
+  form.dataset.editing = target.id;
+  const fields = ['nome', 'cabina', 'comune', 'cf', 'quota', 'riparto', 'trader', 'note', 'template_code', 'rp_prod', 'rp_pros', 'rp_cer'];
+  fields.forEach((name) => {
+    const el = form.elements.namedItem(name);
+    if (!el) return;
+    const value = target[name] ?? '';
+    if (name === 'quota' && !value) {
+      el.value = 60;
+      return;
+    }
+    if (name.startsWith('rp_') && target.riparto !== 'Personalizzato') {
+      el.value = el.defaultValue || '';
+      return;
+    }
+    el.value = value;
+  });
+  const ripartoSelect = form.elements.namedItem('riparto');
+  if (ripartoSelect) {
+    ripartoSelect.value = target.riparto || ripartoSelect.value;
+  }
+  if (target.riparto === 'Personalizzato') {
+    const rpProd = form.elements.namedItem('rp_prod');
+    const rpPros = form.elements.namedItem('rp_pros');
+    const rpCer = form.elements.namedItem('rp_cer');
+    if (rpProd) rpProd.value = target.rp_prod ?? rpProd.value;
+    if (rpPros) rpPros.value = target.rp_pros ?? rpPros.value;
+    if (rpCer) rpCer.value = target.rp_cer ?? rpCer.value;
+  }
+  const memberMap = new Map((target.membri || []).map((m) => [m.id, m]));
+  membersBox?.querySelectorAll('.member-pick').forEach((row) => {
+    const cb = row.querySelector('input[type=checkbox]');
+    const roleSel = row.querySelector('.role');
+    if (!cb) return;
+    const id = cb.dataset.id;
+    const member = memberMap.get(id);
+    cb.checked = Boolean(member);
+    if (member && roleSel) {
+      roleSel.value = member.ruolo || roleSel.value;
+    }
+  });
+  handleMemberChange();
+  if (plantFormList) {
+    plantFormList.innerHTML = '';
+    (target.impianti || []).forEach((plant) => {
+      addPlantRow({
+        id: plant.id,
+        nome: plant.nome,
+        titolareId: plant.titolareId || plant.titolare || plant.titolareID || '',
+        potenza_kwp: plant.potenza_kwp
+      });
+    });
+  }
+  updatePlantOwnerOptions();
+  updateCerValidationUI();
+  form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  CRONO_STATE.currentCerId = target.id;
+  if (docsCerSelect) {
+    docsCerSelect.value = target.id;
+    renderDocumentsForCer(target.id);
+  }
+  if (cerDocsTable) {
+    cerDocsTable.dataset.entityId = target.id;
+  }
+  if (cronSelect) {
+    cronSelect.value = target.id;
+    renderCronoprogramma(target.id);
+  }
+  if (plantsCerSelect) {
+    plantsCerSelect.value = target.id;
+    plantState.selectedCerId = target.id;
+    if (typeof loadPlantsForCer === 'function') {
+      loadPlantsForCer(target.id);
+    }
+  }
+  return target;
+}
+
 function initDocumentsModule() {
   docsCerSelect = document.getElementById('docs-cer-select');
   docsActions = document.getElementById('docs-actions');
   docsProgress = document.getElementById('docs-progress');
+  cerDocsTable = document.getElementById('cer-docs-table');
+  cerDocsEmpty = document.getElementById('cer-docs-empty');
   if (!docsCerSelect) return;
   docsCerSelect.addEventListener('change', () => {
     renderDocumentsForCer(docsCerSelect.value);
@@ -514,10 +642,16 @@ function renderDocumentsForCer(cerId) {
   const cer = cers.find(c => c.id === cerId);
   docsActions.innerHTML = '';
   docsProgress.innerHTML = '';
+  if (cerDocsTable) {
+    cerDocsTable.dataset.entityId = cerId || '';
+  }
   if (!cer) {
     docsActions.innerHTML = '<p class="info-text">Seleziona una CER per generare documenti.</p>';
+    if (cerDocsTable) cerDocsTable.innerHTML = '';
+    if (cerDocsEmpty) cerDocsEmpty.hidden = false;
     return;
   }
+  CRONO_STATE.currentCerId = cer.id;
   const membri = cer.membri || [];
   docsActions.innerHTML = `
     <button class="btn" data-doc="statuto">Statuto (.doc)</button>
@@ -578,6 +712,94 @@ function renderDocumentsForCer(cerId) {
   };
 
   renderCerProgress(docsProgress, cer);
+  renderCerDocs(cer.id);
+  loadCerDocs(cer.id);
+}
+
+function cerDocStatusBadge(status = 'uploaded') {
+  const normalized = String(status || 'uploaded');
+  if (normalized === 'approved') return '<span class="badge green">Approvato</span>';
+  if (normalized === 'rejected') return '<span class="badge danger">Respinto</span>';
+  return '<span class="badge blue">Caricato</span>';
+}
+
+function renderCerDocs(cerId) {
+  if (!cerDocsTable) return;
+  const cid = String(cerId || '');
+  const docs = cerDocsStore.get(cid) || [];
+  cerDocsTable.innerHTML = '';
+  if (!docs.length) {
+    if (cerDocsEmpty) cerDocsEmpty.hidden = false;
+    return;
+  }
+  if (cerDocsEmpty) cerDocsEmpty.hidden = true;
+  docs.slice().sort((a, b) => {
+    const aPhase = a.phase ?? '';
+    const bPhase = b.phase ?? '';
+    return String(aPhase).localeCompare(String(bPhase));
+  }).forEach((doc) => {
+    const phase = doc.phase ?? '-';
+    const name = escapeHtml(doc.filename || doc.name || 'Documento');
+    const url = doc.url || '#';
+    const tr = document.createElement('tr');
+    tr.dataset.docId = doc.doc_id;
+    tr.innerHTML = `
+      <td>${escapeHtml(String(phase))}</td>
+      <td>${name}</td>
+      <td>${cerDocStatusBadge(doc.status)}</td>
+      <td class="nowrap actions">
+        <a class="btn ghost" href="${url}" target="_blank" rel="noopener">Apri</a>
+        <button class="btn ghost" type="button" data-doc-mark="${doc.doc_id}" data-status="approved" data-entity="cer" data-entity-id="${cid}" data-phase="${escapeHtml(String(phase))}">Approva</button>
+        <button class="btn ghost" type="button" data-doc-mark="${doc.doc_id}" data-status="rejected" data-entity="cer" data-entity-id="${cid}" data-phase="${escapeHtml(String(phase))}">Rifiuta</button>
+      </td>
+    `;
+    cerDocsTable.appendChild(tr);
+  });
+}
+
+async function loadCerDocs(cerId) {
+  if (!cerId || !cerDocsTable) return;
+  const cid = String(cerId);
+  cerDocsTable.innerHTML = '<tr><td colspan="4">Caricamento documenti…</td></tr>';
+  try {
+    const res = await fetch(`${API_BASE}/docs?entity_type=cer&entity_id=${encodeURIComponent(cid)}`);
+    const payload = await res.json();
+    if (!res.ok || payload.ok === false) {
+      throw new Error(payload.error?.message || 'Errore caricamento documenti CER');
+    }
+    const list = Array.isArray(payload.data) ? payload.data.map(doc => ({ ...doc, entity_type: 'cer', entity_id: cid })) : [];
+    cerDocsStore.set(cid, list);
+    renderCerDocs(cid);
+  } catch (err) {
+    cerDocsTable.innerHTML = `<tr><td colspan="4" class="error-text">${escapeHtml(err.message || 'Errore caricamento documenti')}</td></tr>`;
+  }
+}
+
+function upsertCerDoc(doc) {
+  if (!doc || String(doc.entity_type || '') !== 'cer') return;
+  const cid = String(doc.entity_id || '');
+  if (!cid) return;
+  const list = cerDocsStore.get(cid) || [];
+  const index = list.findIndex(item => item.doc_id === doc.doc_id);
+  if (index >= 0) {
+    list[index] = { ...list[index], ...doc };
+  } else {
+    list.push(doc);
+  }
+  cerDocsStore.set(cid, list);
+  if (docsCerSelect && docsCerSelect.value === cid) {
+    renderCerDocs(cid);
+  }
+}
+
+function handleCerDocEvent(detail) {
+  if (!detail || String(detail.entity_type || '') !== 'cer') return;
+  const normalized = {
+    ...detail,
+    entity_type: 'cer',
+    entity_id: String(detail.entity_id || '')
+  };
+  upsertCerDoc(normalized);
 }
 
 function focusDocumentsTab(cerId) {
@@ -1146,13 +1368,20 @@ async function savePlantConfiguration() {
     return;
   }
   try {
-    const res = await fetch(`${API_BASE}/plants/${encodeURIComponent(plantState.modalPlantId)}`, {
+    const res = await safeGuardAction(() => fetch(`${API_BASE}/plants/${encodeURIComponent(plantState.modalPlantId)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tipologia, pct_cer: pctCer, pct_contra: pctContra })
-    });
+    }));
     const payload = await res.json();
     if (!res.ok || payload.ok === false) throw new Error(payload.error || 'Errore salvataggio impianto');
+    if (isDryRunResult(res, payload)) {
+      plantState.lastResults = null;
+      hideAllocationsPreview();
+      toast('SAFE MODE attivo: configurazione impianto non persistita (dry-run).');
+      closePlantModal();
+      return;
+    }
     const idx = plantState.plants.findIndex(p => p.id === plantState.modalPlantId);
     if (idx !== -1) {
       plantState.plants[idx] = payload.data;
@@ -1176,11 +1405,11 @@ async function postRecalc(confirm) {
     return;
   }
   try {
-    const res = await fetch(`${API_BASE}/allocations/recalc`, {
+    const res = await safeGuardAction(() => fetch(`${API_BASE}/allocations/recalc`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cer_id: plantState.selectedCerId, period: plantState.period, confirm })
-    });
+    }));
     const payload = await res.json();
     if (!res.ok || payload.ok === false) {
       if (payload?.details?.length) {
@@ -1188,6 +1417,10 @@ async function postRecalc(confirm) {
         throw new Error(`${payload.error}\n${msg}`);
       }
       throw new Error(payload.error || 'Errore calcolo riparti');
+    }
+    if (isDryRunResult(res, payload)) {
+      setPlantsFeedback('SAFE MODE attivo: ricalcolo simulato, nessuna anteprima disponibile in dry-run.', true);
+      return;
     }
     plantState.lastResults = payload.data;
     renderAllocationsPreview(payload.data, confirm);
@@ -1315,6 +1548,15 @@ function toast(message) {
   } else {
     console.log(message);
   }
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function formatKwh(value) {

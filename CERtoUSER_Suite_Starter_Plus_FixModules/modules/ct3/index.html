@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MIND — Suite</title>
+  <link rel="icon" href="/assets/img/mind.png">
+  <link rel="stylesheet" href="/assets/css/style.css?v=26"/>
+  <script type="module" src="/assets/js/app.js?v=26"></script>
+  <script type="module" src="/assets/js/ct3_rules.js?v=26"></script>
+  <script type="module" src="/assets/js/ct3.js?v=26"></script>
+</head>
+<body class="dark">
+  <header class="app-header">
+    <div class="brand">
+      <a href="/" class="brand-link">
+        <img class="logo" src="/assets/img/mind.png" alt="MIND">
+        <span class="brand-name">MIND</span>
+      </a>
+      <div class="titles">
+        <h1>Conto Termico 3.0</h1>
+        <p class="subtitle">Gestione pratiche, requisiti e checklist documentali</p>
+      </div>
+    </div>
+    <nav class="toolbar main-nav">
+      <a class="btn nav-item" data-module="crm" href="/modules/crm/index.html">CRM</a>
+      <a class="btn nav-item" data-module="cer" href="/modules/cer/index.html">CER</a>
+      <a class="btn nav-item" data-module="impianti" href="/modules/impianti/index.html">IMPIANTI</a>
+      <a class="btn nav-item" data-module="modelli" href="/modules/modelli/index.html">MODELLI</a>
+      <a class="btn nav-item" data-module="contratti" href="/modules/contratti/index.html">CONTRATTI</a>
+      <a class="btn nav-item" data-module="ct3" href="/modules/ct3/index.html">CT 3.0</a>
+      <a class="btn nav-item" data-module="simulatori" href="/modules/simulatori/index.html">SIMULATORI</a>
+      <a class="btn ghost" href="/">HUB</a>
+    </nav>
+  </header>
+
+  <main class="container wide">
+    <form id="ct3-form" class="ct3-grid" autocomplete="off">
+      <section class="ct3-column">
+        <section class="card soft">
+          <h2>Pratica CT 3.0</h2>
+          <div class="stack">
+            <label>Pratiche esistenti
+              <select id="ct3-case-selector">
+                <option value="">Nuova pratica</option>
+              </select>
+            </label>
+            <div class="info-text" id="ct3-case-meta">Nessuna pratica selezionata. Le pratiche vengono salvate in locale tramite le API mock.</div>
+            <div class="helper-grid">
+              <label>Stato pratica
+                <select id="ct3-status-select">
+                  <option value="draft">Bozza</option>
+                  <option value="in_review">In valutazione</option>
+                  <option value="eligible">Ammissibile</option>
+                  <option value="ineligible">Non ammissibile</option>
+                </select>
+              </label>
+              <label>Fase workflow
+                <select id="ct3-phase-select">
+                  <option value="F0">F0 — Intake</option>
+                  <option value="F1">F1 — Requisiti soggetto</option>
+                  <option value="F2">F2 — Tecnologia &amp; Catalogo</option>
+                  <option value="F3">F3 — Titoli &amp; Progetto</option>
+                  <option value="F4">F4 — Spesa &amp; Richiesta</option>
+                  <option value="F5">F5 — Erogazione &amp; Rate</option>
+                </select>
+              </label>
+            </div>
+            <div class="actions">
+              <button type="button" class="btn ghost" id="ct3-new-case">Nuova scheda</button>
+              <button type="button" class="btn ghost" id="ct3-refresh-cases">Aggiorna elenco</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Soggetto (da CRM)</h2>
+          <label>Cliente CRM
+            <input type="text" id="ct3-client-search" placeholder="Cerca per nome, CF/P.IVA, POD..." autocomplete="off"/>
+          </label>
+          <div id="ct3-client-suggestions" class="ct3-suggestions" role="listbox"></div>
+          <div class="info-text">Seleziona un cliente dal CRM e collega la pratica. I POD associati vengono mostrati automaticamente.</div>
+          <label>Tipologia soggetto
+            <select id="ct3-subject-type" name="subject_type" required>
+              <option value="">Seleziona tipologia</option>
+              <option value="PA/ETS">PA / ETS</option>
+              <option value="Privato">Privato</option>
+              <option value="Impresa">Impresa</option>
+            </select>
+          </label>
+          <div class="ct3-client-summary" id="ct3-client-summary" hidden>
+            <p><strong>Cliente collegato:</strong> <span id="ct3-client-name"></span></p>
+            <p><strong>Tipo:</strong> <span id="ct3-client-type"></span></p>
+            <div id="ct3-client-pods" class="ct3-client-pods"></div>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn" id="ct3-link-client">Collega a CRM</button>
+          </div>
+        </section>
+      </section>
+
+      <section class="ct3-column">
+        <section class="card">
+          <h2>Immobile</h2>
+          <label>Tipologia immobile
+            <select id="ct3-building-types" name="building_types" multiple>
+              <option value="residenziale">Residenziale</option>
+              <option value="non_residenziale">Non residenziale</option>
+              <option value="scuola">Scuola</option>
+              <option value="PA">Pubblica amministrazione</option>
+              <option value="ETS">Ente del Terzo Settore</option>
+              <option value="condominio">Condominio</option>
+              <option value="industriale">Industriale</option>
+              <option value="agricolo">Rurale / Agricolo</option>
+            </select>
+          </label>
+          <div class="helper-grid">
+            <label>Zona climatica
+              <select id="ct3-building-zone" name="building_zone">
+                <option value="">Seleziona</option>
+                <option value="A">A</option>
+                <option value="B">B</option>
+                <option value="C">C</option>
+                <option value="D">D</option>
+                <option value="E">E</option>
+                <option value="F">F</option>
+              </select>
+            </label>
+            <label>Comune
+              <input type="text" id="ct3-building-city" name="building_city" placeholder="Comune"/>
+            </label>
+            <label>Anno costruzione
+              <input type="number" id="ct3-building-year" name="building_year" min="1900" max="2100"/>
+            </label>
+          </div>
+          <label class="chk">
+            <input type="checkbox" id="ct3-building-existing" name="building_existing" required/>
+            Edificio esistente (obbligatorio ai fini CT 3.0)
+          </label>
+        </section>
+
+        <section class="card">
+          <h2>Intervento</h2>
+          <label>Catalogo interventi
+            <select id="ct3-intervention-type" name="intervention_type" required>
+              <option value="">Seleziona intervento</option>
+            </select>
+          </label>
+          <label id="ct3-intervention-subtype-wrap" hidden>Dettaglio tecnologia
+            <select id="ct3-intervention-subtype" name="intervention_subtype"></select>
+          </label>
+          <p class="info-text" id="ct3-intervention-range"></p>
+          <div class="helper-grid">
+            <label id="ct3-size-kw-wrap">Taglia (kW)
+              <input type="number" id="ct3-size-kw" name="intervention_size_kw" min="0" step="0.1" placeholder="0.0"/>
+            </label>
+            <label id="ct3-area-m2-wrap" hidden>Superficie (m²)
+              <input type="number" id="ct3-area-m2" name="intervention_area_m2" min="0" step="0.1" placeholder="0.0"/>
+            </label>
+            <label>CAPEX €
+              <input type="number" id="ct3-capex" name="capex_eur" min="0" step="100" placeholder="0"/>
+            </label>
+            <label>OPEX annuo €
+              <input type="number" id="ct3-opex" name="opex_eur" min="0" step="50" placeholder="0"/>
+            </label>
+            <label>Vita utile (anni)
+              <input type="number" id="ct3-life-years" name="life_years" min="1" max="30" placeholder="20"/>
+            </label>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Parametri incentivo</h2>
+          <div class="helper-grid">
+            <label>% incentivo base
+              <input type="number" id="ct3-incentive-pct" name="incentive_pct" min="0" max="100" step="0.1" placeholder="65"/>
+            </label>
+            <label>Tetto €/unità
+              <input type="number" id="ct3-incentive-cap-unit" name="incentive_cap_unit" min="0" step="10" placeholder="0"/>
+            </label>
+            <label>Tetto totale €
+              <input type="number" id="ct3-incentive-cap-total" name="incentive_cap_total" min="0" step="100" placeholder="0"/>
+            </label>
+            <label>Anni erogazione
+              <input type="number" id="ct3-incentive-years" name="incentive_years" min="1" max="5" value="2"/>
+            </label>
+            <label>Soglia pagamento unico €
+              <input type="number" id="ct3-incentive-threshold" name="incentive_threshold" min="0" step="100" value="5000"/>
+            </label>
+            <label>Risparmio energetico annuo stimato €
+              <input type="number" id="ct3-incentive-savings" name="incentive_savings" min="0" step="50" placeholder="0"/>
+            </label>
+          </div>
+          <label class="chk">
+            <input type="checkbox" id="ct3-single-payment" name="incentive_single_payment"/>
+            Pagamento unico se l'incentivo è ≤ soglia
+          </label>
+        </section>
+      </section>
+
+      <section class="ct3-column">
+        <section class="card">
+          <div class="row-between">
+            <h2>Verifica ammissibilità</h2>
+            <span id="ct3-eligibility-badge" class="badge muted">Da completare</span>
+          </div>
+          <p class="info-text">La verifica utilizza il motore regole parametrico CT 3.0. Compila i campi obbligatori e avvia il controllo.</p>
+          <div id="ct3-eligibility-feedback" class="ct3-eligibility-feedback"></div>
+        </section>
+
+        <section class="card">
+          <div class="row-between">
+            <h2>Fasi documentali</h2>
+            <button type="button" class="btn ghost btn-xs" id="ct3-expand-all">Espandi tutto</button>
+          </div>
+          <p class="info-text">Checklist dinamica per fase. Carica, approva o rifiuta ogni documento richiesto.</p>
+          <div id="ct3-phases" class="ct3-phases"></div>
+        </section>
+
+        <section class="card">
+          <h2>Stima incentivo</h2>
+          <p class="info-text">Calcolo orientativo basato sui parametri inseriti. Aggiorna i campi per ricalcolare in tempo reale.</p>
+          <div class="table-wrap">
+            <table class="data-table" id="ct3-incentive-table">
+              <thead>
+                <tr>
+                  <th>Anno</th>
+                  <th>Quota CT €</th>
+                  <th>Risparmio €</th>
+                  <th>OPEX €</th>
+                  <th>Cash flow €</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p class="note">Simulazione orientativa; attenersi alle Regole Applicative CT 3.0 GSE.</p>
+        </section>
+      </section>
+    </form>
+
+    <div class="ct3-actions">
+      <div class="actions">
+        <button type="button" class="btn" id="ct3-save-draft">Salva bozza pratica</button>
+        <button type="button" class="btn" id="ct3-run-eligibility" disabled>Valuta ammissibilità</button>
+        <button type="button" class="btn ghost" id="ct3-export-checklist">Genera checklist CSV</button>
+        <button type="button" class="btn ghost" id="ct3-send-crono">Invia a Cronoprogramma impianto</button>
+      </div>
+      <p class="info-text">Le API sono mock Netlify Functions. I dati demo rimangono in memoria della sessione.</p>
+    </div>
+  </main>
+  <div id="envBanner" class="env-banner" hidden></div>
+  <script>
+    (function(){ try{
+      const el=document.getElementById('envBanner');
+      if (window.__SAFE_MODE__) { el.hidden=false; el.classList.add('safe'); el.textContent='SAFE MODE attivo: tutte le operazioni di scrittura sono in DRY-RUN.'; }
+    }catch(e){}})();
+  </script>
+</body>
+</html>

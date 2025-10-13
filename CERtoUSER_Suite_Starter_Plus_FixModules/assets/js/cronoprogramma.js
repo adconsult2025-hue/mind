@@ -1,4 +1,16 @@
+import { apiFetch } from './api.js?v=26';
+
 const API_BASE = '/api';
+
+const SAFE_MODE = typeof window !== 'undefined' && (window.__SAFE_MODE__ === true || String(window.SAFE_MODE).toLowerCase() === 'true');
+
+export const STATE = {
+  currentClientId: null,
+  currentCerId: null,
+  currentPlantId: null
+};
+
+const docRegistry = new Map();
 
 export const CER_PHASES = [
   {
@@ -163,6 +175,10 @@ let navigateToPlants = () => {};
 let triggerRecalc = () => {};
 let initialized = false;
 
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', handleGlobalDocActions);
+}
+
 const phaseModal = {
   root: null,
   title: null,
@@ -259,14 +275,22 @@ export async function advancePhase(cerId, phase, status, extra = {}) {
     due_date: extra.due_date !== undefined ? extra.due_date : (existing?.due_date || ''),
     notes: extra.notes !== undefined ? extra.notes : (existing?.notes || '')
   };
-  const data = await apiFetch(`${API_BASE}/workflows/advance`, {
+  const fallback = {
+    ...payload,
+    dryRun: true,
+    updatedAt: Date.now(),
+    updated_at: new Date().toISOString()
+  };
+  const response = await apiFetch(`${API_BASE}/workflows/advance`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    __safeFallback: fallback
   });
-  upsertWorkflowCache(targetCer, data);
+  const entry = response?.data ?? response;
+  upsertWorkflowCache(targetCer, entry);
   renderPhaseCards(workflowCache.get(targetCer), docsCache.get(targetCer) || new Map());
-  return data;
+  return response;
 }
 
 export function exportChecklistCSV(cerId) {
@@ -307,16 +331,22 @@ export async function openUploadDialog(cerId, phase) {
   const filename = window.prompt('Nome del documento da caricare (mock upload)?');
   if (filename === null) return;
   try {
-    const data = await apiFetch(`${API_BASE}/docs/upload`, {
+    const response = await apiFetch(`${API_BASE}/docs/upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entity_type: 'cer', entity_id: target, phase: phaseNumber, filename })
+      body: JSON.stringify({ entity_type: 'cer', entity_id: target, phase: phaseNumber, filename }),
+      __safeFallback: dryRunDoc
     });
-    emit('cer:notify', 'Documento registrato (mock). Usa il link per caricare il file reale.');
+    if (data?.dryRun) {
+      emit('cer:notify', 'SAFE MODE attivo: caricamento documento simulato (dry-run).');
+    } else {
+      emit('cer:notify', 'Documento registrato (mock). Usa il link per caricare il file reale.');
+    }
     const group = docsCache.get(target) || new Map();
     const key = phaseNumber === null ? -1 : phaseNumber;
     const list = group.get(key) || [];
-    list.push(data);
+    const doc = response?.data ?? response;
+    list.push(doc);
     group.set(key, list);
     docsCache.set(target, group);
     renderPhaseCards(workflowCache.get(target) || new Map(), group);
@@ -328,15 +358,34 @@ export async function openUploadDialog(cerId, phase) {
 async function markDocument(docId, status) {
   if (!docId || !activeCerId) return;
   try {
-    await apiFetch(`${API_BASE}/docs/mark`, {
+    let cachedDoc = null;
+    const docGroups = docsCache.get(activeCerId);
+    if (docGroups instanceof Map) {
+      for (const list of docGroups.values()) {
+        if (!Array.isArray(list)) continue;
+        const found = list.find(item => item && item.doc_id === docId);
+        if (found) {
+          cachedDoc = found;
+          break;
+        }
+      }
+    }
+    const fallbackDoc = cachedDoc ? { ...cachedDoc, status, updated_at: new Date().toISOString(), dryRun: true } : null;
+    const data = await apiFetch(`${API_BASE}/docs/mark`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ doc_id: docId, status })
+      body: JSON.stringify({ doc_id: docId, status }),
+      __safeFallback: fallbackDoc
     });
+    if (data?.dryRun) {
+      emit('cer:notify', 'SAFE MODE attivo: aggiornamento stato documento simulato.');
+    }
     await loadDocs(activeCerId);
     renderPhaseCards(workflowCache.get(activeCerId) || new Map(), docsCache.get(activeCerId) || new Map());
     const label = status === 'approved' ? 'approvato' : 'rifiutato';
-    emit('cer:notify', `Documento ${label}.`);
+    if (!data?.dryRun) {
+      emit('cer:notify', `Documento ${label}.`);
+    }
   } catch (err) {
     emit('cer:notify', err.message || 'Errore durante l’aggiornamento del documento');
   }
@@ -366,12 +415,12 @@ function setupModals() {
       if (Number.isNaN(phaseId)) return;
       const entry = getPhaseState(activeCerId, phaseId) || {};
       try {
-        await advancePhase(activeCerId, phaseId, entry.status || 'todo', {
+        const res = await advancePhase(activeCerId, phaseId, entry.status || 'todo', {
           owner: phaseModal.owner?.value?.trim() || '',
           due_date: phaseModal.due?.value || '',
           notes: phaseModal.notes?.value || ''
         });
-        emit('cer:notify', 'Checklist aggiornata.');
+        emit('cer:notify', res?.dryRun ? 'SAFE MODE: operazione simulata, nessuna modifica salvata.' : 'Checklist aggiornata.');
         closePhaseModal();
       } catch (err) {
         emit('cer:notify', err.message || 'Errore salvataggio checklist');
@@ -422,6 +471,7 @@ function handleContainerClick(event) {
       openPhaseModal(phaseId);
       break;
     case 'upload':
+      if (btn.hasAttribute('data-doc-upload')) break;
       if (phaseId === 3) navigateToPlants();
       openUploadDialog(activeCerId, phaseId);
       break;
@@ -433,9 +483,11 @@ function handleContainerClick(event) {
       openGseModal();
       break;
     case 'doc-approve':
+      if (btn.hasAttribute('data-doc-mark')) break;
       markDocument(btn.dataset.doc, 'approved', phaseId);
       break;
     case 'doc-reject':
+      if (btn.hasAttribute('data-doc-mark')) break;
       markDocument(btn.dataset.doc, 'rejected', phaseId);
       break;
     default:
@@ -490,17 +542,21 @@ function confirmAdvance(phaseId) {
   if (!phase) return;
   const ok = window.confirm(`Segnare come completata "${phase.title}"?`);
   if (!ok) return;
-  advancePhase(activeCerId, phaseId, 'done').then(() => {
-    emit('cer:notify', `${phase.title} contrassegnata come completata.`);
+  advancePhase(activeCerId, phaseId, 'done').then((res) => {
+    const message = res?.dryRun
+      ? 'SAFE MODE: operazione simulata, nessuna modifica salvata.'
+      : 'Checklist aggiornata.';
+    emit('cer:notify', message);
   }).catch(err => {
     emit('cer:notify', err.message || 'Errore durante l’aggiornamento della fase.');
   });
 }
 
 async function fetchWorkflows(cerId) {
-  const data = await apiFetch(`${API_BASE}/workflows?entity_type=cer&entity_id=${encodeURIComponent(cerId)}`);
+  const response = await apiFetch(`${API_BASE}/workflows?entity_type=cer&entity_id=${encodeURIComponent(cerId)}`);
+  const data = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
   const map = new Map();
-  (Array.isArray(data) ? data : []).forEach(item => {
+  data.forEach(item => {
     map.set(Number(item.phase), item);
   });
   workflowCache.set(cerId, map);
@@ -508,9 +564,10 @@ async function fetchWorkflows(cerId) {
 }
 
 async function loadDocs(cerId) {
-  const data = await apiFetch(`${API_BASE}/docs?entity_type=cer&entity_id=${encodeURIComponent(cerId)}`);
+  const response = await apiFetch(`${API_BASE}/docs?entity_type=cer&entity_id=${encodeURIComponent(cerId)}`);
+  const data = Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
   const grouped = new Map();
-  (Array.isArray(data) ? data : []).forEach(doc => {
+  data.forEach(doc => {
     const phaseRaw = (doc.phase === null || doc.phase === undefined) ? -1 : Number(doc.phase);
     const phase = Number.isFinite(phaseRaw) ? phaseRaw : -1;
     if (!grouped.has(phase)) grouped.set(phase, []);
@@ -550,7 +607,7 @@ function renderPhaseCards(workflows = new Map(), docsByPhase = new Map()) {
       ${renderListBlock('Go/No-Go', phase.go_no_go)}
       <div class="actions">
         <button class="btn ghost" data-action="checklist" data-phase="${phase.id}">Vedi checklist</button>
-        <button class="btn ghost" data-action="upload" data-phase="${phase.id}">Carica documento</button>
+        <button class="btn ghost" data-action="upload" data-phase="${phase.id}" data-doc-upload data-entity="cer" data-entity-id="${activeCerId || ''}">Carica documento</button>
         <button class="btn" data-action="complete" data-phase="${phase.id}">Segna come completata</button>
       </div>
       ${phase.id === 4 ? '<div class="actions"><button class="btn ghost" data-action="gse-info">Apri portale GSE (info)</button></div>' : ''}
@@ -568,7 +625,7 @@ function renderPhaseCards(workflows = new Map(), docsByPhase = new Map()) {
         <p class="info-text">Documenti caricati senza fase specifica.</p>
       </div>
       <div class="actions">
-        <button class="btn ghost" data-action="upload" data-phase="-1">Carica documento</button>
+        <button class="btn ghost" data-action="upload" data-phase="-1" data-doc-upload data-entity="cer" data-entity-id="${activeCerId || ''}">Carica documento</button>
       </div>
     </div>
     ${renderDocsList(-1, generalDocs)}
@@ -592,8 +649,8 @@ function renderDocsList(phaseId, docs) {
     const actions = `
       <div class="doc-actions">
         <a class="btn ghost" href="${doc.url}" target="_blank" rel="noopener">Apri</a>
-        <button class="btn ghost" data-action="doc-approve" data-doc="${doc.doc_id}" data-phase="${phaseId}">Approva</button>
-        <button class="btn ghost" data-action="doc-reject" data-doc="${doc.doc_id}" data-phase="${phaseId}">Rifiuta</button>
+        <button class="btn ghost" data-action="doc-approve" data-doc="${doc.doc_id}" data-phase="${phaseId}" data-doc-mark="${doc.doc_id}" data-status="approved" data-entity="cer" data-entity-id="${activeCerId}">Approva</button>
+        <button class="btn ghost" data-action="doc-reject" data-doc="${doc.doc_id}" data-phase="${phaseId}" data-doc-mark="${doc.doc_id}" data-status="rejected" data-entity="cer" data-entity-id="${activeCerId}">Rifiuta</button>
       </div>
     `;
     return `
@@ -630,22 +687,178 @@ function upsertWorkflowCache(cerId, entry) {
   map.set(Number(entry.phase), entry);
 }
 
-async function apiFetch(url, options = {}) {
+function resolveDocContext(element) {
+  const el = element || null;
+  const entityAttr = el?.getAttribute('data-entity') || el?.closest('[data-entity]')?.getAttribute('data-entity');
+  const entityType = entityAttr || 'client';
+  const explicitId = el?.getAttribute('data-entity-id') || el?.closest('[data-entity-id]')?.getAttribute('data-entity-id');
+  let entityId = explicitId || null;
+  if (!entityId) {
+    if (entityType === 'client') entityId = STATE.currentClientId;
+    else if (entityType === 'cer') entityId = STATE.currentCerId;
+    else if (entityType === 'plant') entityId = STATE.currentPlantId;
+  }
+  const phase = el?.getAttribute('data-phase') || el?.closest('[data-phase]')?.getAttribute('data-phase') || null;
+  return { entityType, entityId, phase };
+}
+
+function normalizeDocPayload(doc = {}, context = {}) {
+  const normalized = { ...doc };
+  normalized.doc_id = normalized.doc_id || `doc_${Date.now()}`;
+  normalized.filename = normalized.filename || normalized.name || '';
+  normalized.status = normalized.status || 'uploaded';
+  normalized.entity_type = normalized.entity_type || context.entityType || 'client';
+  normalized.entity_id = normalized.entity_id || context.entityId || null;
+  if (normalized.entity_id !== null && normalized.entity_id !== undefined) {
+    normalized.entity_id = String(normalized.entity_id);
+  }
+  if (normalized.phase === undefined) normalized.phase = context.phase ?? null;
+  normalized.uploaded_at = normalized.uploaded_at || new Date().toISOString();
+  normalized.url = normalized.url || '#';
+  return normalized;
+}
+
+function phaseCacheKey(value) {
+  if (value === null || value === undefined || value === '') return -1;
+  const num = Number(value);
+  if (Number.isFinite(num)) return num;
+  return String(value);
+}
+
+export function addDocRowLocally(docInput, context = {}) {
+  const normalized = normalizeDocPayload(docInput, context);
+  docRegistry.set(normalized.doc_id, normalized);
+  if (normalized.entity_type === 'cer' && normalized.entity_id) {
+    const key = phaseCacheKey(normalized.phase);
+    const cache = docsCache.get(normalized.entity_id) || new Map();
+    const list = cache.get(key) || [];
+    const idx = list.findIndex(item => item.doc_id === normalized.doc_id);
+    if (idx >= 0) {
+      list[idx] = normalized;
+    } else {
+      list.push(normalized);
+    }
+    cache.set(key, list);
+    docsCache.set(normalized.entity_id, cache);
+    if (normalized.entity_id === activeCerId) {
+      renderPhaseCards(workflowCache.get(activeCerId) || new Map(), cache);
+    }
+  }
+  window.dispatchEvent(new CustomEvent('cronoprogramma:doc-added', { detail: normalized }));
+  return normalized;
+}
+
+export function updateDocRowLocally(docId, status, context = {}) {
+  if (!docId) return null;
+  const existing = docRegistry.get(docId) || {};
+  const normalized = normalizeDocPayload({ ...existing, status }, context);
+  docRegistry.set(docId, normalized);
+  if (normalized.entity_type === 'cer' && normalized.entity_id) {
+    const key = phaseCacheKey(normalized.phase);
+    const cache = docsCache.get(normalized.entity_id) || new Map();
+    const list = cache.get(key) || [];
+    const idx = list.findIndex(item => item.doc_id === normalized.doc_id);
+    if (idx >= 0) {
+      list[idx] = normalized;
+    } else {
+      list.push(normalized);
+    }
+    cache.set(key, list);
+    docsCache.set(normalized.entity_id, cache);
+    if (normalized.entity_id === activeCerId) {
+      renderPhaseCards(workflowCache.get(activeCerId) || new Map(), cache);
+    }
+  }
+  window.dispatchEvent(new CustomEvent('cronoprogramma:doc-updated', { detail: normalized }));
+  return normalized;
+}
+
+async function handleGlobalDocActions(event) {
+  const uploadBtn = event.target.closest('[data-doc-upload]');
+  if (uploadBtn) {
+    event.preventDefault();
+    const context = resolveDocContext(uploadBtn);
+    if (!context.entityId) {
+      emit('cer:notify', 'Seleziona un elemento prima di caricare un documento.');
+      return;
+    }
+    const filename = typeof window !== 'undefined' ? window.prompt('Nome file (mock):') : null;
+    if (!filename) return;
+    const payload = {
+      entity_type: context.entityType,
+      entity_id: context.entityId,
+      phase: context.phase ?? null,
+      filename
+    };
+    try {
+      const response = await fetchJSON('/api/docs/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const docData = response.data || {};
+      const doc = addDocRowLocally({
+        ...docData,
+        filename: docData.filename || filename,
+        entity_type: payload.entity_type,
+        entity_id: payload.entity_id,
+        phase: payload.phase
+      }, context);
+      if (response.dryRun || SAFE_MODE || doc.dryRun) {
+        doc.dryRun = true;
+        emit('cer:notify', 'SAFE_MODE attivo: documento registrato in anteprima.');
+      } else {
+        emit('cer:notify', 'Documento caricato (mock).');
+      }
+    } catch (err) {
+      emit('cer:notify', err.message || 'Errore durante il caricamento del documento');
+    }
+    return;
+  }
+
+  const markBtn = event.target.closest('[data-doc-mark]');
+  if (markBtn) {
+    event.preventDefault();
+    const docId = markBtn.getAttribute('data-doc-mark');
+    const status = markBtn.getAttribute('data-status');
+    if (!docId || !status) return;
+    const context = resolveDocContext(markBtn);
+    if (!context.entityId) {
+      emit('cer:notify', 'Seleziona un elemento prima di aggiornare il documento.');
+      return;
+    }
+    try {
+      const response = await fetchJSON('/api/docs/mark', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ doc_id: docId, status })
+      });
+      updateDocRowLocally(docId, status, context);
+      emit('cer:notify', response.dryRun || SAFE_MODE ? 'SAFE_MODE attivo: stato aggiornato in anteprima.' : 'Stato documento aggiornato.');
+    } catch (err) {
+      emit('cer:notify', err.message || 'Errore durante l’aggiornamento del documento');
+    }
+  }
+}
+
+async function fetchJSON(url, options = {}) {
   const res = await fetch(url, options);
+  const contentType = res.headers.get('content-type') || '';
   let payload;
-  try {
+  if (contentType.includes('application/json')) {
     payload = await res.json();
-  } catch (err) {
-    throw new Error('Risposta JSON non valida');
+  } else {
+    const text = await res.text();
+    throw new Error(`Risposta non JSON (${res.status})${text ? `: ${text.slice(0, 200)}` : ''}`);
   }
   if (!res.ok || payload.ok === false) {
-    const error = payload.error || {};
-    const message = error.message || payload.error || 'Errore API';
+    const error = payload?.error;
+    const message = error?.message || payload?.message || 'Errore API';
     const err = new Error(message);
-    err.details = error.details;
+    err.payload = payload;
     throw err;
   }
-  return payload.data;
+  return payload;
 }
 
 function getBadgeClass(status) {

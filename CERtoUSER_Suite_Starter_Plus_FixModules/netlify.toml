@@ -1,0 +1,8 @@
+[context.production.environment]
+  SAFE_MODE = "false"
+
+[context.deploy-preview.environment]
+  SAFE_MODE = "true"
+
+[context.branch-deploy.environment]
+  SAFE_MODE = "true"

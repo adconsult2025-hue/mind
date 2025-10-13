@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { consumiStore, clientPods, logs, uid } = require('./_store');
+const { guard } = require('./_safe');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -36,9 +37,13 @@ function findExisting(clientId, podId, period) {
 }
 
 function ensureClientPod(clientId, podId) {
-  const registry = clientPods.get(clientId);
+  let registry = clientPods.get(clientId);
   if (!registry) {
-    clientPods.set(clientId, new Set([podId]));
+    registry = new Set();
+    clientPods.set(clientId, registry);
+  }
+  if (registry.size === 0) {
+    registry.add(podId);
     return true;
   }
   if (registry.has(podId)) return true;
@@ -59,7 +64,7 @@ function auditLog(clientId, actor, payload) {
   });
 }
 
-exports.handler = async function handler(event) {
+exports.handler = guard(async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: headers(), body: '' };
   }
@@ -124,6 +129,10 @@ exports.handler = async function handler(event) {
         return response(403, { ok: false, error: 'Il POD non appartiene al cliente', code: 'POD_CLIENT_MISMATCH' });
       }
 
+      const registry = clientPods.get(clientId) || new Set();
+      registry.add(podInput);
+      clientPods.set(clientId, registry);
+
       const existing = findExisting(clientId, podInput, period);
       if (existing && !overwrite) {
         return response(409, { ok: false, error: 'Periodo già presente', code: 'DUPLICATE_PERIOD', existing: { ...existing } });
@@ -163,4 +172,4 @@ exports.handler = async function handler(event) {
   } catch (error) {
     return response(500, { ok: false, error: error.message || 'Errore server' });
   }
-};
+});
