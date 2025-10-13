@@ -17,6 +17,29 @@ export function statutoTemplate(cer, membri) {
   const membriList = membri.map(m => `
     <tr><td>${m.nome}</td><td>${m.ruolo}</td><td>${m.pod}</td><td>${m.comune||''}</td></tr>
   `).join('');
+  const memberIndex = membri.reduce((acc, cur) => ({ ...acc, [cur.id]: cur }), {});
+  const impRows = (cer.impianti || []).map(imp => {
+    const owner = memberIndex[imp.titolareId];
+    const ownerName = owner ? owner.nome : (imp.titolareNome || '-');
+    const ownerRole = owner ? owner.ruolo : (imp.titolareRuolo || '');
+    const shareText = (imp.shares || []).map(share => {
+      const target = memberIndex[share.membroId];
+      const label = target ? target.nome : share.membroId;
+      return `${label}: ${share.percentuale}%`;
+    }).join('<br/>');
+    const kwp = imp.potenza_kwp ? `${imp.potenza_kwp} kWp` : '-';
+    return `<tr><td>${imp.nome}</td><td>${ownerName} (${ownerRole})</td><td>${kwp}</td><td>${shareText}</td></tr>`;
+  }).join('');
+  const impiantiSection = impRows
+    ? `
+  <h3>Art. 4-bis - Impianti e criteri di riparto</h3>
+  <p>Ogni impianto fotovoltaico della CER assegna il 100% dei benefici ai membri secondo le percentuali deliberate, nel rispetto del DM 7 dicembre 2023.</p>
+  <table>
+    <tr><th>Impianto</th><th>Titolare</th><th>Potenza</th><th>Riparto benefici</th></tr>
+    ${impRows}
+  </table>
+  `
+    : '';
 
   return `
   <style>
@@ -45,6 +68,8 @@ export function statutoTemplate(cer, membri) {
   <h3>Art. 4 - Regole di condivisione e riparti</h3>
   <p>La quota di energia condivisa è fissata al <strong>${cer.quota}%</strong>. I benefici economici sono ripartiti secondo il criterio "<strong>${cer.riparto}</strong>" oppure secondo i seguenti valori personalizzati: Produttore <strong>${cer.rp_prod}%</strong>, Prosumer <strong>${cer.rp_pros}%</strong>, CER <strong>${cer.rp_cer}%</strong> (somma 100%).</p>
 
+  ${impiantiSection}
+
   <h3>Art. 5 - Organi</h3>
   <p>L'Assemblea dei Membri e il Responsabile/Amministratore della CER. Le modalità di convocazione, deliberazione e sostituzione sono definite nel Regolamento interno.</p>
 
@@ -65,6 +90,20 @@ export function statutoTemplate(cer, membri) {
 export function regolamentoTemplate(cer, membri) {
   const today = new Date().toLocaleDateString('it-IT');
   const rows = membri.map(m => `<li>${m.nome} — ${m.ruolo} — POD ${m.pod}</li>`).join('');
+  const memberIndex = membri.reduce((acc, cur) => ({ ...acc, [cur.id]: cur }), {});
+  const impList = (cer.impianti || []).map(imp => {
+    const owner = memberIndex[imp.titolareId];
+    const ownerName = owner ? owner.nome : (imp.titolareNome || '-');
+    const shares = (imp.shares || []).map(share => {
+      const target = memberIndex[share.membroId];
+      const label = target ? target.nome : share.membroId;
+      return `${label} (${share.percentuale}%)`;
+    }).join(', ');
+    return `<li><strong>${imp.nome}</strong> — titolare: ${ownerName} — riparto: ${shares}</li>`;
+  }).join('');
+  const impiantiBlock = impList
+    ? `<h4>3-bis. Ripartizione per impianto</h4><ul>${impList}</ul>`
+    : '';
   return `
   <style>
     body { font-family: 'Times New Roman', serif; color: #000; }
@@ -87,6 +126,7 @@ export function regolamentoTemplate(cer, membri) {
 
   <h3>3. Condivisione e riparti</h3>
   <p>Quota energia condivisa: <strong>${cer.quota}%</strong>. Riparto: <strong>${cer.riparto}</strong> o personalizzato (Prod. ${cer.rp_prod}%, Pros. ${cer.rp_pros}%, CER ${cer.rp_cer}%).</p>
+  ${impiantiBlock}
 
   <h3>4. Gestione documentale</h3>
   <p>La CER adotta un cronoprogramma documentale in tre fasi: (i) Costituzione (Statuto, Atto costitutivo, Regolamento); (ii) Attivazione (contratti di connessione, delibere riparti, deleghe GSE); (iii) Operatività (rendicontazioni, variazioni membri).</p>

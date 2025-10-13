@@ -6,7 +6,7 @@
   <title>CER — CERtoUSER Suite</title>
   <link rel="icon" href="/assets/img/favicon.png">
   <!-- USA PERCORSI ASSOLUTI + VERSIONE PER BYPASS CACHE -->
-  <link rel="stylesheet" href="/assets/css/style.css?v=6"/>
+  <link rel="stylesheet" href="/assets/css/style.css?v=7"/>
   <script type="module" src="/assets/js/storage.js?v=6"></script>
   <script type="module" src="/assets/js/docs.js?v=6"></script>
   <script type="module" src="/assets/js/cer.js?v=6"></script>
@@ -15,7 +15,7 @@
   <header class="app-header">
     <div class="brand">
       <a href="index.html" class="brand-link">
-        <img src="assets/img/logo.svg" alt="CERtoUSER" class="logo"/>
+        <img src="/assets/img/logo.svg" alt="CERtoUSER" class="logo"/>
       </a>
       <div class="titles">
         <h1>Gestione CER</h1>
@@ -83,6 +83,13 @@
         <div class="card soft">
           <h3>Seleziona membri (da CRM)</h3>
           <div id="members-picker" class="members"></div>
+        </div>
+
+        <div class="card soft">
+          <h3>Impianti fotovoltaici</h3>
+          <p class="hint">Per ciascun impianto assegna un titolare (prosumer o produttore) e riparti i benefici tra tutti i membri selezionati. La somma delle percentuali deve essere 100%.</p>
+          <div id="plants-list" class="plants"></div>
+          <button class="btn ghost" type="button" id="add-plant">Aggiungi impianto</button>
         </div>
 
         <div class="actions">
