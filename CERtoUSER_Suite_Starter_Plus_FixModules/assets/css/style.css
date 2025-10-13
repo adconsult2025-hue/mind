@@ -144,6 +144,11 @@ img {
   color: #061013;
 }
 
+.nav-item.active {
+  border-bottom: 2px solid var(--brand-primary);
+  color: var(--brand-text);
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
