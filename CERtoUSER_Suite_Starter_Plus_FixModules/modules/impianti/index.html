@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>MIND — Suite</title>
   <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/css/style.css?v=15"/>
-  <script type="module" src="/assets/js/app.js?v=15"></script>
-  <script type="module" src="/assets/js/storage.js?v=15"></script>
-  <script type="module" src="/assets/js/impianti.js?v=15"></script>
+  <link rel="stylesheet" href="/assets/css/style.css?v=18"/>
+  <script type="module" src="/assets/js/app.js?v=18"></script>
+  <script type="module" src="/assets/js/storage.js?v=18"></script>
+  <script type="module" src="/assets/js/impianti.js?v=18"></script>
 </head>
 <body class="dark">
   <header class="app-header">
@@ -78,6 +78,7 @@
       <div class="tabs" id="plant-detail-tabs">
         <button class="tab-btn active" type="button" data-tab="production">Produzione</button>
         <button class="tab-btn" type="button" data-tab="inverter">Inverter</button>
+        <button class="tab-btn" type="button" data-tab="cronoprogramma">Cronoprogramma</button>
       </div>
 
       <section class="tab-panel active" data-panel="production">
@@ -132,11 +133,57 @@
           <p class="info-text">Esempio payload JSON: <code>{ "plant_id": "...", "ts": "ISO8601", "kwh": 12.5 }</code></p>
         </div>
       </section>
+
+      <section class="tab-panel" data-panel="cronoprogramma">
+        <div class="card soft">
+          <div class="row-between">
+            <div>
+              <h3>Cronoprogramma impianto</h3>
+              <p class="info-text">Monitora le fasi P0–P4 con stato e documentazione associata.</p>
+            </div>
+            <div class="actions">
+              <button class="btn ghost" type="button" data-preset-type="producer">Preset Produttore</button>
+              <button class="btn ghost" type="button" data-preset-type="prosumer">Preset Prosumer</button>
+              <button class="btn ghost" type="button" id="btn-export-plant-checklist">Esporta checklist</button>
+            </div>
+          </div>
+          <p class="info-text" id="plant-crono-feedback"></p>
+        </div>
+        <div id="plant-crono-cards" class="stack"></div>
+      </section>
     </section>
   </main>
 
   <footer class="footer">
     <small>© 2025 MIND Suite</small>
   </footer>
+
+  <div id="plant-doc-modal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-panel">
+      <header class="modal-header">
+        <h3 id="plant-doc-modal-title">Carica documento</h3>
+        <button class="close-btn" type="button" aria-label="Chiudi" data-close-modal>&times;</button>
+      </header>
+      <form id="plant-doc-form">
+        <div class="grid-2">
+          <label>Codice documento
+            <input type="text" id="plant-doc-code" placeholder="Es. P3-D01" required />
+          </label>
+          <label>Nome documento
+            <input type="text" id="plant-doc-name" placeholder="Verbale configurazione" required />
+          </label>
+        </div>
+        <label class="mt-4">Nome file (mock)
+          <input type="text" id="plant-doc-filename" placeholder="documento.pdf" required />
+        </label>
+        <p class="info-text" id="plant-doc-feedback"></p>
+        <div class="modal-actions">
+          <button class="btn ghost" type="button" data-close-modal>Annulla</button>
+          <button class="btn" type="submit">Salva documento</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </body>
 </html>

@@ -1,4 +1,5 @@
-const { listWorkflows, upsertWorkflow } = require('./_data');
+const { listWorkflows, upsertWorkflow, getPlants } = require('./_data');
+const { ensurePlantWorkflows, listPlantDocs } = require('./_plant_store');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -35,6 +36,42 @@ exports.handler = async function handler(event) {
           body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'entity_type, entity_id e phase sono obbligatori' } })
         };
       }
+      if (entity_type === 'cer' && Number(phase) === 3 && ['in-review', 'done'].includes(status)) {
+        const plants = getPlants().filter(plant => plant.cer_id === entity_id);
+        const missingByPlant = [];
+        plants.forEach(plant => {
+          const workflows = ensurePlantWorkflows(plant.id);
+          const p3 = workflows.find(item => item.phase === 'P3');
+          if (p3 && p3.status === 'done') {
+            return;
+          }
+          const docs = listPlantDocs(plant.id).filter(doc => doc.phase === 'P3');
+          const missingDocs = docs
+            .filter(doc => doc.status !== 'approved')
+            .map(doc => doc.code || doc.name || doc.id);
+          if (!docs.length) {
+            missingDocs.push('Documentazione fase P3');
+          }
+          if (missingDocs.length) {
+            missingByPlant.push({ plant_id: plant.id, missing_docs: missingDocs });
+          }
+        });
+        if (missingByPlant.length) {
+          return {
+            statusCode: 400,
+            headers: headers(),
+            body: JSON.stringify({
+              ok: false,
+              error: {
+                code: 'GATE_NOT_MET',
+                message: 'Impianti non conformi per Fase 3 CER',
+                details: { missing_by_plant: missingByPlant }
+              }
+            })
+          };
+        }
+      }
+
       const result = upsertWorkflow({ entity_type, entity_id, phase, status, owner, due_date, notes });
       return {
         statusCode: 200,

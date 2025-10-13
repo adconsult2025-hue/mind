@@ -1,4 +1,5 @@
 const { listDocs, addDoc, updateDocStatus } = require('./_data');
+const { listPlantDocs, upsertPlantDoc, markPlantDocStatus } = require('./_plant_store');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -17,17 +18,28 @@ exports.handler = async function handler(event) {
   try {
     if (event.httpMethod === 'GET') {
       const params = event.queryStringParameters || {};
+      const phaseParam = params.phase;
       const filter = {
         entity_type: params.entity_type,
         entity_id: params.entity_id,
-        phase: params.phase !== undefined ? Number(params.phase) : undefined
+        phase: phaseParam !== undefined ? phaseParam : undefined
       };
+      if (filter.entity_type !== 'plant' && filter.phase !== undefined) {
+        filter.phase = Number(filter.phase);
+      }
       if (!filter.entity_type || !filter.entity_id) {
         return {
           statusCode: 400,
           headers: headers(),
           body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'entity_type ed entity_id sono obbligatori' } })
         };
+      }
+      if (filter.entity_type === 'plant') {
+        const data = listPlantDocs(filter.entity_id).filter(doc => {
+          if (filter.phase === undefined) return true;
+          return String(doc.phase) === String(filter.phase);
+        });
+        return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data }) };
       }
       const data = listDocs(filter);
       return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data }) };
@@ -54,6 +66,10 @@ exports.handler = async function handler(event) {
             body: JSON.stringify({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Status non valido' } })
           };
         }
+        const plantUpdated = markPlantDocStatus(doc_id, status);
+        if (plantUpdated) {
+          return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data: plantUpdated }) };
+        }
         const updated = updateDocStatus(doc_id, status);
         if (!updated) {
           return {
@@ -66,7 +82,7 @@ exports.handler = async function handler(event) {
       }
 
       if (isUpload) {
-        const { entity_type, entity_id, phase, filename } = body;
+        const { entity_type, entity_id, phase, filename, code, name, doc_id } = body;
         if (!entity_type || !entity_id || !filename) {
           return {
             statusCode: 400,
@@ -81,6 +97,25 @@ exports.handler = async function handler(event) {
             headers: headers(),
             body: JSON.stringify({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Estensione file non supportata' } })
           };
+        }
+        if (entity_type === 'plant') {
+          try {
+            const doc = upsertPlantDoc(entity_id, {
+              id: doc_id,
+              code,
+              name,
+              phase,
+              status: 'uploaded',
+              url: `https://storage.mock/docs/plant/${entity_id}/${Date.now()}_${filename}`
+            });
+            return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data: doc }) };
+          } catch (err) {
+            return {
+              statusCode: 400,
+              headers: headers(),
+              body: JSON.stringify({ ok: false, error: { code: 'UPLOAD_ERROR', message: err.message || 'Errore registrazione documento' } })
+            };
+          }
         }
         const docId = `doc_${Date.now()}`;
         const doc = addDoc({
