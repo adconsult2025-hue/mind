@@ -1,0 +1,38 @@
+[
+  {
+    "id": "cer-contratto-base-v1",
+    "name": "Contratto standard CER",
+    "code": "CER-CONTR-BASE",
+    "module": "contratti",
+    "version": 1,
+    "status": "active",
+    "placeholders": [
+      "cliente.nome",
+      "pod",
+      "cer.nome",
+      "cer.quota_condivisa",
+      "oggi"
+    ],
+    "content": "<article class=\"contract-preview\"><h2>Accordo di adesione CER</h2><p>Tra la Comunità {{cer.nome}} e il partecipante {{cliente.nome}} (POD {{pod}}) si stabilisce la quota condivisa pari a {{cer.quota_condivisa}}.</p><p>Data sottoscrizione: {{oggi}}.</p></article>",
+    "fileName": "contratto-standard.html",
+    "url": "https://storage.mock/templates/CER-CONTR-BASE-v1.html",
+    "uploaded_at": "2024-01-15T09:00:00.000Z"
+  },
+  {
+    "id": "cer-regolamento-v1",
+    "name": "Regolamento operativo CER",
+    "code": "CER-REG-BASE",
+    "module": "cer",
+    "version": 1,
+    "status": "inactive",
+    "placeholders": [
+      "cer.nome",
+      "cer.comune",
+      "oggi"
+    ],
+    "content": "<article><h2>Regolamento {{cer.nome}}</h2><p>La comunità ha sede in {{cer.comune}}. Il presente regolamento è valido dal {{oggi}}.</p></article>",
+    "fileName": "regolamento-cer.html",
+    "url": "https://storage.mock/templates/CER-REG-BASE-v1.html",
+    "uploaded_at": "2024-02-02T08:30:00.000Z"
+  }
+]
