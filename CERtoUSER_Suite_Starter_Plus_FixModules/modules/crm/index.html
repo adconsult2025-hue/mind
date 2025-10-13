@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>MIND — Suite</title>
   <link rel="icon" href="/MIND.png">
-  <link rel="stylesheet" href="/assets/css/style.css?v=16"/>
-  <script type="module" src="/assets/js/app.js?v=18"></script>
-  <script type="module" src="/assets/js/storage.js?v=18"></script>
-  <script type="module" src="/assets/js/crm.js?v=16"></script>
+  <link rel="stylesheet" href="/assets/css/style.css?v=24"/>
+  <script type="module" src="/assets/js/app.js?v=24"></script>
+  <script type="module" src="/assets/js/storage.js?v=24"></script>
+  <script type="module" src="/assets/js/crm.js?v=24"></script>
 </head>
 <body class="dark">
   <header class="app-header">
@@ -149,6 +149,33 @@
           </div>
         </div>
       </div>
+    </section>
+    <section class="card soft" id="client-crono-card" hidden>
+      <div class="row-between">
+        <div>
+          <h3>Cronoprogramma documentale</h3>
+          <p class="info-text">Carica e approva i documenti associati alle fasi CRM del cliente.</p>
+        </div>
+        <div class="actions" data-entity="client">
+          <button class="btn btn-light" type="button" data-doc-upload data-entity="client" data-phase="F1">Carica F1</button>
+          <button class="btn btn-light" type="button" data-doc-upload data-entity="client" data-phase="F2">Carica F2</button>
+          <button class="btn btn-light" type="button" data-doc-upload data-entity="client" data-phase="F3">Carica F3</button>
+        </div>
+      </div>
+      <div class="table-wrap mt-2">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Fase</th>
+              <th>Documento</th>
+              <th>Stato</th>
+              <th class="nowrap">Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="client-crono-docs"></tbody>
+        </table>
+      </div>
+      <p class="info-text" id="client-crono-empty">Nessun documento registrato per il cliente selezionato.</p>
     </section>
   </main>
 

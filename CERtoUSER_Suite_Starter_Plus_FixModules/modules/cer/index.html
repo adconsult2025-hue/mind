@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>MIND — Suite</title>
   <link rel="icon" href="/assets/img/mind.png">
-  <link rel="stylesheet" href="/assets/css/style.css?v=22"/>
-  <script type="module" src="/assets/js/app.js?v=22"></script>
-  <script type="module" src="/assets/js/storage.js?v=22"></script>
-  <script type="module" src="/assets/js/docs.js?v=22"></script>
-  <script type="module" src="/assets/js/cer.js?v=22"></script>
+  <link rel="stylesheet" href="/assets/css/style.css?v=24"/>
+  <script type="module" src="/assets/js/app.js?v=24"></script>
+  <script type="module" src="/assets/js/storage.js?v=24"></script>
+  <script type="module" src="/assets/js/docs.js?v=24"></script>
+  <script type="module" src="/assets/js/cer.js?v=24"></script>
 </head>
 <body class="dark">
   <header class="app-header">
@@ -190,10 +190,26 @@
               <small>Seleziona CER</small>
               <select id="docs-cer-select"></select>
             </label>
+            <button class="btn btn-light" type="button" data-doc-upload data-entity="cer">Carica documento</button>
           </div>
         </div>
 
         <div id="docs-actions" class="actions"></div>
+
+        <div class="table-wrap mt-3">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Fase</th>
+                <th>Documento</th>
+                <th>Stato</th>
+                <th class="nowrap">Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="cer-docs-table"></tbody>
+          </table>
+        </div>
+        <p class="info-text" id="cer-docs-empty" hidden>Nessun documento caricato per la CER selezionata.</p>
 
         <div class="card soft" id="docs-progress-card">
           <h3>Checklist documentale</h3>
