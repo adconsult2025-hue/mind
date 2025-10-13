@@ -1,9 +1,9 @@
 import { allCustomers, saveCustomers, uid, progressCustomers, saveProgressCustomers } from './storage.js';
-import { safeGuardAction } from './safe.js';
+import { STATE as CRONO_STATE } from './cronoprogramma.js?v=26';
 
 const API_BASE = '/api';
 
-const SAFE_MODE = typeof window !== 'undefined' && String(window.SAFE_MODE).toLowerCase() === 'true';
+const SAFE_MODE = typeof window !== 'undefined' && (window.__SAFE_MODE__ === true || String(window.SAFE_MODE).toLowerCase() === 'true');
 
 const form = document.getElementById('form-customer');
 const listEl = document.getElementById('customers-list');

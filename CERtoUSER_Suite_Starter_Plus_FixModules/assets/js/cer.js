@@ -1,7 +1,6 @@
 import { allCustomers, allCER, saveCER, uid, progressCERs, saveProgressCERs } from './storage.js';
 import { saveDocFile, statutoTemplate, regolamentoTemplate, attoCostitutivoTemplate, adesioneTemplate, delegaGSETemplate, contrattoTraderTemplate, informativaGDPRTemplate } from './docs.js';
-import { initCronoprogrammaUI, renderCronoprogramma } from './cronoprogramma.js?v=18';
-import { safeGuardAction, isDryRunResult } from './safe.js';
+import { STATE as CRONO_STATE, initCronoprogrammaUI, renderCronoprogramma } from './cronoprogramma.js?v=26';
 
 const API_BASE = '/api';
 

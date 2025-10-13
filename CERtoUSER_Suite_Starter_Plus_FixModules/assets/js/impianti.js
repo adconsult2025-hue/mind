@@ -1,4 +1,5 @@
-import { safeGuardAction, isDryRunResult } from './safe.js';
+import { STATE as CRONO_STATE } from './cronoprogramma.js?v=26';
+import { apiFetch } from './api.js?v=26';
 
 const API_BASE = '/api';
 
@@ -696,12 +697,15 @@ async function markDoc(docId, status) {
 async function advancePlantPhase(plantId, phase, status) {
   if (!plantId || !phase || !status) return;
   try {
-    await apiFetch(`${API_BASE}/plants/workflows/advance`, {
+    const payload = { plant_id: plantId, phase, status };
+    const fallback = { ...payload, dryRun: true, updatedAt: Date.now(), updated_at: new Date().toISOString() };
+    const res = await apiFetch(`${API_BASE}/plants/workflows/advance`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plant_id: plantId, phase, status })
+      body: JSON.stringify(payload),
+      __safeFallback: fallback
     });
-    toast('Stato fase aggiornato.');
+    toast(res?.dryRun ? 'SAFE MODE: operazione simulata, nessuna modifica salvata.' : 'Checklist aggiornata.');
     await renderPlantCrono(plantId);
   } catch (err) {
     if (err.code === 'GATE_NOT_MET') {
@@ -769,27 +773,6 @@ function csvEscape(value) {
     return `"${str}"`;
   }
   return str;
-}
-
-async function apiFetch(url, options = {}) {
-  const method = (options.method || 'GET').toUpperCase();
-  const executor = () => fetch(url, options);
-  const res = await (method !== 'GET' ? safeGuardAction(executor) : executor());
-  let payload;
-  try {
-    payload = await res.json();
-  } catch (err) {
-    const error = new Error('Risposta JSON non valida');
-    error.code = 'INVALID_JSON';
-    throw error;
-  }
-  if (!res.ok || payload.ok === false) {
-    const error = new Error(payload.error?.message || 'Errore API');
-    error.code = payload.error?.code;
-    error.details = payload.error?.details;
-    throw error;
-  }
-  return payload.data;
 }
 
 function toast(message) {
