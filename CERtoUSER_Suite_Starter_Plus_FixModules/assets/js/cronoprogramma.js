@@ -151,6 +151,7 @@ export const CER_PHASES = [
 ];
 
 const workflowCache = new Map(); // cerId -> Map(phase -> workflow)
+const docsCache = new Map(); // cerId -> Map(phase -> docs[])
 
 let containerEl;
 let feedbackEl;
@@ -236,7 +237,8 @@ export async function renderCronoprogramma(cerId) {
   try {
     setFeedback('Caricamento stato fasi…');
     const workflows = await fetchWorkflows(cerId);
-    renderPhaseCards(workflows);
+    await loadDocs(cerId);
+    renderPhaseCards(workflows, docsCache.get(cerId));
     setFeedback('');
   } catch (err) {
     setFeedback(err.message || 'Errore nel recupero del cronoprogramma', true);
@@ -263,7 +265,7 @@ export async function advancePhase(cerId, phase, status, extra = {}) {
     body: JSON.stringify(payload)
   });
   upsertWorkflowCache(targetCer, data);
-  renderPhaseCards(workflowCache.get(targetCer));
+  renderPhaseCards(workflowCache.get(targetCer), docsCache.get(targetCer) || new Map());
   return data;
 }
 
@@ -301,25 +303,42 @@ export async function openUploadDialog(cerId, phase) {
     emit('cer:notify', 'Seleziona prima una CER.');
     return;
   }
+  const phaseNumber = Number.isFinite(Number(phase)) && Number(phase) >= 0 ? Number(phase) : null;
   const filename = window.prompt('Nome del documento da caricare (mock upload)?');
   if (filename === null) return;
   try {
     const data = await apiFetch(`${API_BASE}/docs/upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entity_type: 'cer', entity_id: target, phase, filename })
+      body: JSON.stringify({ entity_type: 'cer', entity_id: target, phase: phaseNumber, filename })
     });
-    emit('cer:notify', 'Upload documentale simulato: usa l’URL presigned per il caricamento.');
-    const existing = getPhaseState(target, phase) || {};
-    const noteLine = `Upload ${filename} – presigned URL: ${data.upload_url}`;
-    const combinedNotes = [existing.notes, noteLine].filter(Boolean).join('\n');
-    await advancePhase(target, phase, 'in-review', {
-      owner: existing.owner,
-      due_date: existing.due_date,
-      notes: combinedNotes
-    });
+    emit('cer:notify', 'Documento registrato (mock). Usa il link per caricare il file reale.');
+    const group = docsCache.get(target) || new Map();
+    const key = phaseNumber === null ? -1 : phaseNumber;
+    const list = group.get(key) || [];
+    list.push(data);
+    group.set(key, list);
+    docsCache.set(target, group);
+    renderPhaseCards(workflowCache.get(target) || new Map(), group);
   } catch (err) {
     emit('cer:notify', err.message || 'Errore durante il caricamento simulato');
+  }
+}
+
+async function markDocument(docId, status) {
+  if (!docId || !activeCerId) return;
+  try {
+    await apiFetch(`${API_BASE}/docs/mark`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ doc_id: docId, status })
+    });
+    await loadDocs(activeCerId);
+    renderPhaseCards(workflowCache.get(activeCerId) || new Map(), docsCache.get(activeCerId) || new Map());
+    const label = status === 'approved' ? 'approvato' : 'rifiutato';
+    emit('cer:notify', `Documento ${label}.`);
+  } catch (err) {
+    emit('cer:notify', err.message || 'Errore durante l’aggiornamento del documento');
   }
 }
 
@@ -413,6 +432,12 @@ function handleContainerClick(event) {
     case 'gse-info':
       openGseModal();
       break;
+    case 'doc-approve':
+      markDocument(btn.dataset.doc, 'approved', phaseId);
+      break;
+    case 'doc-reject':
+      markDocument(btn.dataset.doc, 'rejected', phaseId);
+      break;
     default:
       break;
   }
@@ -482,7 +507,20 @@ async function fetchWorkflows(cerId) {
   return map;
 }
 
-function renderPhaseCards(workflows = new Map()) {
+async function loadDocs(cerId) {
+  const data = await apiFetch(`${API_BASE}/docs?entity_type=cer&entity_id=${encodeURIComponent(cerId)}`);
+  const grouped = new Map();
+  (Array.isArray(data) ? data : []).forEach(doc => {
+    const phaseRaw = (doc.phase === null || doc.phase === undefined) ? -1 : Number(doc.phase);
+    const phase = Number.isFinite(phaseRaw) ? phaseRaw : -1;
+    if (!grouped.has(phase)) grouped.set(phase, []);
+    grouped.get(phase).push(doc);
+  });
+  docsCache.set(cerId, grouped);
+  return grouped;
+}
+
+function renderPhaseCards(workflows = new Map(), docsByPhase = new Map()) {
   if (!containerEl) return;
   containerEl.innerHTML = '';
   CER_PHASES.forEach(phase => {
@@ -496,6 +534,7 @@ function renderPhaseCards(workflows = new Map()) {
     const card = document.createElement('article');
     card.className = 'card soft phase-card';
     card.dataset.phase = String(phase.id);
+    const docsList = renderDocsList(phase.id, docsByPhase.get(phase.id) || []);
     card.innerHTML = `
       <div class="row-between">
         <div>
@@ -507,6 +546,7 @@ function renderPhaseCards(workflows = new Map()) {
       <p class="info-text"><strong>Referente:</strong> ${owner}<br/><strong>Scadenza:</strong> ${due}${notes}</p>
       ${renderListBlock('Attività', phase.activities)}
       ${renderListBlock('Deliverable (da caricare)', phase.deliverables)}
+      ${docsList}
       ${renderListBlock('Go/No-Go', phase.go_no_go)}
       <div class="actions">
         <button class="btn ghost" data-action="checklist" data-phase="${phase.id}">Vedi checklist</button>
@@ -517,6 +557,23 @@ function renderPhaseCards(workflows = new Map()) {
     `;
     containerEl.appendChild(card);
   });
+
+  const generalDocs = docsByPhase.get(-1) || [];
+  const wrap = document.createElement('article');
+  wrap.className = 'card soft phase-card';
+  wrap.innerHTML = `
+    <div class="row-between">
+      <div>
+        <h3>Documenti generali CER</h3>
+        <p class="info-text">Documenti caricati senza fase specifica.</p>
+      </div>
+      <div class="actions">
+        <button class="btn ghost" data-action="upload" data-phase="-1">Carica documento</button>
+      </div>
+    </div>
+    ${renderDocsList(-1, generalDocs)}
+  `;
+  containerEl.appendChild(wrap);
 }
 
 function renderListBlock(title, items) {
@@ -525,6 +582,37 @@ function renderListBlock(title, items) {
     <div class="phase-block">
       <h4>${title}</h4>
       <ul>${list}</ul>
+    </div>
+  `;
+}
+
+function renderDocsList(phaseId, docs) {
+  const listItems = (docs || []).map(doc => {
+    const statusInfo = getDocStatus(doc.status);
+    const actions = `
+      <div class="doc-actions">
+        <a class="btn ghost" href="${doc.url}" target="_blank" rel="noopener">Apri</a>
+        <button class="btn ghost" data-action="doc-approve" data-doc="${doc.doc_id}" data-phase="${phaseId}">Approva</button>
+        <button class="btn ghost" data-action="doc-reject" data-doc="${doc.doc_id}" data-phase="${phaseId}">Rifiuta</button>
+      </div>
+    `;
+    return `
+      <li data-doc="${doc.doc_id}">
+        <div class="doc-row">
+          <div>
+            <strong>${escapeHtml(doc.filename)}</strong><br/>
+            <small>Upload: ${formatDate(doc.uploaded_at)} · Stato: <span class="badge ${statusInfo.className}">${statusInfo.label}</span></small>
+          </div>
+          ${actions}
+        </div>
+      </li>
+    `;
+  }).join('');
+  const emptyState = '<p class="info-text">Nessun documento caricato.</p>';
+  return `
+    <div class="phase-block docs-block">
+      <h4>Documenti caricati</h4>
+      ${docs && docs.length ? `<ul class="docs-list">${listItems}</ul>` : emptyState}
     </div>
   `;
 }
@@ -575,6 +663,13 @@ function getStatusLabel(status) {
     default:
       return 'Da avviare';
   }
+}
+
+function getDocStatus(status) {
+  const normalized = String(status || 'uploaded');
+  if (normalized === 'approved') return { label: 'Approvato', className: 'green' };
+  if (normalized === 'rejected') return { label: 'Rifiutato', className: 'danger' };
+  return { label: 'Caricato', className: 'blue' };
 }
 
 function formatDate(value) {

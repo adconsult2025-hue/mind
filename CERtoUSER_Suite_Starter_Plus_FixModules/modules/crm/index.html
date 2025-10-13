@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>MIND — Suite</title>
   <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/css/style.css?v=12"/>
-  <script type="module" src="/assets/js/app.js?v=12"></script>
-  <script type="module" src="/assets/js/storage.js?v=12"></script>
-  <script type="module" src="/assets/js/crm.js?v=12"></script>
+  <link rel="stylesheet" href="/assets/css/style.css?v=15"/>
+  <script type="module" src="/assets/js/app.js?v=15"></script>
+  <script type="module" src="/assets/js/storage.js?v=15"></script>
+  <script type="module" src="/assets/js/crm.js?v=15"></script>
 </head>
 <body class="dark">
   <header class="app-header">
@@ -24,6 +24,7 @@
     <nav class="toolbar">
       <a class="btn" href="/modules/crm/">CRM</a>
       <a class="btn" href="/modules/cer/">CER</a>
+      <a class="btn" href="/modules/impianti/">IMPIANTI</a>
       <a class="btn" href="/modules/modelli/">MODELLI</a>
       <a class="btn" href="/modules/contratti/">CONTRATTI</a>
       <a class="btn ghost" href="/">HUB</a>
@@ -86,7 +87,82 @@
         <div id="customers-list" class="table"></div>
       </div>
     </section>
+    <section class="card" id="customer-detail" style="grid-column: 1 / -1;" hidden>
+      <div class="row-between">
+        <div>
+          <h2 id="detail-name">Scheda cliente</h2>
+          <p class="info-text" id="detail-info"></p>
+        </div>
+        <div class="actions">
+          <button class="btn ghost" type="button" id="detail-close">Chiudi scheda</button>
+        </div>
+      </div>
+
+      <div class="grid-2" id="detail-consumption-grid">
+        <form id="consumi-form" class="card soft">
+          <h3>Consumi annui</h3>
+          <div class="grid-2">
+            <label>Anno di riferimento
+              <input type="number" name="year" id="consumi-year" min="2000" max="2100" required />
+            </label>
+            <label>F1 (kWh)
+              <input type="number" name="f1_kwh" id="consumi-f1" min="0" step="0.01" required />
+            </label>
+            <label>F2 (kWh)
+              <input type="number" name="f2_kwh" id="consumi-f2" min="0" step="0.01" required />
+            </label>
+            <label>F3 (kWh)
+              <input type="number" name="f3_kwh" id="consumi-f3" min="0" step="0.01" required />
+            </label>
+          </div>
+          <p class="info-text" id="consumi-feedback"></p>
+          <div class="actions">
+            <button class="btn" type="submit">Salva consumi</button>
+            <button class="btn ghost" type="button" id="btn-import-bill">Importa da bolletta</button>
+          </div>
+        </form>
+
+        <div class="card soft">
+          <h3>Storico consumi</h3>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Anno</th>
+                  <th>F1 (kWh)</th>
+                  <th>F2 (kWh)</th>
+                  <th>F3 (kWh)</th>
+                  <th>Totale</th>
+                </tr>
+              </thead>
+              <tbody id="consumi-history"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
+
+  <div class="modal" id="modal-bill-import" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close-modal="bill"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h3>Importa bolletta</h3>
+        <button class="close-btn" type="button" data-close-modal="bill">×</button>
+      </div>
+      <div class="stack">
+        <label>File bolletta (PDF/JPG/PNG)
+          <input type="file" id="bill-file" accept=".pdf,.jpg,.jpeg,.png" />
+        </label>
+        <p class="info-text" id="bill-import-feedback"></p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" type="button" id="btn-bill-upload">Carica</button>
+        <button class="btn ghost" type="button" id="btn-bill-parse" disabled>Estrai dati</button>
+        <button class="btn" type="button" id="btn-bill-save" disabled>Salva consumi</button>
+      </div>
+    </div>
+  </div>
 
   <footer class="footer">
     <small>© 2025 MIND Suite</small>
