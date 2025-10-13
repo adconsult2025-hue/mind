@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MIND — Simulatori</title>
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/css/style.css?v=20"/>
+  <script type="module" src="/assets/js/app.js?v=18"></script>
+  <script type="module" src="/assets/js/sim_pv.js?v=20"></script>
+</head>
+<body class="dark">
+  <header class="app-header">
+    <div class="brand">
+      <a href="/" class="brand-link">
+        <img class="logo" src="/MIND.png" alt="MIND">
+        <span class="brand-name">MIND</span>
+      </a>
+      <div class="titles">
+        <h1>Simulatori</h1>
+        <p class="subtitle">Analizza scenari fotovoltaici e termici</p>
+      </div>
+    </div>
+    <nav class="toolbar">
+      <a class="btn" href="/modules/crm/">CRM</a>
+      <a class="btn" href="/modules/cer/">CER</a>
+      <a class="btn" href="/modules/modelli/">MODELLI</a>
+      <a class="btn" href="/modules/contratti/">CONTRATTI</a>
+      <a class="btn" href="/modules/impianti/">IMPIANTI</a>
+      <a class="btn" href="/modules/simulatori/">SIMULATORI</a>
+      <a class="btn ghost" href="/">HUB</a>
+    </nav>
+  </header>
+
+  <main class="container wide" id="simulatori-app">
+    <section class="card">
+      <div class="tabs" id="simulatori-tabs">
+        <button class="tab-btn active" type="button" data-tab="pv">Fotovoltaico</button>
+        <button class="tab-btn" type="button" data-tab="ct">Comunità Termica</button>
+      </div>
+
+      <section class="tab-panel active" data-panel="pv">
+        <div class="pv-grid grid-2">
+          <section class="card soft stack" id="pv-input-card">
+            <div class="row-between">
+              <div>
+                <h2>Simulatore fotovoltaico</h2>
+                <p class="info-text">Compila i parametri per confrontare gli scenari di investimento e autoconsumo.</p>
+              </div>
+              <span class="badge blue">Versione 20</span>
+            </div>
+
+            <section class="card soft stack" id="scenario-flags-card">
+              <div class="row-between">
+                <h3>Scenari</h3>
+                <span class="badge muted">Base sempre disponibile</span>
+              </div>
+              <div class="switch-group">
+                <div class="switch fake-base">
+                  <span class="switch-control" aria-hidden="true"></span>
+                  <div class="switch-copy">
+                    <strong>Scenario Base</strong>
+                    <small>Investimento senza incentivi o CER.</small>
+                  </div>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="chk_pnrr" />
+                  <span class="switch-control" aria-hidden="true"></span>
+                  <div class="switch-copy">
+                    <strong>Incentivo PNRR 40%</strong>
+                    <small>Grant in conto capitale con dimezzamento incentivo CER.</small>
+                  </div>
+                </label>
+                <label class="switch">
+                  <input type="checkbox" id="chk_irpef" />
+                  <span class="switch-control" aria-hidden="true"></span>
+                  <div class="switch-copy">
+                    <strong>IRPEF 50% (10 anni)</strong>
+                    <small>Recupero fiscale in dieci quote costanti.</small>
+                  </div>
+                </label>
+                <label class="switch">
+                  <input type="checkbox" id="chk_cer" />
+                  <span class="switch-control" aria-hidden="true"></span>
+                  <div class="switch-copy">
+                    <strong>CER attiva</strong>
+                    <small>Ricavi da condivisione energia, costi e tariffa CER.</small>
+                  </div>
+                </label>
+                <label class="switch">
+                  <input type="checkbox" id="chk_piva" />
+                  <span class="switch-control" aria-hidden="true"></span>
+                  <div class="switch-copy">
+                    <strong>Soggetto P.IVA</strong>
+                    <small>Ammortamento e tax shield sull'investimento.</small>
+                  </div>
+                </label>
+                <label class="switch">
+                  <input type="checkbox" id="chk_piva_cer" />
+                  <span class="switch-control" aria-hidden="true"></span>
+                  <div class="switch-copy">
+                    <strong>P.IVA + CER</strong>
+                    <small>Combina ammortamento e ricavi CER.</small>
+                  </div>
+                </label>
+              </div>
+              <div class="scenario-alerts">
+                <span class="badge warn" id="badge-pnrr-irpef" hidden>Verificare compatibilità PNRR + IRPEF col consulente fiscale.</span>
+                <span class="badge blue" id="badge-pnrr-incentivo" hidden>PNRR attivo: componente Incentivo CER dimezzata.</span>
+              </div>
+            </section>
+
+            <section class="card soft stack" id="cer-inputs-card">
+              <div class="row-between">
+                <h3>Tariffa CER</h3>
+                <span class="badge muted">Totale: <strong id="cer-tariff-total">€ 0,00</strong>/kWh</span>
+              </div>
+              <p class="info-text">Scomponi la tariffa in Incentivo, Premio e Zona. Se attivo <strong>PNRR 40%</strong>, la componente Incentivo viene dimezzata automaticamente.</p>
+              <div class="grid-3">
+                <label>CER — componente Incentivo (€/kWh)
+                  <div class="input-with-help">
+                    <input type="number" id="cer_incentivo" min="0" step="0.001" value="0.11" />
+                    <button type="button" class="help-btn" title="Quota base incentivante riconosciuta dal GSE.">i</button>
+                  </div>
+                </label>
+                <label>CER — componente Premio (€/kWh)
+                  <div class="input-with-help">
+                    <input type="number" id="cer_premio" min="0" step="0.001" value="0.02" />
+                    <button type="button" class="help-btn" title="Maggiorazioni o bonus legati a dimensione e autoconsumo.">i</button>
+                  </div>
+                </label>
+                <label>CER — componente Zona (€/kWh)
+                  <div class="input-with-help">
+                    <input type="number" id="cer_zona" min="0" step="0.001" value="0.01" />
+                    <button type="button" class="help-btn" title="Differenziale territoriale applicato in base all'area geografica.">i</button>
+                  </div>
+                </label>
+              </div>
+            </section>
+
+            <section class="card soft stack" id="pv-inputs-card">
+              <h3>Parametri impianto</h3>
+              <div class="grid-3">
+                <label>Potenza impianto (kW)
+                  <input type="number" id="pv_kw" min="0" step="0.1" value="6" />
+                </label>
+                <label>CAPEX totale (€)
+                  <input type="number" id="pv_capex" min="0" step="100" value="9000" />
+                </label>
+                <label>OPEX annuo (€)
+                  <input type="number" id="pv_opex" min="0" step="10" value="150" />
+                </label>
+                <label>Produzione specifica (kWh/kW)
+                  <input type="number" id="pv_prod_specific" min="0" step="10" value="1300" />
+                </label>
+                <label>Degrado annuo (%)
+                  <input type="number" id="pv_degrado" min="0" max="100" step="0.1" value="0.7" />
+                </label>
+                <label>Autoconsumo (%)
+                  <input type="number" id="pv_autoconsumo" min="0" max="100" step="1" value="35" />
+                </label>
+                <label>Prezzo energia iniziale (€/kWh)
+                  <input type="number" id="pv_price" min="0" step="0.01" value="0.28" />
+                </label>
+                <label>Inflazione prezzo energia (%)
+                  <input type="number" id="pv_inflazione" min="0" max="100" step="0.1" value="3" />
+                </label>
+                <label>Costi CER annui (€)
+                  <input type="number" id="pv_cer_costi" min="0" step="10" value="0" />
+                </label>
+              </div>
+            </section>
+
+            <section class="card soft stack" id="cer-energy-card">
+              <h3>Energia condivisa CER</h3>
+              <div class="grid-3">
+                <label>kWh CER annui
+                  <input type="number" id="pv_cer_kwh" min="0" step="10" value="2000" />
+                </label>
+                <label>% produzione in CER
+                  <input type="number" id="pv_cer_perc" min="0" max="100" step="1" value="0" />
+                </label>
+                <label class="chk-inline">
+                  <input type="checkbox" id="chk_cer_degrada" />
+                  <span>Degrada i kWh CER con la produzione</span>
+                </label>
+              </div>
+              <p class="info-text">Compila uno tra kWh annui o percentuale su produzione. Seleziona l'opzione degrada per scalare i kWh assoluti con la produzione.</p>
+            </section>
+
+            <section class="card soft stack" id="finance-card">
+              <h3>Parametri finanziari</h3>
+              <div class="grid-3">
+                <label>Orizzonte analisi (anni)
+                  <input type="number" id="pv_orizzonte" min="1" max="30" step="1" value="20" />
+                </label>
+                <label>Tasso di sconto (%)
+                  <input type="number" id="pv_tasso" min="0" max="100" step="0.1" value="5" />
+                </label>
+                <label>Grant PNRR (%)
+                  <input type="number" id="pv_pnrr_grant" min="0" max="100" step="1" value="40" />
+                </label>
+                <label>Aliquota IRPEF marginale (%)
+                  <input type="number" id="pv_irpef" min="0" max="100" step="1" value="38" />
+                </label>
+                <label>Aliquota fiscale totale (%)
+                  <input type="number" id="pv_tax" min="0" max="100" step="1" value="28" />
+                </label>
+                <label>Anni ammortamento (P.IVA)
+                  <input type="number" id="pv_ammortamento" min="1" max="20" step="1" value="5" />
+                </label>
+              </div>
+            </section>
+          </section>
+
+          <section class="card soft stack" id="pv-output-card">
+            <div class="row-between">
+              <div>
+                <h2>Risultati scenari</h2>
+                <p class="info-text">Valuta Payback, NPV e IRR per ogni combinazione attivata.</p>
+              </div>
+              <span class="badge muted" id="pv-tariff-info">Tariffa CER effettiva: <strong id="tariffa-cer-label">€ 0,00</strong>/kWh</span>
+            </div>
+
+            <div class="tabs scenario-tabs" id="scenario-tabs">
+              <button class="tab-btn active" type="button" data-scenario-tab="base">Base</button>
+              <button class="tab-btn" type="button" data-scenario-tab="pnrr">PNRR</button>
+              <button class="tab-btn" type="button" data-scenario-tab="irpef">IRPEF</button>
+              <button class="tab-btn" type="button" data-scenario-tab="cer">CER</button>
+              <button class="tab-btn" type="button" data-scenario-tab="piva">P.IVA</button>
+              <button class="tab-btn" type="button" data-scenario-tab="pivacer">P.IVA + CER</button>
+            </div>
+
+            <div class="scenario-panels">
+              <section class="scenario-panel active" data-scenario-panel="base">
+                <div class="scenario-message" data-scenario-message>Lo scenario base considera solo risparmi da autoconsumo e OPEX.</div>
+                <div class="kpi-grid" hidden>
+                  <div class="kpi">
+                    <span class="kpi-label">Payback semplice</span>
+                    <span class="kpi-value" data-metric="payback-simple"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">Payback attualizzato</span>
+                    <span class="kpi-value" data-metric="payback-discounted"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">NPV</span>
+                    <span class="kpi-value" data-metric="npv"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">IRR</span>
+                    <span class="kpi-value" data-metric="irr"></span>
+                  </div>
+                </div>
+                <div class="table-wrap" hidden>
+                  <table class="data-table" data-cashflow-table>
+                    <thead>
+                      <tr>
+                        <th>Anno</th>
+                        <th>Cash Flow (€)</th>
+                        <th>Cash Flow attualizzato (€)</th>
+                        <th>Cumulato (€)</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+              </section>
+              <section class="scenario-panel" data-scenario-panel="pnrr">
+                <div class="scenario-message" data-scenario-message>Attiva il flag PNRR per sbloccare questo scenario.</div>
+                <div class="kpi-grid" hidden>
+                  <div class="kpi">
+                    <span class="kpi-label">Payback semplice</span>
+                    <span class="kpi-value" data-metric="payback-simple"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">Payback attualizzato</span>
+                    <span class="kpi-value" data-metric="payback-discounted"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">NPV</span>
+                    <span class="kpi-value" data-metric="npv"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">IRR</span>
+                    <span class="kpi-value" data-metric="irr"></span>
+                  </div>
+                </div>
+                <div class="table-wrap" hidden>
+                  <table class="data-table" data-cashflow-table>
+                    <thead>
+                      <tr>
+                        <th>Anno</th>
+                        <th>Cash Flow (€)</th>
+                        <th>Cash Flow attualizzato (€)</th>
+                        <th>Cumulato (€)</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+              </section>
+              <section class="scenario-panel" data-scenario-panel="irpef">
+                <div class="scenario-message" data-scenario-message>Attiva il flag IRPEF 50% per calcolare la detrazione.</div>
+                <div class="kpi-grid" hidden>
+                  <div class="kpi">
+                    <span class="kpi-label">Payback semplice</span>
+                    <span class="kpi-value" data-metric="payback-simple"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">Payback attualizzato</span>
+                    <span class="kpi-value" data-metric="payback-discounted"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">NPV</span>
+                    <span class="kpi-value" data-metric="npv"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">IRR</span>
+                    <span class="kpi-value" data-metric="irr"></span>
+                  </div>
+                </div>
+                <div class="table-wrap" hidden>
+                  <table class="data-table" data-cashflow-table>
+                    <thead>
+                      <tr>
+                        <th>Anno</th>
+                        <th>Cash Flow (€)</th>
+                        <th>Cash Flow attualizzato (€)</th>
+                        <th>Cumulato (€)</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+              </section>
+              <section class="scenario-panel" data-scenario-panel="cer">
+                <div class="scenario-message" data-scenario-message>Attiva il flag CER per includere ricavi e costi CER.</div>
+                <div class="kpi-grid" hidden>
+                  <div class="kpi">
+                    <span class="kpi-label">Payback semplice</span>
+                    <span class="kpi-value" data-metric="payback-simple"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">Payback attualizzato</span>
+                    <span class="kpi-value" data-metric="payback-discounted"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">NPV</span>
+                    <span class="kpi-value" data-metric="npv"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">IRR</span>
+                    <span class="kpi-value" data-metric="irr"></span>
+                  </div>
+                </div>
+                <div class="table-wrap" hidden>
+                  <table class="data-table" data-cashflow-table>
+                    <thead>
+                      <tr>
+                        <th>Anno</th>
+                        <th>Cash Flow (€)</th>
+                        <th>Cash Flow attualizzato (€)</th>
+                        <th>Cumulato (€)</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+              </section>
+              <section class="scenario-panel" data-scenario-panel="piva">
+                <div class="scenario-message" data-scenario-message>Attiva il flag Soggetto P.IVA per calcolare ammortamenti e tax shield.</div>
+                <div class="kpi-grid" hidden>
+                  <div class="kpi">
+                    <span class="kpi-label">Payback semplice</span>
+                    <span class="kpi-value" data-metric="payback-simple"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">Payback attualizzato</span>
+                    <span class="kpi-value" data-metric="payback-discounted"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">NPV</span>
+                    <span class="kpi-value" data-metric="npv"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">IRR</span>
+                    <span class="kpi-value" data-metric="irr"></span>
+                  </div>
+                </div>
+                <div class="table-wrap" hidden>
+                  <table class="data-table" data-cashflow-table>
+                    <thead>
+                      <tr>
+                        <th>Anno</th>
+                        <th>Cash Flow (€)</th>
+                        <th>Cash Flow attualizzato (€)</th>
+                        <th>Cumulato (€)</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+              </section>
+              <section class="scenario-panel" data-scenario-panel="pivacer">
+                <div class="scenario-message" data-scenario-message>Attiva il flag P.IVA + CER per sommare tax shield e ricavi CER.</div>
+                <div class="kpi-grid" hidden>
+                  <div class="kpi">
+                    <span class="kpi-label">Payback semplice</span>
+                    <span class="kpi-value" data-metric="payback-simple"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">Payback attualizzato</span>
+                    <span class="kpi-value" data-metric="payback-discounted"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">NPV</span>
+                    <span class="kpi-value" data-metric="npv"></span>
+                  </div>
+                  <div class="kpi">
+                    <span class="kpi-label">IRR</span>
+                    <span class="kpi-value" data-metric="irr"></span>
+                  </div>
+                </div>
+                <div class="table-wrap" hidden>
+                  <table class="data-table" data-cashflow-table>
+                    <thead>
+                      <tr>
+                        <th>Anno</th>
+                        <th>Cash Flow (€)</th>
+                        <th>Cash Flow attualizzato (€)</th>
+                        <th>Cumulato (€)</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="tab-panel" data-panel="ct">
+        <section class="card soft stack">
+          <h2>Simulatore Comunità Termica</h2>
+          <p class="info-text">Il simulatore CT rimane invariato in questa release. Utilizza la versione precedente oppure importa i tuoi parametri personalizzati.</p>
+          <p class="info-text">Stiamo integrando i dati della piattaforma locale per la pubblicazione online.</p>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <small>© 2025 MIND Suite — Simulatori.</small>
+  </footer>
+</body>
+</html>
