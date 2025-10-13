@@ -1,4 +1,4 @@
-import { safeGuardAction } from './safe.js';
+import { safeGuardAction, isDryRunResult } from './safe.js';
 
 const API_BASE = '/api';
 
@@ -261,12 +261,30 @@ export async function advancePhase(cerId, phase, status, extra = {}) {
     due_date: extra.due_date !== undefined ? extra.due_date : (existing?.due_date || ''),
     notes: extra.notes !== undefined ? extra.notes : (existing?.notes || '')
   };
+  const fallbackEntry = {
+    ...(existing || {}),
+    ...payload,
+    updated_at: new Date().toISOString()
+  };
+  if (!fallbackEntry.id) {
+    fallbackEntry.id = `${targetCer}-${phase}`;
+  }
   const data = await apiFetch(`${API_BASE}/workflows/advance`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    __safeFallback: fallbackEntry
   });
-  upsertWorkflowCache(targetCer, data);
+  const normalized = data && typeof data === 'object' ? { ...data } : data;
+  if (normalized && typeof normalized === 'object') {
+    delete normalized.dryRun;
+  }
+  if (normalized) {
+    upsertWorkflowCache(targetCer, normalized);
+  }
+  if (data?.dryRun) {
+    emit('cer:notify', 'SAFE MODE attivo: avanzamento fase simulato (dry-run).');
+  }
   renderPhaseCards(workflowCache.get(targetCer), docsCache.get(targetCer) || new Map());
   return data;
 }
@@ -309,16 +327,36 @@ export async function openUploadDialog(cerId, phase) {
   const filename = window.prompt('Nome del documento da caricare (mock upload)?');
   if (filename === null) return;
   try {
+    const dryRunDoc = {
+      doc_id: `dry-run-${Date.now()}`,
+      phase: phaseNumber,
+      filename,
+      status: 'uploaded',
+      url: '#',
+      uploaded_at: new Date().toISOString(),
+      dryRun: true
+    };
     const data = await apiFetch(`${API_BASE}/docs/upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entity_type: 'cer', entity_id: target, phase: phaseNumber, filename })
+      body: JSON.stringify({ entity_type: 'cer', entity_id: target, phase: phaseNumber, filename }),
+      __safeFallback: dryRunDoc
     });
-    emit('cer:notify', 'Documento registrato (mock). Usa il link per caricare il file reale.');
+    if (data?.dryRun) {
+      emit('cer:notify', 'SAFE MODE attivo: caricamento documento simulato (dry-run).');
+    } else {
+      emit('cer:notify', 'Documento registrato (mock). Usa il link per caricare il file reale.');
+    }
     const group = docsCache.get(target) || new Map();
     const key = phaseNumber === null ? -1 : phaseNumber;
     const list = group.get(key) || [];
-    list.push(data);
+    const normalized = data && typeof data === 'object' ? { ...data } : data;
+    if (normalized && typeof normalized === 'object') {
+      delete normalized.dryRun;
+    }
+    if (normalized) {
+      list.push(normalized);
+    }
     group.set(key, list);
     docsCache.set(target, group);
     renderPhaseCards(workflowCache.get(target) || new Map(), group);
@@ -330,15 +368,34 @@ export async function openUploadDialog(cerId, phase) {
 async function markDocument(docId, status) {
   if (!docId || !activeCerId) return;
   try {
-    await apiFetch(`${API_BASE}/docs/mark`, {
+    let cachedDoc = null;
+    const docGroups = docsCache.get(activeCerId);
+    if (docGroups instanceof Map) {
+      for (const list of docGroups.values()) {
+        if (!Array.isArray(list)) continue;
+        const found = list.find(item => item && item.doc_id === docId);
+        if (found) {
+          cachedDoc = found;
+          break;
+        }
+      }
+    }
+    const fallbackDoc = cachedDoc ? { ...cachedDoc, status, updated_at: new Date().toISOString(), dryRun: true } : null;
+    const data = await apiFetch(`${API_BASE}/docs/mark`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ doc_id: docId, status })
+      body: JSON.stringify({ doc_id: docId, status }),
+      __safeFallback: fallbackDoc
     });
+    if (data?.dryRun) {
+      emit('cer:notify', 'SAFE MODE attivo: aggiornamento stato documento simulato.');
+    }
     await loadDocs(activeCerId);
     renderPhaseCards(workflowCache.get(activeCerId) || new Map(), docsCache.get(activeCerId) || new Map());
     const label = status === 'approved' ? 'approvato' : 'rifiutato';
-    emit('cer:notify', `Documento ${label}.`);
+    if (!data?.dryRun) {
+      emit('cer:notify', `Documento ${label}.`);
+    }
   } catch (err) {
     emit('cer:notify', err.message || 'Errore durante l’aggiornamento del documento');
   }
@@ -633,8 +690,9 @@ function upsertWorkflowCache(cerId, entry) {
 }
 
 async function apiFetch(url, options = {}) {
-  const method = (options.method || 'GET').toUpperCase();
-  const executor = () => fetch(url, options);
+  const { __safeFallback, ...fetchOptions } = options;
+  const method = (fetchOptions.method || 'GET').toUpperCase();
+  const executor = () => fetch(url, fetchOptions);
   const res = await (method !== 'GET' ? safeGuardAction(executor) : executor());
   let payload;
   try {
@@ -648,6 +706,15 @@ async function apiFetch(url, options = {}) {
     const err = new Error(message);
     err.details = error.details;
     throw err;
+  }
+  if (isDryRunResult(res, payload)) {
+    if (__safeFallback !== undefined) {
+      if (__safeFallback && typeof __safeFallback === 'object') {
+        return { ...__safeFallback };
+      }
+      return __safeFallback;
+    }
+    return null;
   }
   return payload.data;
 }
