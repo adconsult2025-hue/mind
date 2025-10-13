@@ -7,9 +7,9 @@
   <link rel="icon" href="/assets/img/favicon.png">
   <!-- USA PERCORSI ASSOLUTI + VERSIONE PER BYPASS CACHE -->
   <link rel="stylesheet" href="/assets/css/style.css?v=7"/>
-  <script type="module" src="/assets/js/storage.js?v=6"></script>
-  <script type="module" src="/assets/js/docs.js?v=6"></script>
-  <script type="module" src="/assets/js/cer.js?v=6"></script>
+  <script type="module" src="/assets/js/storage.js?v=7"></script>
+  <script type="module" src="/assets/js/docs.js?v=7"></script>
+  <script type="module" src="/assets/js/cer.js?v=7"></script>
 </head>
 <body class="dark">
   <header class="app-header">
@@ -29,84 +29,194 @@
     </nav>
   </header>
 
-  <main class="container grid-2">
-    <section class="card">
-      <h2>Nuova CER</h2>
-      <form id="form-cer">
-        <div class="grid-2">
-          <label>Denominazione CER
-            <input type="text" name="nome" placeholder="CER Ponte Grande" required/>
-          </label>
-          <label>Cabina primaria
-            <input type="text" name="cabina" placeholder="CP-001" required/>
-          </label>
-          <label>Comune
-            <input type="text" name="comune" placeholder="Frosinone" required/>
-          </label>
-          <label>Codice Fiscale CER (se disponibile)
-            <input type="text" name="cf" placeholder="(opzionale)"/>
-          </label>
-          <label>Quota energia condivisa (%)
-            <input type="number" name="quota" min="1" max="100" value="60" required/>
-          </label>
-          <label>Riparti incentivi
-            <select name="riparto">
-              <option value="Produttore85_CER15">Produttore 85% / CER 15%</option>
-              <option value="Produttore70_CER30">Produttore 70% / CER 30%</option>
-              <option value="Personalizzato">Personalizzato (imposta sotto)</option>
-            </select>
-          </label>
-          <label>Trader eccedenze
-            <input type="text" name="trader" placeholder="Omnia Energia S.r.l."/>
-          </label>
-          <label>Note
-            <input type="text" name="note" placeholder="Es. modello franchising, regole particolari..."/>
-          </label>
-        </div>
+  <main class="container">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="setup">Configurazione CER</button>
+      <button class="tab-btn" data-tab="plants">Impianti fotovoltaici</button>
+    </div>
 
-        <details class="card soft">
-          <summary>Riparti personalizzati</summary>
-          <div class="grid-3">
-            <label>Produttore %
-              <input type="number" name="rp_prod" min="0" max="100" value="85"/>
+    <section class="tab-panel active grid-2" data-panel="setup">
+      <section class="card">
+        <h2>Nuova CER</h2>
+        <form id="form-cer">
+          <div class="grid-2">
+            <label>Denominazione CER
+              <input type="text" name="nome" placeholder="CER Ponte Grande" required/>
             </label>
-            <label>Prosumer %
-              <input type="number" name="rp_pros" min="0" max="100" value="0"/>
+            <label>Cabina primaria
+              <input type="text" name="cabina" placeholder="CP-001" required/>
             </label>
-            <label>CER %
-              <input type="number" name="rp_cer" min="0" max="100" value="15"/>
+            <label>Comune
+              <input type="text" name="comune" placeholder="Frosinone" required/>
+            </label>
+            <label>Codice Fiscale CER (se disponibile)
+              <input type="text" name="cf" placeholder="(opzionale)"/>
+            </label>
+            <label>Quota energia condivisa (%)
+              <input type="number" name="quota" min="1" max="100" value="60" required/>
+            </label>
+            <label>Riparti incentivi
+              <select name="riparto">
+                <option value="Produttore85_CER15">Produttore 85% / CER 15%</option>
+                <option value="Produttore70_CER30">Produttore 70% / CER 30%</option>
+                <option value="Personalizzato">Personalizzato (imposta sotto)</option>
+              </select>
+            </label>
+            <label>Trader eccedenze
+              <input type="text" name="trader" placeholder="Omnia Energia S.r.l."/>
+            </label>
+            <label>Note
+              <input type="text" name="note" placeholder="Es. modello franchising, regole particolari..."/>
             </label>
           </div>
-          <p class="hint">La somma deve essere 100%.</p>
-        </details>
 
-        <div class="card soft">
-          <h3>Seleziona membri (da CRM)</h3>
-          <div id="members-picker" class="members"></div>
-        </div>
+          <details class="card soft">
+            <summary>Riparti personalizzati</summary>
+            <div class="grid-3">
+              <label>Produttore %
+                <input type="number" name="rp_prod" min="0" max="100" value="85"/>
+              </label>
+              <label>Prosumer %
+                <input type="number" name="rp_pros" min="0" max="100" value="0"/>
+              </label>
+              <label>CER %
+                <input type="number" name="rp_cer" min="0" max="100" value="15"/>
+              </label>
+            </div>
+            <p class="hint">La somma deve essere 100%.</p>
+          </details>
 
-        <div class="card soft">
-          <h3>Impianti fotovoltaici</h3>
-          <p class="hint">Per ciascun impianto assegna un titolare (prosumer o produttore) e riparti i benefici tra tutti i membri selezionati. La somma delle percentuali deve essere 100%.</p>
-          <div id="plants-list" class="plants"></div>
-          <button class="btn ghost" type="button" id="add-plant">Aggiungi impianto</button>
-        </div>
+          <div class="card soft">
+            <h3>Seleziona membri (da CRM)</h3>
+            <div id="members-picker" class="members"></div>
+          </div>
 
-        <div class="actions">
-          <button class="btn" type="submit">Crea CER</button>
-          <button class="btn ghost" type="reset">Reset</button>
+          <div class="actions">
+            <button class="btn" type="submit">Crea CER</button>
+            <button class="btn ghost" type="reset">Reset</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="row-between">
+          <h2>CER esistenti</h2>
+          <input id="search-cer" class="search" placeholder="Cerca per nome, cabina, comune..."/>
         </div>
-      </form>
+        <div id="cer-list" class="table"></div>
+      </section>
     </section>
 
-    <section class="card">
-      <div class="row-between">
-        <h2>CER esistenti</h2>
-        <input id="search-cer" class="search" placeholder="Cerca per nome, cabina, comune..."/>
-      </div>
-      <div id="cer-list" class="table"></div>
+    <section class="tab-panel" data-panel="plants">
+      <section class="card">
+        <div class="row-between">
+          <div>
+            <h2>Impianti fotovoltaici</h2>
+            <p class="info-text">Gestisci tipologia, percentuali e riparti su base kWh.</p>
+          </div>
+          <div class="actions">
+            <button class="btn ghost" type="button" id="btn-export-csv">Esporta CSV</button>
+            <button class="btn ghost" type="button" id="btn-recalc-preview">Ricalcola periodo corrente</button>
+            <button class="btn" type="button" id="btn-recalc-confirm">Conferma riparti</button>
+          </div>
+        </div>
+
+        <div class="filters helper-grid">
+          <label>Seleziona CER
+            <select id="plants-cer-select"></select>
+          </label>
+          <label>Periodo di riferimento
+            <input type="month" id="plants-period"/>
+          </label>
+        </div>
+
+        <p id="plants-feedback" class="info-text"></p>
+
+        <div class="table-wrapper mt-4">
+          <table class="data-table" id="plants-table">
+            <thead>
+              <tr>
+                <th>Nome impianto</th>
+                <th>Tipologia</th>
+                <th>% CER</th>
+                <th>% Controparte</th>
+                <th>kWh condivisi</th>
+                <th>Validazione</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div id="allocations-preview" class="preview-box hidden">
+          <h3>Anteprima riparti CER</h3>
+          <div id="allocations-preview-content" class="preview-grid"></div>
+          <div class="mt-4">
+            <h4>Totali per membro</h4>
+            <div id="allocations-preview-members" class="preview-grid"></div>
+          </div>
+        </div>
+      </section>
     </section>
   </main>
+
+  <div id="plant-config-modal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div>
+          <h3 id="plant-modal-title">Configura impianto</h3>
+          <p class="info-text" id="plant-modal-subtitle"></p>
+          <p class="info-text" id="plant-modal-energy"></p>
+        </div>
+        <button class="close-btn" type="button" data-close-modal aria-label="Chiudi">×</button>
+      </div>
+
+      <div class="helper-grid">
+        <label>Tipologia impianto
+          <select id="plant-modal-tipologia">
+            <option value="A">Tipologia A — Produttori</option>
+            <option value="B">Tipologia B — Prosumer</option>
+          </select>
+        </label>
+        <label>Percentuale CER
+          <input type="number" id="plant-modal-pct-cer" min="0" max="100" step="1"/>
+        </label>
+        <label>Percentuale controparte
+          <input type="number" id="plant-modal-pct-contra" min="0" max="100" step="1"/>
+        </label>
+      </div>
+
+      <div class="helper-grid">
+        <label>Regola quota CER
+          <input type="range" id="plant-modal-slider" min="0" max="100" step="1"/>
+        </label>
+        <div>
+          <p class="info-text">Le percentuali devono sempre sommare 100%. Se modifichi una quota, l'altra viene adeguata automaticamente.</p>
+          <p class="error-text hidden" id="plant-modal-error"></p>
+        </div>
+      </div>
+
+      <div>
+        <div class="weights-tabs">
+          <button type="button" class="active" data-weight-tab="consumers">Consumer</button>
+          <button type="button" data-weight-tab="counter">Controparte</button>
+        </div>
+        <div id="plant-modal-weights" class="weights-list"></div>
+      </div>
+
+      <div class="preview-box">
+        <h4>Anteprima riparti (kWh)</h4>
+        <div id="plant-modal-preview" class="preview-grid"></div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn" id="plant-modal-save">Salva configurazione</button>
+        <button type="button" class="btn ghost" id="plant-modal-recalc">Ricalcola periodo</button>
+      </div>
+    </div>
+  </div>
 
   <footer class="footer">
     <small>© 2025 CERtoUSER</small>
