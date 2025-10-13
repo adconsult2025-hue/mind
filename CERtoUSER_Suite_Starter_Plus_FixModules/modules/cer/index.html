@@ -4,12 +4,12 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>MIND — Suite</title>
-  <link rel="icon" href="/MIND.png">
-  <link rel="stylesheet" href="/assets/css/style.css?v=14"/>
-  <script type="module" src="/assets/js/app.js?v=14"></script>
-  <script type="module" src="/assets/js/storage.js?v=14"></script>
-  <script type="module" src="/assets/js/docs.js?v=14"></script>
-  <script type="module" src="/assets/js/cer.js?v=14"></script>
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/css/style.css?v=15"/>
+  <script type="module" src="/assets/js/app.js?v=15"></script>
+  <script type="module" src="/assets/js/storage.js?v=15"></script>
+  <script type="module" src="/assets/js/docs.js?v=15"></script>
+  <script type="module" src="/assets/js/cer.js?v=15"></script>
 </head>
 <body class="dark">
   <header class="app-header">
@@ -26,6 +26,7 @@
     <nav class="toolbar">
       <a class="btn" href="/modules/crm/">CRM</a>
       <a class="btn" href="/modules/cer/">CER</a>
+      <a class="btn" href="/modules/impianti/">IMPIANTI</a>
       <a class="btn" href="/modules/modelli/">MODELLI</a>
       <a class="btn" href="/modules/contratti/">CONTRATTI</a>
       <a class="btn ghost" href="/">HUB</a>
@@ -102,7 +103,17 @@
             <div id="members-picker" class="members"></div>
           </div>
 
+          <div class="card soft" id="cer-plants-section">
+            <div class="row-between">
+              <h3>Impianti associati</h3>
+              <button class="btn ghost" type="button" id="btn-add-cer-plant">Aggiungi impianto</button>
+            </div>
+            <p class="info-text" id="cer-plants-empty">Aggiungi almeno un impianto per rispettare i requisiti minimi della CER.</p>
+            <div id="cer-plants-list" class="stack"></div>
+          </div>
+
           <div class="actions">
+            <p class="error-text" id="cer-validation-alert" hidden></p>
             <button class="btn" type="submit">Crea CER</button>
             <button class="btn ghost" type="reset">Reset</button>
           </div>

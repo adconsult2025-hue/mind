@@ -1,6 +1,6 @@
 import { allCustomers, allCER, saveCER, uid, progressCERs, saveProgressCERs } from './storage.js';
 import { saveDocFile, statutoTemplate, regolamentoTemplate, attoCostitutivoTemplate, adesioneTemplate, delegaGSETemplate, contrattoTraderTemplate, informativaGDPRTemplate } from './docs.js';
-import { initCronoprogrammaUI, renderCronoprogramma } from './cronoprogramma.js?v=12';
+import { initCronoprogrammaUI, renderCronoprogramma } from './cronoprogramma.js?v=15';
 
 const API_BASE = '/api';
 
@@ -9,6 +9,11 @@ let membersBox;
 let listEl;
 let searchEl;
 let templateSelect;
+let plantFormList;
+let plantEmptyState;
+let addPlantBtn;
+let validationAlert;
+let formSubmitBtn;
 
 let docsCerSelect;
 let docsActions;
@@ -67,12 +72,18 @@ function init() {
   listEl = document.getElementById('cer-list');
   searchEl = document.getElementById('search-cer');
   templateSelect = document.getElementById('cer-template-select');
+  plantFormList = document.getElementById('cer-plants-list');
+  plantEmptyState = document.getElementById('cer-plants-empty');
+  addPlantBtn = document.getElementById('btn-add-cer-plant');
+  validationAlert = document.getElementById('cer-validation-alert');
 
   customers = allCustomers();
   cers = allCER();
 
   if (form) {
+    formSubmitBtn = form.querySelector('button[type="submit"]');
     bindCerForm();
+    setupPlantForm();
     renderMembersPicker();
     renderCERList();
     if (searchEl) searchEl.oninput = renderCERList;
@@ -167,15 +178,31 @@ function bindCerForm() {
       const c = customers.find(x => x.id === id);
       return { id: c.id, nome: c.nome, pod: c.pod, comune: c.comune, ruolo: role };
     }).filter(Boolean);
-    if (!picks.length) {
-      alert('Seleziona almeno un membro dalla lista.');
+    if (picks.length < 3) {
+      toast('Per creare la CER servono almeno 3 clienti selezionati.');
+      return;
+    }
+    const producers = picks.filter(m => ['prosumer', 'produttore', 'producer'].includes(String(m.ruolo || '').toLowerCase()));
+    if (!producers.length) {
+      toast('Aggiungi almeno un membro Prosumer o Produttore alla CER.');
+      return;
+    }
+    const plants = collectFormPlants({ validate: true });
+    if (!plants) {
+      return;
+    }
+    if (!plants.length) {
+      toast('Configura almeno un impianto prima di salvare la CER.');
       return;
     }
     cer.membri = picks;
+    cer.impianti = plants;
 
     cers.push(cer);
     saveCER(cers);
     form.reset();
+    updatePlantEmptyState();
+    updateCerValidationUI();
     renderCERList();
     refreshCerOptions();
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
@@ -202,158 +229,171 @@ function selectedMembers() {
 }
 
 function eligibleOwners() {
-  return selectedMembers().filter(m => m.ruolo === 'Produttore' || m.ruolo === 'Prosumer');
+  return selectedMembers().filter(m => ['prosumer', 'produttore', 'producer'].includes(String(m.ruolo || '').toLowerCase()));
 }
 
-function refreshPlantOwners(plant) {
-  const ownerSelect = plant.querySelector('.owner');
-  if (!ownerSelect) return;
-  const current = ownerSelect.value;
-  const owners = eligibleOwners();
-  ownerSelect.innerHTML = '<option value="">Seleziona membro</option>';
-  owners.forEach(owner => {
-    const opt = document.createElement('option');
-    opt.value = owner.id;
-    opt.textContent = `${owner.nome} — ${owner.ruolo}`;
-    if (owner.id === current) opt.selected = true;
-    ownerSelect.appendChild(opt);
+function setupPlantForm() {
+  if (!plantFormList) return;
+  addPlantBtn?.addEventListener('click', () => {
+    addPlantRow();
+    updateCerValidationUI();
   });
-  if (!ownerSelect.value && owners.length === 1) {
-    ownerSelect.value = owners[0].id;
-  }
-}
-
-function refreshPlantShares(plant) {
-  const wrap = plant.querySelector('.shares-grid');
-  if (!wrap) return;
-  const previous = new Map([...wrap.querySelectorAll('input[data-member]')].map(inp => [inp.dataset.member, inp.value]));
-  wrap.innerHTML = '';
-  const members = selectedMembers();
-  if (!members.length) {
-    wrap.innerHTML = '<p class="note">Seleziona membri per definire le percentuali di riparto.</p>';
-    return;
-  }
-  members.forEach(member => {
-    const label = document.createElement('label');
-    const title = document.createElement('span');
-    title.textContent = member.nome;
-    const role = document.createElement('small');
-    role.textContent = member.ruolo;
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.min = '0';
-    input.max = '100';
-    input.step = '0.1';
-    input.dataset.member = member.id;
-    input.name = `share_${plant.dataset.id}_${member.id}`;
-    const prev = previous.get(member.id);
-    input.value = prev !== undefined ? prev : '0';
-    label.appendChild(title);
-    label.appendChild(role);
-    label.appendChild(input);
-    wrap.appendChild(label);
+  form?.addEventListener('reset', () => {
+    window.setTimeout(() => {
+      plantFormList.innerHTML = '';
+      updatePlantEmptyState();
+      updateCerValidationUI();
+    }, 0);
   });
+  updatePlantEmptyState();
+  updatePlantOwnerOptions();
+  updateCerValidationUI();
 }
 
-function refreshAllPlants() {
-  [...plantsBox.querySelectorAll('.plant')].forEach(plant => {
-    refreshPlantOwners(plant);
-    refreshPlantShares(plant);
-  });
+function getPlantRows() {
+  if (!plantFormList) return [];
+  return [...plantFormList.querySelectorAll('.cer-plant-row')];
 }
 
-function handleMemberChange() {
-  refreshAllPlants();
-}
-
-function addPlant(data = {}) {
-  const plant = document.createElement('div');
-  plant.className = 'plant';
-  const pid = data.id || uid('plant');
-  plant.dataset.id = pid;
-  plant.innerHTML = `
-    <div class="plant-grid">
+function addPlantRow(data = {}) {
+  if (!plantFormList) return null;
+  const row = document.createElement('div');
+  row.className = 'card soft cer-plant-row';
+  row.dataset.id = data.id || uid('plant');
+  row.innerHTML = `
+    <div class="grid-2">
       <label>Nome impianto
-        <input type="text" data-k="name" value="${data.nome || ''}" required/>
+        <input type="text" class="plant-name" value="${data.nome || ''}" required />
       </label>
-      <label>Potenza (kWp)
-        <input type="number" min="0" step="0.1" data-k="kwp" value="${data.potenza_kwp || ''}"/>
-      </label>
-      <label>Titolare impianto
-        <select class="owner" data-k="owner" required>
-          <option value="">Seleziona membro</option>
+      <label>Titolare (Prosumer/Produttore)
+        <select class="plant-owner">
+          <option value="">Seleziona titolare</option>
         </select>
       </label>
     </div>
-    <div class="plant-shares">
-      <h4>Ripartizione percentuale</h4>
-      <div class="shares-grid" data-k="shares"></div>
+    <div class="grid-2">
+      <label>Potenza (kWp)
+        <input type="number" class="plant-kwp" min="0" step="0.1" value="${data.potenza_kwp || ''}" />
+      </label>
+      <div class="actions" style="align-items:flex-end;">
+        <button type="button" class="btn danger" data-remove-plant>Rimuovi</button>
+      </div>
     </div>
-    <button type="button" class="btn danger remove-plant">Rimuovi impianto</button>
   `;
-  const ownerSelect = plant.querySelector('.owner');
-  if (data.titolareId) ownerSelect.value = data.titolareId;
-  plantsBox.appendChild(plant);
-  refreshPlantOwners(plant);
-  refreshPlantShares(plant);
-  plant.querySelector('.remove-plant').onclick = () => {
-    plant.remove();
-  };
-  return plant;
+  const ownerSelect = row.querySelector('.plant-owner');
+  ownerSelect.value = data.titolareId || '';
+  ownerSelect.addEventListener('change', updateCerValidationUI);
+  row.querySelector('.plant-name')?.addEventListener('input', updateCerValidationUI);
+  row.querySelector('.plant-kwp')?.addEventListener('input', () => {});
+  row.querySelector('[data-remove-plant]')?.addEventListener('click', () => {
+    row.remove();
+    updatePlantEmptyState();
+    updatePlantOwnerOptions();
+    updateCerValidationUI();
+  });
+  plantFormList.appendChild(row);
+  updatePlantOwnerOptions();
+  updatePlantEmptyState();
+  return row;
 }
 
-function serializePlant(plant, members) {
-  const nameInput = plant.querySelector('[data-k="name"]');
-  const kwpInput = plant.querySelector('[data-k="kwp"]');
-  const ownerSelect = plant.querySelector('.owner');
-  const name = (nameInput.value || '').trim();
-  if (!name) {
-    alert('Inserisci un nome per ogni impianto fotovoltaico.');
-    nameInput.focus();
-    return null;
-  }
-  const ownerId = ownerSelect.value;
-  if (!ownerId) {
-    alert(`Seleziona il titolare dell'impianto "${name}".`);
-    ownerSelect.focus();
-    return null;
-  }
-  const ownerMember = members.find(m => m.id === ownerId);
-  if (!ownerMember || (ownerMember.ruolo !== 'Produttore' && ownerMember.ruolo !== 'Prosumer')) {
-    alert('Il titolare di un impianto deve essere un Prosumer o un Produttore.');
-    ownerSelect.focus();
-    return null;
-  }
-  const shareInputs = [...plant.querySelectorAll('.shares-grid input[data-member]')];
-  if (!shareInputs.length) {
-    alert(`Seleziona almeno un membro per ripartire l'impianto "${name}".`);
-    return null;
-  }
-  let total = 0;
-  const shares = shareInputs.map(input => {
-    const value = Number(input.value || 0);
-    total += value;
-    return { membroId: input.dataset.member, percentuale: value };
+function updatePlantOwnerOptions() {
+  const owners = eligibleOwners();
+  getPlantRows().forEach(row => {
+    const select = row.querySelector('.plant-owner');
+    if (!select) return;
+    const current = select.value;
+    select.innerHTML = '<option value="">Seleziona titolare</option>';
+    owners.forEach(owner => {
+      const opt = document.createElement('option');
+      opt.value = owner.id;
+      opt.textContent = `${owner.nome} — ${owner.ruolo}`;
+      select.appendChild(opt);
+    });
+    if (current && owners.some(o => o.id === current)) {
+      select.value = current;
+    } else if (!select.value && owners.length === 1) {
+      select.value = owners[0].id;
+    }
   });
-  if (!shares.some(s => s.percentuale > 0)) {
-    alert(`Definisci le percentuali di riparto per l'impianto "${name}".`);
-    return null;
+}
+
+function updatePlantEmptyState() {
+  if (!plantEmptyState) return;
+  const hasPlants = getPlantRows().length > 0;
+  plantEmptyState.style.display = hasPlants ? 'none' : '';
+}
+
+function collectFormPlants({ validate = false } = {}) {
+  const rows = getPlantRows();
+  const members = selectedMembers();
+  const owners = eligibleOwners();
+  const plants = [];
+  for (const row of rows) {
+    const nameInput = row.querySelector('.plant-name');
+    const ownerSelect = row.querySelector('.plant-owner');
+    const kwpInput = row.querySelector('.plant-kwp');
+    const name = (nameInput?.value || '').trim();
+    const ownerId = ownerSelect?.value || '';
+    if (validate) {
+      if (!name) {
+        nameInput?.focus();
+        toast('Inserisci un nome per ogni impianto.');
+        return null;
+      }
+      if (!ownerId || !owners.some(o => o.id === ownerId)) {
+        ownerSelect?.focus();
+        toast('Ogni impianto deve avere un Prosumer/Produttore assegnato.');
+        return null;
+      }
+    }
+    if (!name && !ownerId) continue;
+    const ownerMember = members.find(m => m.id === ownerId) || owners.find(o => o.id === ownerId) || null;
+    const kwpValue = kwpInput?.value ? Number(kwpInput.value) : null;
+    plants.push({
+      id: row.dataset.id || uid('plant'),
+      nome: name,
+      titolareId: ownerId || null,
+      titolareNome: ownerMember?.nome || '',
+      titolareRuolo: ownerMember?.ruolo || '',
+      potenza_kwp: Number.isFinite(kwpValue) ? kwpValue : null
+    });
   }
-  const totalRounded = Math.round(total * 100) / 100;
-  if (Math.abs(totalRounded - 100) > 0.01) {
-    alert(`La somma delle percentuali per l'impianto "${name}" deve essere 100%. Attuale: ${totalRounded.toFixed(2)}%.`);
-    return null;
-  }
-  const kwp = kwpInput.value ? Number(kwpInput.value) : null;
+  return plants;
+}
+
+function evaluateCerValidation() {
+  const members = selectedMembers();
+  const producers = members.filter(m => ['prosumer', 'produttore', 'producer'].includes(String(m.ruolo || '').toLowerCase()));
+  const plantCount = getPlantRows().length;
+  const issues = [];
+  if (members.length < 3) issues.push('Seleziona almeno 3 clienti dal CRM.');
+  if (producers.length < 1) issues.push('Assegna almeno un Prosumer o Produttore.');
+  if (plantCount < 1) issues.push('Aggiungi almeno un impianto alla CER.');
   return {
-    id: plant.dataset.id,
-    nome: name,
-    potenza_kwp: kwp,
-    titolareId: ownerId,
-    titolareNome: ownerMember.nome,
-    titolareRuolo: ownerMember.ruolo,
-    shares
+    valid: issues.length === 0,
+    issues,
+    counts: { members: members.length, producers: producers.length, plants: plantCount }
   };
+}
+
+function updateCerValidationUI() {
+  const { valid, issues } = evaluateCerValidation();
+  if (validationAlert) {
+    if (valid) {
+      validationAlert.hidden = true;
+      validationAlert.textContent = '';
+    } else {
+      validationAlert.hidden = false;
+      validationAlert.textContent = issues.join(' ');
+    }
+  }
+  if (formSubmitBtn) formSubmitBtn.disabled = !valid;
+}
+
+function handleMemberChange() {
+  updatePlantOwnerOptions();
+  updateCerValidationUI();
 }
 
 function renderMembersPicker() {

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MIND — Suite</title>
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/css/style.css?v=15"/>
+  <script type="module" src="/assets/js/app.js?v=15"></script>
+  <script type="module" src="/assets/js/storage.js?v=15"></script>
+  <script type="module" src="/assets/js/impianti.js?v=15"></script>
+</head>
+<body class="dark">
+  <header class="app-header">
+    <div class="brand">
+      <a href="/" class="brand-link">
+        <img src="/assets/img/mind.svg" alt="MIND" class="logo"/>
+      </a>
+      <div class="titles">
+        <h1>Impianti fotovoltaici</h1>
+        <p class="subtitle">Produzione, webhook inverter e letture manuali</p>
+      </div>
+    </div>
+    <nav class="toolbar">
+      <a class="btn" href="/modules/crm/">CRM</a>
+      <a class="btn" href="/modules/cer/">CER</a>
+      <a class="btn" href="/modules/impianti/">IMPIANTI</a>
+      <a class="btn" href="/modules/modelli/">MODELLI</a>
+      <a class="btn" href="/modules/contratti/">CONTRATTI</a>
+      <a class="btn ghost" href="/">HUB</a>
+    </nav>
+  </header>
+
+  <main class="container wide grid-2">
+    <section class="card" id="plants-overview">
+      <div class="row-between">
+        <div>
+          <h2>Elenco impianti</h2>
+          <p class="info-text">Seleziona un impianto per monitorare la produzione e lo stato del webhook inverter.</p>
+        </div>
+        <div class="actions">
+          <label>
+            <small>Filtra per CER</small>
+            <select id="impianti-cer-select"></select>
+          </label>
+          <button class="btn ghost" type="button" id="btn-refresh-plants">Aggiorna</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" id="impianti-table">
+          <thead>
+            <tr>
+              <th>Impianto</th>
+              <th>Tipologia</th>
+              <th>Ultima lettura</th>
+              <th>kWh oggi</th>
+              <th>kWh mese</th>
+              <th>kWh anno</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="info-text" id="impianti-feedback"></p>
+    </section>
+
+    <section class="card" id="plant-detail" hidden>
+      <div class="row-between">
+        <div>
+          <h2 id="plant-detail-name">Dettaglio impianto</h2>
+          <p class="info-text" id="plant-detail-meta"></p>
+        </div>
+        <div class="actions">
+          <button class="btn ghost" type="button" id="btn-refresh-detail">Aggiorna letture</button>
+        </div>
+      </div>
+
+      <div class="tabs" id="plant-detail-tabs">
+        <button class="tab-btn active" type="button" data-tab="production">Produzione</button>
+        <button class="tab-btn" type="button" data-tab="inverter">Inverter</button>
+      </div>
+
+      <section class="tab-panel active" data-panel="production">
+        <div class="card soft">
+          <h3>Ultime letture</h3>
+          <div class="metrics" id="plant-production-metrics">
+            <div class="metric">
+              <span class="metric-label">Oggi</span>
+              <span class="metric-value" id="metric-daily">-</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Mese</span>
+              <span class="metric-value" id="metric-monthly">-</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Anno</span>
+              <span class="metric-value" id="metric-yearly">-</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Ultimo push</span>
+              <span class="metric-value" id="metric-last">-</span>
+            </div>
+          </div>
+        </div>
+
+        <form id="production-form" class="card soft">
+          <h3>Inserisci produzione manuale</h3>
+          <div class="grid-2">
+            <label>Data
+              <input type="date" name="date" id="production-date" required />
+            </label>
+            <label>Energia (kWh)
+              <input type="number" name="kwh" id="production-kwh" min="0.01" step="0.01" required />
+            </label>
+          </div>
+          <p class="info-text" id="production-feedback"></p>
+          <div class="actions">
+            <button class="btn" type="submit">Registra produzione</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="tab-panel" data-panel="inverter">
+        <div class="card soft">
+          <h3>Webhook inverter</h3>
+          <p class="info-text">Utilizza l'endpoint seguente per inviare le letture automatiche dall'inverter. Includi la API key nel header <code>x-api-key</code>.</p>
+          <ul class="info-list">
+            <li><strong>Endpoint:</strong> <code id="webhook-endpoint">/api/inverter/webhook</code></li>
+            <li><strong>API Key:</strong> <code id="webhook-api-key">-</code></li>
+            <li><strong>Ultimo push:</strong> <span id="webhook-last-status">-</span></li>
+          </ul>
+          <p class="info-text">Esempio payload JSON: <code>{ "plant_id": "...", "ts": "ISO8601", "kwh": 12.5 }</code></p>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <small>© 2025 MIND Suite</small>
+  </footer>
+</body>
+</html>
