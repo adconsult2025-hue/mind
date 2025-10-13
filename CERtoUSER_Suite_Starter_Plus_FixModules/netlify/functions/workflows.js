@@ -1,5 +1,6 @@
 const { listWorkflows, upsertWorkflow, getPlants } = require('./_data');
-const { ensurePlantWorkflows, listPlantDocs } = require('./_plant_store');
+const plantWorkflows = require('./plant_workflows');
+const plantDocs = require('./plant_docs');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -36,27 +37,9 @@ exports.handler = async function handler(event) {
           body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'entity_type, entity_id e phase sono obbligatori' } })
         };
       }
-      if (entity_type === 'cer' && Number(phase) === 3 && ['in-review', 'done'].includes(status)) {
-        const plants = getPlants().filter(plant => plant.cer_id === entity_id);
-        const missingByPlant = [];
-        plants.forEach(plant => {
-          const workflows = ensurePlantWorkflows(plant.id);
-          const p3 = workflows.find(item => item.phase === 'P3');
-          if (p3 && p3.status === 'done') {
-            return;
-          }
-          const docs = listPlantDocs(plant.id).filter(doc => doc.phase === 'P3');
-          const missingDocs = docs
-            .filter(doc => doc.status !== 'approved')
-            .map(doc => doc.code || doc.name || doc.id);
-          if (!docs.length) {
-            missingDocs.push('Documentazione fase P3');
-          }
-          if (missingDocs.length) {
-            missingByPlant.push({ plant_id: plant.id, missing_docs: missingDocs });
-          }
-        });
-        if (missingByPlant.length) {
+      if (entity_type === 'cer' && Number(phase) === 3 && status) {
+        const gateResult = checkCerPhaseThree(entity_id, status);
+        if (!gateResult.ok) {
           return {
             statusCode: 400,
             headers: headers(),
@@ -65,13 +48,12 @@ exports.handler = async function handler(event) {
               error: {
                 code: 'GATE_NOT_MET',
                 message: 'Impianti non conformi per Fase 3 CER',
-                details: { missing_by_plant: missingByPlant }
+                details: gateResult.details
               }
             })
           };
         }
       }
-
       const result = upsertWorkflow({ entity_type, entity_id, phase, status, owner, due_date, notes });
       return {
         statusCode: 200,
@@ -93,3 +75,39 @@ exports.handler = async function handler(event) {
     };
   }
 };
+
+function checkCerPhaseThree(cerId, targetStatus) {
+  if (!['in-review', 'done'].includes(targetStatus)) {
+    return { ok: true };
+  }
+  const plants = getPlants().filter(plant => plant.cer_id === cerId);
+  if (!plants.length) {
+    return { ok: true };
+  }
+  const missingByPlant = [];
+  plants.forEach(plant => {
+    const workflows = plantWorkflows.listWorkflows(plant.id);
+    const phaseEntry = workflows.find(item => item.phase === 'P3');
+    if (phaseEntry?.status === 'done') {
+      return;
+    }
+    const docs = plantDocs.listPlantDocs(plant.id, { phase: 'P3' }) || [];
+    const missingDocs = [];
+    if (!docs.length) {
+      missingDocs.push('Nessun documento fase P3');
+    } else {
+      docs.forEach(doc => {
+        if (doc.status !== 'approved') {
+          missingDocs.push(doc.code || doc.name || doc.doc_id);
+        }
+      });
+    }
+    if (missingDocs.length) {
+      missingByPlant.push({ plant_id: plant.id, missing_docs: missingDocs });
+    }
+  });
+  if (missingByPlant.length) {
+    return { ok: false, details: { missing_by_plant: missingByPlant } };
+  }
+  return { ok: true };
+}
