@@ -258,6 +258,11 @@ main.container {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
+.stack {
+  display: grid;
+  gap: var(--space-4);
+}
+
 main.cer-layout {
   display: block;
 }
