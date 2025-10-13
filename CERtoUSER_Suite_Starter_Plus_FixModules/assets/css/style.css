@@ -759,6 +759,169 @@ body:not(.dark) .modal-panel {
   transform: translateY(8px);
 }
 
+/* --- CT3 --- */
+.ct3-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  align-items: start;
+}
+
+.ct3-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ct3-actions {
+  margin-top: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ct3-actions .actions {
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.ct3-suggestions {
+  margin-top: var(--space-2);
+  border: 1px solid rgba(53, 201, 201, 0.35);
+  border-radius: var(--radius-md);
+  background: rgba(12, 26, 31, 0.9);
+  box-shadow: var(--shadow-sm);
+  max-height: 220px;
+  overflow-y: auto;
+  display: none;
+}
+
+.ct3-suggestions.show {
+  display: block;
+}
+
+.ct3-suggestions button {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--brand-text);
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.ct3-suggestions button:hover,
+.ct3-suggestions button:focus-visible {
+  background: rgba(53, 201, 201, 0.2);
+  outline: none;
+}
+
+.ct3-client-summary {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(53, 201, 201, 0.35);
+  background: rgba(53, 201, 201, 0.08);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.ct3-client-pods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.ct3-client-pods .badge {
+  background: rgba(53, 201, 201, 0.2);
+  border-color: rgba(53, 201, 201, 0.45);
+}
+
+.ct3-eligibility-feedback {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.ct3-eligibility-feedback ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--brand-muted);
+}
+
+.ct3-phases {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ct3-phase-card {
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(53, 201, 201, 0.3);
+  background: rgba(12, 26, 31, 0.65);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.ct3-phase-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  cursor: pointer;
+}
+
+.ct3-phase-card h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.ct3-phase-card:not(.expanded) .ct3-doc-list {
+  display: none;
+}
+
+.ct3-doc-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.ct3-doc-row {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (min-width: 720px) {
+  .ct3-doc-row {
+    grid-template-columns: 1fr auto;
+  }
+}
+
+.ct3-doc-row .actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.ct3-doc-row p {
+  margin: 0;
+}
+
+.ct3-doc-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ct3-doc-status .badge {
+  font-size: 0.8rem;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

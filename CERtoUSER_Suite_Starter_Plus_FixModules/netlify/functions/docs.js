@@ -24,6 +24,27 @@ function normalizePlantPhase(value) {
   return null;
 }
 
+function parseGenericPhase(value) {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+      const numeric = Number(trimmed);
+      if (Number.isFinite(numeric)) {
+        return numeric;
+      }
+    }
+    return trimmed;
+  }
+  return value;
+}
+
 exports.handler = async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: headers(), body: '' };
@@ -38,9 +59,6 @@ exports.handler = async function handler(event) {
         entity_id: params.entity_id,
         phase: params.phase
       };
-      if (filter.entity_type !== 'plant' && filter.phase !== undefined) {
-        filter.phase = Number(filter.phase);
-      }
       if (!filter.entity_type || !filter.entity_id) {
         return {
           statusCode: 400,
@@ -55,9 +73,7 @@ exports.handler = async function handler(event) {
       }
       const parsedFilter = {
         ...filter,
-        phase: filter.phase !== undefined && filter.phase !== null && filter.phase !== ''
-          ? Number(filter.phase)
-          : undefined
+        phase: parseGenericPhase(phaseParam)
       };
       const data = listDocs(parsedFilter);
       return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data }) };
@@ -130,11 +146,14 @@ exports.handler = async function handler(event) {
           return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data: doc }) };
         }
         const docId = `doc_${Date.now()}`;
+        const parsedPhase = parseGenericPhase(phase);
         const doc = addDoc({
           doc_id: docId,
           entity_type,
           entity_id,
-          phase: phase ?? null,
+          phase: parsedPhase ?? null,
+          code: code || null,
+          name: name || '',
           filename,
           url: `https://storage.mock/docs/${entity_type}/${entity_id}/${docId}.${ext}`,
           status: 'uploaded',
