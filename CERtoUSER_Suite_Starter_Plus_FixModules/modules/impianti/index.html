@@ -6,7 +6,23 @@
   <title>MIND — Suite</title>
   <link rel="icon" href="/assets/img/mind.png">
   <link rel="stylesheet" href="/assets/css/style.css?v=22"/>
-  <script>window.__SAFE_MODE__ = location.hostname.includes('preview') || location.hostname.includes('staging');</script>
+  <script>
+    (function(){
+      const host = location.hostname.toLowerCase();
+      const envValue = (typeof window !== 'undefined' && window._env_ && typeof window._env_.SAFE_MODE !== 'undefined')
+        ? window._env_.SAFE_MODE
+        : undefined;
+      const parseFlag = (val) => {
+        if (typeof val === 'string') { return val.toLowerCase() === 'true'; }
+        if (typeof val === 'boolean') { return val; }
+        return null;
+      };
+      const resolvedEnv = parseFlag(envValue);
+      const netlifyPreview = host.endsWith('.netlify.app') && host.includes('--');
+      const heuristics = host.includes('preview') || host.includes('staging') || netlifyPreview;
+      window.__SAFE_MODE__ = (resolvedEnv ?? heuristics);
+    })();
+  </script>
   <script type="module" src="/assets/js/app.js?v=22"></script>
   <script type="module" src="/assets/js/storage.js?v=22"></script>
   <script type="module" src="/assets/js/impianti.js?v=22"></script>
