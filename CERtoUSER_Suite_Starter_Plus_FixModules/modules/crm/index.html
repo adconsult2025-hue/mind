@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>MIND — Suite</title>
   <link rel="icon" href="/MIND.png">
-  <link rel="stylesheet" href="/assets/css/style.css?v=14"/>
+  <link rel="stylesheet" href="/assets/css/style.css?v=16"/>
   <script type="module" src="/assets/js/app.js?v=14"></script>
   <script type="module" src="/assets/js/storage.js?v=14"></script>
-  <script type="module" src="/assets/js/crm.js?v=14"></script>
+  <script type="module" src="/assets/js/crm.js?v=16"></script>
 </head>
 <body class="dark">
   <header class="app-header">
@@ -48,7 +48,10 @@
             <input type="text" name="nome" placeholder="Mario Rossi / Rossi S.r.l." required/>
           </label>
           <label>POD (univoco)
-            <input type="text" name="pod" placeholder="IT001E1234567890" required/>
+            <div class="field-inline">
+              <input type="text" name="pod" placeholder="IT001E1234567890" required/>
+              <a class="btn btn-light btn-xs cp-link" href="https://www.gse.it/servizi-per-te/autoconsumo/mappa-interattiva-delle-cabine-primarie" target="_blank" rel="noopener noreferrer" title="Apri mappa GSE per verificare la cabina rispetto al POD">CP</a>
+            </div>
           </label>
           <label>Cabina primaria
             <input type="text" name="cabina" placeholder="CP-001"/>
@@ -92,5 +95,63 @@
   <footer class="footer">
     <small>© 2025 MIND Suite</small>
   </footer>
+  <div id="modal-consumi" class="modal" aria-hidden="true" role="dialog">
+    <div class="modal-backdrop" data-close-consumi></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div>
+          <h3 data-modal-title>Consumi cliente</h3>
+          <p class="info-text" data-modal-subtitle></p>
+        </div>
+        <button class="close-btn" type="button" data-close-consumi aria-label="Chiudi">×</button>
+      </div>
+
+      <section class="preview-block" id="consumi-history">
+        <header class="row-between">
+          <h4>Storico consumi</h4>
+          <button class="btn ghost" type="button" id="btn-refresh-consumi">Aggiorna</button>
+        </header>
+        <div id="consumi-table" class="table-mini"></div>
+      </section>
+
+      <section class="preview-block mt-4" id="bill-import">
+        <h4>Importa bolletta</h4>
+        <div class="wizard-step" data-step="1">
+          <h5>Step 1 — Carica bolletta</h5>
+          <p class="info-text">Carica il file (PDF, JPG o PNG). I dati binari non vengono memorizzati in questa demo.</p>
+          <div class="helper-grid">
+            <label class="file-input">
+              <span>Seleziona file bolletta</span>
+              <input type="file" id="bill-file" accept=".pdf,.jpg,.jpeg,.png"/>
+            </label>
+            <div class="preview-box" id="bill-upload-info"></div>
+          </div>
+          <div class="modal-actions">
+            <button class="btn" type="button" id="btn-upload-bill">Carica</button>
+          </div>
+        </div>
+
+        <div class="wizard-step" data-step="2">
+          <h5>Step 2 — Estrai &amp; review</h5>
+          <p class="info-text">Avvia il parsing per visualizzare i campi estratti in modalità dry-run. Nessun dato viene ancora salvato.</p>
+          <div class="modal-actions">
+            <button class="btn" type="button" id="btn-parse-bill" disabled>Estrai dati</button>
+          </div>
+          <div id="bill-review" class="review-pane hidden" aria-live="polite"></div>
+        </div>
+
+        <div class="wizard-step" data-step="3">
+          <h5>Step 3 — Conferma &amp; salva</h5>
+          <p class="info-text">Conferma manualmente i dati prima di salvarli tra i consumi del cliente.</p>
+          <div id="bill-checklist" class="checklist"></div>
+          <div id="bill-duplicate" class="duplicate-warning hidden"></div>
+          <div class="modal-actions">
+            <button class="btn btn-primary" type="button" id="btn-save-consumi" disabled>Salva consumi</button>
+          </div>
+          <p class="error-text hidden" id="bill-blocked"></p>
+        </div>
+      </section>
+    </div>
+  </div>
 </body>
 </html>
