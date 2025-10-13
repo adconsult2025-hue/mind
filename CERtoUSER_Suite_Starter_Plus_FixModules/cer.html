@@ -6,10 +6,10 @@
   <title>CER — CERtoUSER Suite</title>
   <link rel="icon" href="/assets/img/favicon.png">
   <!-- USA PERCORSI ASSOLUTI + VERSIONE PER BYPASS CACHE -->
-  <link rel="stylesheet" href="/assets/css/style.css?v=7"/>
-  <script type="module" src="/assets/js/storage.js?v=7"></script>
-  <script type="module" src="/assets/js/docs.js?v=7"></script>
-  <script type="module" src="/assets/js/cer.js?v=7"></script>
+  <link rel="stylesheet" href="/assets/css/style.css?v=8"/>
+  <script type="module" src="/assets/js/storage.js?v=8"></script>
+  <script type="module" src="/assets/js/docs.js?v=8"></script>
+  <script type="module" src="/assets/js/cer.js?v=8"></script>
 </head>
 <body class="dark">
   <header class="app-header">
@@ -33,6 +33,9 @@
     <div class="tabs">
       <button class="tab-btn active" data-tab="setup">Configurazione CER</button>
       <button class="tab-btn" data-tab="plants">Impianti fotovoltaici</button>
+      <button class="tab-btn" data-tab="documents">Documenti</button>
+      <button class="tab-btn" data-tab="allocations">Riparti</button>
+      <button class="tab-btn" data-tab="cronoprogramma">Cronoprogramma CER</button>
     </div>
 
     <section class="tab-panel active grid-2" data-panel="setup">
@@ -149,6 +152,47 @@
           </table>
         </div>
 
+      </section>
+    </section>
+
+    <section class="tab-panel" data-panel="documents">
+      <section class="card">
+        <div class="row-between">
+          <div>
+            <h2>Documenti CER</h2>
+            <p class="info-text">Genera le bozze principali e monitora lo stato documentale direttamente dalla Suite.</p>
+          </div>
+          <div class="actions">
+            <label>
+              <small>Seleziona CER</small>
+              <select id="docs-cer-select"></select>
+            </label>
+          </div>
+        </div>
+
+        <div id="docs-actions" class="actions"></div>
+
+        <div class="card soft" id="docs-progress-card">
+          <h3>Checklist documentale</h3>
+          <p class="info-text">Segna le checklist interne completate e sincronizza manualmente con il Cronoprogramma CER.</p>
+          <div id="docs-progress"></div>
+        </div>
+      </section>
+    </section>
+
+    <section class="tab-panel" data-panel="allocations">
+      <section class="card">
+        <div class="row-between">
+          <div>
+            <h2>Riparti e anteprime</h2>
+            <p class="info-text">Riepilogo dei calcoli effettuati sugli impianti per periodo e membro.</p>
+          </div>
+          <div class="actions">
+            <button class="btn ghost" type="button" id="btn-open-plants">Apri configurazione impianti</button>
+            <button class="btn" type="button" id="btn-riparti-recalc">Ricalcola periodo</button>
+          </div>
+        </div>
+
         <div id="allocations-preview" class="preview-box hidden">
           <h3>Anteprima riparti CER</h3>
           <div id="allocations-preview-content" class="preview-grid"></div>
@@ -157,9 +201,83 @@
             <div id="allocations-preview-members" class="preview-grid"></div>
           </div>
         </div>
+        <p id="allocations-empty" class="info-text"></p>
+      </section>
+    </section>
+
+    <section class="tab-panel" data-panel="cronoprogramma">
+      <section class="card">
+        <div class="row-between">
+          <div>
+            <h2>Cronoprogramma CER</h2>
+            <p class="info-text">Monitora le fasi 0→6 della Comunità Energetica, con collegamento diretto a impianti, documenti e riparti.</p>
+          </div>
+          <div class="actions">
+            <label>
+              <small>Seleziona CER</small>
+              <select id="cronoprogramma-cer-select"></select>
+            </label>
+            <button class="btn ghost" type="button" id="cronoprogramma-export">Esporta checklist CSV</button>
+            <button class="btn" type="button" id="cronoprogramma-print">Stampa PDF</button>
+          </div>
+        </div>
+        <div id="cronoprogramma-feedback" class="info-text"></div>
+        <div id="cronoprogramma-phases" class="grid-3"></div>
       </section>
     </section>
   </main>
+
+  <div class="modal" id="cronoprogramma-phase-modal">
+    <div class="modal-backdrop" data-close-modal="phase"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h3 id="phase-modal-title"></h3>
+        <button class="close-btn" type="button" data-close-modal="phase">×</button>
+      </div>
+      <p id="phase-modal-description" class="info-text"></p>
+      <div id="phase-modal-lists" class="grid-2"></div>
+      <form id="phase-modal-form" class="grid-2">
+        <label>Referente operativo
+          <input type="text" id="phase-modal-owner" placeholder="Nome e cognome"/>
+        </label>
+        <label>Scadenza prevista
+          <input type="date" id="phase-modal-due"/>
+        </label>
+        <label style="grid-column: 1 / -1;">Note condivise
+          <textarea id="phase-modal-notes" rows="3" placeholder="Note operative o decisioni rilevanti"></textarea>
+        </label>
+        <input type="hidden" id="phase-modal-id"/>
+      </form>
+      <div class="modal-actions" id="phase-modal-shortcuts"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" type="button" data-close-modal="phase">Chiudi</button>
+        <button class="btn" type="button" id="phase-modal-save">Salva checklist</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="gse-info-modal">
+    <div class="modal-backdrop" data-close-modal="gse"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h3>Portale GSE – Allegati richiesti</h3>
+        <button class="close-btn" type="button" data-close-modal="gse">×</button>
+      </div>
+      <p class="info-text">Promemoria degli allegati tipici per l’invio pratica CER al portale GSE. Aggiornare in base alle ultime specifiche ufficiali.</p>
+      <ul>
+        <li>Statuto e Regolamento approvati (PDF firmati)</li>
+        <li>Atto costitutivo registrato</li>
+        <li>Delibera riparti e dichiarazione responsabilità amministratore</li>
+        <li>Contratti di connessione e convenzioni di uso su impianti</li>
+        <li>Deleghe GSE complete di documenti identità</li>
+        <li>Elenco POD e mappa cabina primaria</li>
+        <li>Prospetto riparti per tipologia impianto (A/B) e periodo di avvio</li>
+      </ul>
+      <div class="modal-actions">
+        <button class="btn" type="button" data-close-modal="gse">Chiudi</button>
+      </div>
+    </div>
+  </div>
 
   <div id="plant-config-modal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
     <div class="modal-backdrop" data-close-modal></div>

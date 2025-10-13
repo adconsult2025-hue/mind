@@ -1,5 +1,6 @@
 import { allCustomers, allCER, saveCER, uid, progressCERs, saveProgressCERs } from './storage.js';
 import { saveDocFile, statutoTemplate, regolamentoTemplate, attoCostitutivoTemplate, adesioneTemplate, delegaGSETemplate, contrattoTraderTemplate, informativaGDPRTemplate } from './docs.js';
+import { initCronoprogrammaUI, renderCronoprogramma } from './cronoprogramma.js?v=8';
 
 const API_BASE = '/api';
 
@@ -7,6 +8,22 @@ let form;
 let membersBox;
 let listEl;
 let searchEl;
+
+let docsCerSelect;
+let docsActions;
+let docsProgress;
+
+let cronSelect;
+let cronContainer;
+let cronFeedback;
+let cronExportBtn;
+let cronPrintBtn;
+
+let allocationsShortcutBtn;
+let openPlantsShortcutBtn;
+
+let tabButtons = [];
+let tabPanels = [];
 
 let customers = [];
 let cers = [];
@@ -58,8 +75,16 @@ function init() {
     if (searchEl) searchEl.oninput = renderCERList;
   }
 
+  window.addEventListener('cer:notify', (event) => {
+    const message = event?.detail;
+    if (message) toast(message);
+  });
+
   initTabs();
   initPlantsModule();
+  initDocumentsModule();
+  initCronoprogrammaModule();
+  initAllocationsShortcuts();
 }
 
 // -----------------------------
@@ -357,80 +382,196 @@ function renderCERList() {
         renderCERList();
         refreshCerOptions();
       };
-      r.querySelector('[data-docs]').onclick = () => openDocs(cer);
+      r.querySelector('[data-docs]').onclick = () => focusDocumentsTab(cer.id);
       listEl.appendChild(r);
     });
 }
 
-function openDocs(cer) {
-  if (!listEl) return;
-  const membri = cer.membri || [];
-  const html = `
-    <div class="card soft">
-      <h3>Genera documenti — ${cer.nome}</h3>
-      <div class="actions">
-        <button class="btn" id="btnStatuto">Statuto (.doc)</button>
-        <button class="btn" id="btnRegolamento">Regolamento (.doc)</button>
-        <button class="btn" id="btnAtto">Atto costitutivo (.doc)</button>
-        <select class="slim" id="membroPick"></select>
-        <button class="btn" id="btnAdesione">Adesione membro (.doc)</button>
-        <button class="btn" id="btnDelega">Delega GSE (.doc)</button>
-        <button class="btn" id="btnTrader">Contratto Trader (.doc)</button>
-        <button class="btn ghost" id="btnPrivacy">Informativa GDPR (.doc)</button>
-      </div>
-      <p class="note">Le bozze sono basate sui dati attuali della CER e dei membri.</p>
-    </div>
-    <div class="card soft">
-      <h3>Cronoprogramma CER</h3>
-      <div id="cerProgress"></div>
-    </div>
-  `;
-  const wrap = document.createElement('div');
-  wrap.innerHTML = html;
-  const row = document.createElement('div');
-  row.className = 'row';
-  row.style.gridTemplateColumns = '1fr';
-  row.appendChild(wrap);
-  listEl.prepend(row);
+function initDocumentsModule() {
+  docsCerSelect = document.getElementById('docs-cer-select');
+  docsActions = document.getElementById('docs-actions');
+  docsProgress = document.getElementById('docs-progress');
+  if (!docsCerSelect) return;
+  docsCerSelect.addEventListener('change', () => {
+    renderDocumentsForCer(docsCerSelect.value);
+  });
+  updateDocumentsSelect();
+}
 
-  wrap.querySelector('#btnStatuto').onclick = () => {
+function updateDocumentsSelect() {
+  if (!docsCerSelect) return;
+  const previous = docsCerSelect.value;
+  docsCerSelect.innerHTML = '';
+  if (!cers.length) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'Nessuna CER disponibile';
+    docsCerSelect.appendChild(opt);
+    docsActions.innerHTML = '<p class="info-text">Crea una CER per abilitare la generazione documentale.</p>';
+    docsProgress.innerHTML = '';
+    return;
+  }
+  cers.forEach(cer => {
+    const opt = document.createElement('option');
+    opt.value = cer.id;
+    opt.textContent = cer.nome;
+    docsCerSelect.appendChild(opt);
+  });
+  const target = previous && cers.some(c => c.id === previous) ? previous : cers[0].id;
+  docsCerSelect.value = target;
+  renderDocumentsForCer(target);
+}
+
+function renderDocumentsForCer(cerId) {
+  if (!docsActions || !docsProgress) return;
+  const cer = cers.find(c => c.id === cerId);
+  docsActions.innerHTML = '';
+  docsProgress.innerHTML = '';
+  if (!cer) {
+    docsActions.innerHTML = '<p class="info-text">Seleziona una CER per generare documenti.</p>';
+    return;
+  }
+  const membri = cer.membri || [];
+  docsActions.innerHTML = `
+    <button class="btn" data-doc="statuto">Statuto (.doc)</button>
+    <button class="btn" data-doc="regolamento">Regolamento (.doc)</button>
+    <button class="btn" data-doc="atto">Atto costitutivo (.doc)</button>
+    <select class="slim" id="docs-member-select"></select>
+    <button class="btn" data-doc="adesione">Adesione membro (.doc)</button>
+    <button class="btn" data-doc="delega">Delega GSE (.doc)</button>
+    <button class="btn" data-doc="trader">Contratto Trader (.doc)</button>
+    <button class="btn ghost" data-doc="privacy">Informativa GDPR (.doc)</button>
+  `;
+  const memberSelect = docsActions.querySelector('#docs-member-select');
+  if (memberSelect) {
+    membri.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.nome;
+      memberSelect.appendChild(opt);
+    });
+    if (!membri.length) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'Nessun membro';
+      memberSelect.appendChild(opt);
+      memberSelect.disabled = true;
+    }
+  }
+
+  docsActions.querySelector('[data-doc="statuto"]').onclick = () => {
     const doc = statutoTemplate(cer, membri);
     saveDocFile(`Statuto_${cer.nome}.doc`, doc);
   };
-  wrap.querySelector('#btnRegolamento').onclick = () => {
+  docsActions.querySelector('[data-doc="regolamento"]').onclick = () => {
     const doc = regolamentoTemplate(cer, membri);
     saveDocFile(`Regolamento_${cer.nome}.doc`, doc);
   };
-  wrap.querySelector('#btnAtto').onclick = () => {
+  docsActions.querySelector('[data-doc="atto"]').onclick = () => {
     const doc = attoCostitutivoTemplate(cer, membri);
     saveDocFile(`AttoCostitutivo_${cer.nome}.doc`, doc);
   };
-  const pick = wrap.querySelector('#membroPick');
-  membri.forEach(m => {
-    const opt = document.createElement('option');
-    opt.value = m.id;
-    opt.textContent = m.nome;
-    pick.appendChild(opt);
-  });
-  wrap.querySelector('#btnAdesione').onclick = () => {
-    const id = pick.value;
+  docsActions.querySelector('[data-doc="adesione"]').onclick = () => {
+    const id = memberSelect?.value;
     const membro = membri.find(m => m.id === id);
     const doc = adesioneTemplate(cer, membro);
     saveDocFile(`Adesione_${membro?.nome || 'Membro'}.doc`, doc);
   };
-  wrap.querySelector('#btnDelega').onclick = () => {
+  docsActions.querySelector('[data-doc="delega"]').onclick = () => {
     const doc = delegaGSETemplate(cer, membri);
     saveDocFile(`Delega_GSE_${cer.nome}.doc`, doc);
   };
-  wrap.querySelector('#btnTrader').onclick = () => {
+  docsActions.querySelector('[data-doc="trader"]').onclick = () => {
     const doc = contrattoTraderTemplate(cer, membri);
     saveDocFile(`ContrattoTrader_${cer.nome}.doc`, doc);
   };
-  wrap.querySelector('#btnPrivacy').onclick = () => {
+  docsActions.querySelector('[data-doc="privacy"]').onclick = () => {
     const doc = informativaGDPRTemplate(cer, membri);
     saveDocFile(`Privacy_${cer.nome}.doc`, doc);
   };
-  renderCerProgress(wrap.querySelector('#cerProgress'), cer);
+
+  renderCerProgress(docsProgress, cer);
+}
+
+function focusDocumentsTab(cerId) {
+  activateTab('documents');
+  if (docsCerSelect) {
+    docsCerSelect.value = cerId;
+    renderDocumentsForCer(cerId);
+  }
+}
+
+function initCronoprogrammaModule() {
+  cronSelect = document.getElementById('cronoprogramma-cer-select');
+  cronContainer = document.getElementById('cronoprogramma-phases');
+  cronFeedback = document.getElementById('cronoprogramma-feedback');
+  cronExportBtn = document.getElementById('cronoprogramma-export');
+  cronPrintBtn = document.getElementById('cronoprogramma-print');
+
+  if (!cronContainer || !cronSelect) return;
+
+  initCronoprogrammaUI({
+    container: cronContainer,
+    feedback: cronFeedback,
+    select: cronSelect,
+    exportBtn: cronExportBtn,
+    printBtn: cronPrintBtn,
+    onNavigateToPlants: () => {
+      activateTab('plants');
+      document.getElementById('plants-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+    onTriggerRecalc: () => {
+      activateTab('plants');
+      btnRecalcPreview?.click();
+    }
+  });
+
+  updateCronoprogrammaSelect();
+}
+
+function updateCronoprogrammaSelect() {
+  if (!cronSelect) return;
+  const previous = cronSelect.value;
+  cronSelect.innerHTML = '';
+  if (!cers.length) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'Nessuna CER disponibile';
+    cronSelect.appendChild(opt);
+    if (cronFeedback) cronFeedback.textContent = 'Crea una CER per iniziare a pianificare il cronoprogramma.';
+    if (cronContainer) cronContainer.innerHTML = '';
+    return;
+  }
+  cers.forEach(cer => {
+    const opt = document.createElement('option');
+    opt.value = cer.id;
+    opt.textContent = cer.nome;
+    cronSelect.appendChild(opt);
+  });
+  const target = previous && cers.some(c => c.id === previous) ? previous : cers[0].id;
+  cronSelect.value = target;
+  renderCronoprogramma(target);
+}
+
+function initAllocationsShortcuts() {
+  allocationsShortcutBtn = document.getElementById('btn-riparti-recalc');
+  openPlantsShortcutBtn = document.getElementById('btn-open-plants');
+  openPlantsShortcutBtn?.addEventListener('click', () => {
+    activateTab('plants');
+    document.getElementById('plants-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  allocationsShortcutBtn?.addEventListener('click', () => {
+    activateTab('plants');
+    btnRecalcPreview?.click();
+  });
+}
+
+function focusCronoprogrammaTab(cerId) {
+  activateTab('cronoprogramma');
+  if (cronSelect) {
+    cronSelect.value = cerId;
+    renderCronoprogramma(cerId);
+  }
 }
 
 function renderCerProgress(container, cer) {
@@ -473,17 +614,23 @@ function renderCerProgress(container, cer) {
 // Tabs
 // -----------------------------
 function initTabs() {
-  const buttons = document.querySelectorAll('.tab-btn');
-  const panels = document.querySelectorAll('.tab-panel');
-  if (!buttons.length || !panels.length) return;
-  buttons.forEach(btn => {
+  tabButtons = [...document.querySelectorAll('.tab-btn')];
+  tabPanels = [...document.querySelectorAll('.tab-panel')];
+  if (!tabButtons.length || !tabPanels.length) return;
+  tabButtons.forEach(btn => {
     btn.addEventListener('click', () => {
-      const tab = btn.dataset.tab;
-      buttons.forEach(b => b.classList.toggle('active', b === btn));
-      panels.forEach(panel => {
-        panel.classList.toggle('active', panel.dataset.panel === tab);
-      });
+      activateTab(btn.dataset.tab);
     });
+  });
+  const active = tabButtons.find(btn => btn.classList.contains('active'))?.dataset.tab || tabButtons[0]?.dataset.tab;
+  if (active) activateTab(active);
+}
+
+function activateTab(tab) {
+  if (!tabButtons.length || !tabPanels.length) return;
+  tabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+  tabPanels.forEach(panel => {
+    panel.classList.toggle('active', panel.dataset.panel === tab);
   });
 }
 
@@ -500,6 +647,7 @@ let btnExportCsv;
 let allocationsPreview;
 let allocationsPreviewContent;
 let allocationsPreviewMembers;
+let allocationsEmptyMessage;
 
 function initPlantsModule() {
   plantsCerSelect = document.getElementById('plants-cer-select');
@@ -512,6 +660,10 @@ function initPlantsModule() {
   allocationsPreview = document.getElementById('allocations-preview');
   allocationsPreviewContent = document.getElementById('allocations-preview-content');
   allocationsPreviewMembers = document.getElementById('allocations-preview-members');
+  allocationsEmptyMessage = document.getElementById('allocations-empty');
+  if (allocationsEmptyMessage) {
+    allocationsEmptyMessage.textContent = 'Esegui un ricalcolo per generare l’anteprima dei riparti.';
+  }
 
   modalEls.root = document.getElementById('plant-config-modal');
   modalEls.tipologia = document.getElementById('plant-modal-tipologia');
@@ -586,7 +738,11 @@ function currentPeriod() {
 }
 
 async function refreshCerOptions() {
-  if (!plantsCerSelect) return;
+  if (!plantsCerSelect) {
+    updateDocumentsSelect();
+    updateCronoprogrammaSelect();
+    return;
+  }
   try {
     const res = await fetch(`${API_BASE}/plants`);
     const payload = await res.json();
@@ -612,6 +768,8 @@ async function refreshCerOptions() {
     plantsCerSelect.disabled = true;
     setPlantsFeedback('Crea una CER o configura impianti per iniziare.');
     renderPlantsTable();
+    updateDocumentsSelect();
+    updateCronoprogrammaSelect();
     return;
   }
 
@@ -633,6 +791,8 @@ async function refreshCerOptions() {
     loadPlantsForCer(plantState.selectedCerId);
   };
   loadPlantsForCer(plantState.selectedCerId);
+  updateDocumentsSelect();
+  updateCronoprogrammaSelect();
 }
 
 async function loadPlantsForCer(cerId) {
@@ -956,6 +1116,13 @@ function renderAllocationsPreview(data, confirmed = false) {
     hideAllocationsPreview();
     return;
   }
+  const hasResults = Array.isArray(data.results) && data.results.length > 0;
+  if (!hasResults) {
+    hideAllocationsPreview();
+    if (allocationsEmptyMessage) allocationsEmptyMessage.textContent = 'Nessun dato disponibile per il periodo selezionato.';
+    return;
+  }
+  if (allocationsEmptyMessage) allocationsEmptyMessage.textContent = '';
   allocationsPreviewContent.innerHTML = '';
   data.results.forEach(result => {
     const block = document.createElement('div');
@@ -989,6 +1156,7 @@ function hideAllocationsPreview() {
   if (allocationsPreviewContent) allocationsPreviewContent.innerHTML = '';
   if (allocationsPreviewMembers) allocationsPreviewMembers.innerHTML = '';
   if (btnExportCsv) btnExportCsv.disabled = true;
+  if (allocationsEmptyMessage) allocationsEmptyMessage.textContent = 'Esegui un ricalcolo per generare l’anteprima dei riparti.';
 }
 
 function exportAllocationsCsv() {

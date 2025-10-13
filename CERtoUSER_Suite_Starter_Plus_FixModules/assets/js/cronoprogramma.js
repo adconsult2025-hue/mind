@@ -1,0 +1,613 @@
+const API_BASE = '/api';
+
+export const CER_PHASES = [
+  {
+    id: 0,
+    key: 'scouting',
+    title: 'Fase 0 — Scouting & Pre-check',
+    description: 'Valutazione preliminare di membri, cabina primaria e potenziale di condivisione prima dell’avvio formale.',
+    activities: [
+      'Analizzare le anagrafiche CRM e individuare POD insistenti sulla stessa cabina primaria',
+      'Verificare requisiti ARERA/GSE e vincoli urbanistici/territoriali',
+      'Stimare volumi energetici condivisibili e modello di governance preliminare'
+    ],
+    deliverables: [
+      'Checklist requisiti minimi (ARERA/GSE)',
+      'Lettere di manifestazione di interesse firmate',
+      'Report di fattibilità tecnico-economica'
+    ],
+    go_no_go: [
+      'Cabina primaria e POD compatibili confermati',
+      'Volume minimo di energia condivisibile raggiunto',
+      'Sponsor e responsabile di progetto nominati'
+    ]
+  },
+  {
+    id: 1,
+    key: 'legale',
+    title: 'Fase 1 — Governance & Documenti costitutivi',
+    description: 'Costituzione formale della CER con definizione ruoli, organi e documentazione legale.',
+    activities: [
+      'Redigere statuto, regolamento e atto costitutivo con riferimenti al DM 7 dicembre 2023',
+      'Definire ruoli (Responsabile, Referenti tecnici, Organi deliberanti) e quorum assembleari',
+      'Raccogliere dati anagrafici e POD dei membri ammessi'
+    ],
+    deliverables: [
+      'Bozze statuto, regolamento e atto costitutivo in formato editabile',
+      'Delibera di nomina organi e responsabile CER',
+      'Registro membri con ruoli e quote di partecipazione'
+    ],
+    go_no_go: [
+      'Documenti approvati dall’assemblea costituente',
+      'Responsabile CER accetta l’incarico',
+      'Membri allineati su governance e quote di partecipazione'
+    ]
+  },
+  {
+    id: 2,
+    key: 'impianti',
+    title: 'Fase 2 — Ingegneria & connessioni',
+    description: 'Raccolta dati impiantistici, contratti di connessione e validazione tecnica.',
+    activities: [
+      'Mappare impianti fotovoltaici disponibili e relativa potenza',
+      'Verificare stato connessione e convenzioni di uso/diritto sui siti',
+      'Raccogliere schede tecniche e layout elettrici aggiornati'
+    ],
+    deliverables: [
+      'Schede impianto (potenza, POD produttore, titolarità)',
+      'Contratti di connessione e convenzioni d’uso',
+      'Relazione tecnica con piano di entrata in esercizio'
+    ],
+    go_no_go: [
+      'Tutti gli impianti richiesti dispongono di titolo di disponibilità',
+      'Connessione attiva o con tempi certi di attivazione',
+      'Layout elettrico conforme ai requisiti GSE'
+    ]
+  },
+  {
+    id: 3,
+    key: 'riparti',
+    title: 'Fase 3 — Configurazione impianti & riparti',
+    description: 'Allineamento tra impianti, tipologie A/B, percentuali di riparto e simulazione economica.',
+    activities: [
+      'Configurare gli impianti nella Suite con tipologia A/B e percentuali CER/controparte',
+      'Associare membri, ruoli e pesi di consumo per ciascun impianto',
+      'Eseguire simulazione incentivi e “Ricalcola periodo” per il mese di avvio'
+    ],
+    deliverables: [
+      'Matrici di riparto per impianto con dettaglio membri',
+      'Report anteprima incentivi e quota energia condivisa',
+      'Verbale di approvazione riparti e criteri economici'
+    ],
+    go_no_go: [
+      'Tutte le tipologie impianto coerenti con i membri assegnati',
+      'Riparti percentuali 100% validati e salvati',
+      'Simulazione incentivo approvata dal responsabile finanziario'
+    ]
+  },
+  {
+    id: 4,
+    key: 'gse',
+    title: 'Fase 4 — Pratiche GSE & autorizzazioni',
+    description: 'Predisposizione e invio della documentazione al portale GSE con controllo allegati.',
+    activities: [
+      'Raccogliere versioni firmate di statuto, regolamento e deleghe GSE',
+      'Preparare prospetto POD e mappa cabina primaria',
+      'Verificare completezza allegati richiesti dal portale GSE'
+    ],
+    deliverables: [
+      'Dossier pratica GSE con tutti gli allegati',
+      'Elenco POD firmato e dichiarazioni responsabile',
+      'Upload ricevute di presentazione istanza'
+    ],
+    go_no_go: [
+      'Documentazione caricata e validata sul portale GSE',
+      'Conferma ricezione istanza e protocollazione',
+      'Check list allegati completa senza non conformità'
+    ]
+  },
+  {
+    id: 5,
+    key: 'avvio',
+    title: 'Fase 5 — Attivazione & collaudo',
+    description: 'Gestione lavori, collaudo impianti, attivazione convenzioni e avvio della CER.',
+    activities: [
+      'Coordinare lavori di adeguamento e collaudi su impianti e misure',
+      'Attivare convenzioni di vendita eccedenze e servizi ancillari',
+      'Formalizzare ingresso in esercizio e comunicazione ai membri'
+    ],
+    deliverables: [
+      'Verbali di collaudo e rapporti di prova',
+      'Contratti trader o controparte firmati',
+      'Comunicazione ufficiale di entrata in esercizio'
+    ],
+    go_no_go: [
+      'Impianti collaudati e misure attive',
+      'Convenzioni economicamente efficaci',
+      'Data di avvio comunicata e approvata dal GSE'
+    ]
+  },
+  {
+    id: 6,
+    key: 'ottimizzazione',
+    title: 'Fase 6 — Monitoraggio & ottimizzazione',
+    description: 'Monitoraggio operativo della CER, ottimizzazione riparti e rendicontazione periodica.',
+    activities: [
+      'Monitorare KPI energia condivisa e incentivi con dashboard periodiche',
+      'Aggiornare riparti e membership su base trimestrale o a seguito di variazioni',
+      'Gestire caricamento documenti periodici (rendiconti, report ambientali)'
+    ],
+    deliverables: [
+      'Report mensile energia condivisa e benefici economici',
+      'Registro aggiornato membri/impianti con variazioni approvate',
+      'Piano di ottimizzazione e interventi correttivi'
+    ],
+    go_no_go: [
+      'KPI entro soglie target definite dalla governance',
+      'Riparti aggiornati e comunicati ai membri',
+      'Documentazione periodica caricata e condivisa'
+    ]
+  }
+];
+
+const workflowCache = new Map(); // cerId -> Map(phase -> workflow)
+
+let containerEl;
+let feedbackEl;
+let selectEl;
+let exportBtnEl;
+let printBtnEl;
+let activeCerId = '';
+let navigateToPlants = () => {};
+let triggerRecalc = () => {};
+let initialized = false;
+
+const phaseModal = {
+  root: null,
+  title: null,
+  description: null,
+  lists: null,
+  owner: null,
+  due: null,
+  notes: null,
+  hiddenId: null,
+  shortcuts: null,
+  saveBtn: null
+};
+
+const gseModal = { root: null };
+
+export function initCronoprogrammaUI({ container, feedback, select, exportBtn, printBtn, onNavigateToPlants, onTriggerRecalc }) {
+  containerEl = resolveElement(container);
+  feedbackEl = resolveElement(feedback);
+  selectEl = resolveElement(select);
+  exportBtnEl = resolveElement(exportBtn);
+  printBtnEl = resolveElement(printBtn);
+  navigateToPlants = onNavigateToPlants || (() => {});
+  triggerRecalc = onTriggerRecalc || (() => {});
+
+  setupModals();
+
+  if (selectEl) {
+    selectEl.addEventListener('change', () => {
+      renderCronoprogramma(selectEl.value);
+    });
+  }
+
+  if (exportBtnEl) {
+    exportBtnEl.addEventListener('click', () => {
+      if (!activeCerId) {
+        emit('cer:notify', 'Seleziona una CER prima di esportare la checklist.');
+        return;
+      }
+      try {
+        exportChecklistCSV(activeCerId);
+        emit('cer:notify', 'Checklist esportata in formato CSV.');
+      } catch (err) {
+        emit('cer:notify', err.message || 'Impossibile esportare la checklist');
+      }
+    });
+  }
+
+  if (printBtnEl) {
+    printBtnEl.addEventListener('click', () => window.print());
+  }
+
+  containerEl?.addEventListener('click', handleContainerClick);
+
+  initialized = true;
+  if (selectEl?.value) {
+    renderCronoprogramma(selectEl.value);
+  }
+}
+
+export async function renderCronoprogramma(cerId) {
+  if (!initialized) return;
+  activeCerId = cerId || '';
+  if (!cerId) {
+    if (feedbackEl) {
+      feedbackEl.textContent = 'Seleziona una CER per visualizzare il cronoprogramma.';
+      feedbackEl.classList.remove('error-text');
+    }
+    if (containerEl) containerEl.innerHTML = '';
+    return;
+  }
+
+  try {
+    setFeedback('Caricamento stato fasi…');
+    const workflows = await fetchWorkflows(cerId);
+    renderPhaseCards(workflows);
+    setFeedback('');
+  } catch (err) {
+    setFeedback(err.message || 'Errore nel recupero del cronoprogramma', true);
+    if (containerEl) containerEl.innerHTML = '';
+  }
+}
+
+export async function advancePhase(cerId, phase, status, extra = {}) {
+  if (!cerId && !activeCerId) throw new Error('Nessuna CER selezionata');
+  const targetCer = cerId || activeCerId;
+  const existing = getPhaseState(targetCer, phase);
+  const payload = {
+    entity_type: 'cer',
+    entity_id: targetCer,
+    phase,
+    status,
+    owner: extra.owner !== undefined ? extra.owner : (existing?.owner || ''),
+    due_date: extra.due_date !== undefined ? extra.due_date : (existing?.due_date || ''),
+    notes: extra.notes !== undefined ? extra.notes : (existing?.notes || '')
+  };
+  const data = await apiFetch(`${API_BASE}/workflows/advance`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  upsertWorkflowCache(targetCer, data);
+  renderPhaseCards(workflowCache.get(targetCer));
+  return data;
+}
+
+export function exportChecklistCSV(cerId) {
+  const target = cerId || activeCerId;
+  if (!target) throw new Error('Nessuna CER selezionata');
+  const phases = workflowCache.get(target) || new Map();
+  const headers = ['phase', 'id', 'activity', 'owner', 'status', 'due_date'];
+  const lines = [headers.join(';')];
+  CER_PHASES.forEach(phase => {
+    const entry = phases.get(phase.id) || {};
+    const owner = sanitizeCsv(entry.owner || '');
+    const status = entry.status || 'todo';
+    const due = entry.due_date || '';
+    phase.activities.forEach((activity, idx) => {
+      const row = [phase.id, `${phase.key}_${idx + 1}`, sanitizeCsv(activity), owner, status, due];
+      lines.push(row.join(';'));
+    });
+  });
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const stamp = new Date().toISOString().slice(0, 10);
+  a.download = `cronoprogramma_${target}_${stamp}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export async function openUploadDialog(cerId, phase) {
+  const target = cerId || activeCerId;
+  if (!target) {
+    emit('cer:notify', 'Seleziona prima una CER.');
+    return;
+  }
+  const filename = window.prompt('Nome del documento da caricare (mock upload)?');
+  if (filename === null) return;
+  try {
+    const data = await apiFetch(`${API_BASE}/docs/upload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entity_type: 'cer', entity_id: target, phase, filename })
+    });
+    emit('cer:notify', 'Upload documentale simulato: usa l’URL presigned per il caricamento.');
+    const existing = getPhaseState(target, phase) || {};
+    const noteLine = `Upload ${filename} – presigned URL: ${data.upload_url}`;
+    const combinedNotes = [existing.notes, noteLine].filter(Boolean).join('\n');
+    await advancePhase(target, phase, 'in-review', {
+      owner: existing.owner,
+      due_date: existing.due_date,
+      notes: combinedNotes
+    });
+  } catch (err) {
+    emit('cer:notify', err.message || 'Errore durante il caricamento simulato');
+  }
+}
+
+function resolveElement(ref) {
+  if (!ref) return null;
+  if (typeof ref === 'string') return document.querySelector(ref);
+  return ref;
+}
+
+function setupModals() {
+  phaseModal.root = document.getElementById('cronoprogramma-phase-modal');
+  phaseModal.title = document.getElementById('phase-modal-title');
+  phaseModal.description = document.getElementById('phase-modal-description');
+  phaseModal.lists = document.getElementById('phase-modal-lists');
+  phaseModal.owner = document.getElementById('phase-modal-owner');
+  phaseModal.due = document.getElementById('phase-modal-due');
+  phaseModal.notes = document.getElementById('phase-modal-notes');
+  phaseModal.hiddenId = document.getElementById('phase-modal-id');
+  phaseModal.shortcuts = document.getElementById('phase-modal-shortcuts');
+  phaseModal.saveBtn = document.getElementById('phase-modal-save');
+
+  if (phaseModal.saveBtn) {
+    phaseModal.saveBtn.addEventListener('click', async () => {
+      const phaseId = Number(phaseModal.hiddenId?.value || 'NaN');
+      if (Number.isNaN(phaseId)) return;
+      const entry = getPhaseState(activeCerId, phaseId) || {};
+      try {
+        await advancePhase(activeCerId, phaseId, entry.status || 'todo', {
+          owner: phaseModal.owner?.value?.trim() || '',
+          due_date: phaseModal.due?.value || '',
+          notes: phaseModal.notes?.value || ''
+        });
+        emit('cer:notify', 'Checklist aggiornata.');
+        closePhaseModal();
+      } catch (err) {
+        emit('cer:notify', err.message || 'Errore salvataggio checklist');
+      }
+    });
+  }
+
+  phaseModal.root?.querySelectorAll('[data-close-modal="phase"]').forEach(btn => {
+    btn.addEventListener('click', closePhaseModal);
+  });
+  phaseModal.root?.addEventListener('click', (event) => {
+    if (event.target?.dataset?.closeModal === 'phase') closePhaseModal();
+  });
+
+  phaseModal.shortcuts?.addEventListener('click', (event) => {
+    const btn = event.target.closest('button[data-shortcut]');
+    if (!btn) return;
+    const type = btn.dataset.shortcut;
+    if (type === 'plants') navigateToPlants();
+    if (type === 'recalc') triggerRecalc();
+  });
+
+  gseModal.root = document.getElementById('gse-info-modal');
+  gseModal.root?.querySelectorAll('[data-close-modal="gse"]').forEach(btn => {
+    btn.addEventListener('click', closeGseModal);
+  });
+  gseModal.root?.addEventListener('click', (event) => {
+    if (event.target?.dataset?.closeModal === 'gse') closeGseModal();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      closePhaseModal();
+      closeGseModal();
+    }
+  });
+}
+
+function handleContainerClick(event) {
+  const btn = event.target.closest('button[data-action]');
+  if (!btn) return;
+  const phaseId = Number(btn.dataset.phase);
+  const action = btn.dataset.action;
+  if (Number.isNaN(phaseId) && action !== 'gse-info') return;
+
+  switch (action) {
+    case 'checklist':
+      openPhaseModal(phaseId);
+      break;
+    case 'upload':
+      if (phaseId === 3) navigateToPlants();
+      openUploadDialog(activeCerId, phaseId);
+      break;
+    case 'complete':
+      if (phaseId === 3) triggerRecalc();
+      confirmAdvance(phaseId);
+      break;
+    case 'gse-info':
+      openGseModal();
+      break;
+    default:
+      break;
+  }
+}
+
+function openPhaseModal(phaseId) {
+  const phase = CER_PHASES.find(p => p.id === phaseId);
+  if (!phase || !phaseModal.root) return;
+  const entry = getPhaseState(activeCerId, phaseId) || {};
+  if (phaseModal.title) phaseModal.title.textContent = phase.title;
+  if (phaseModal.description) phaseModal.description.textContent = phase.description;
+  if (phaseModal.hiddenId) phaseModal.hiddenId.value = String(phase.id);
+  if (phaseModal.owner) phaseModal.owner.value = entry.owner || '';
+  if (phaseModal.due) phaseModal.due.value = entry.due_date || '';
+  if (phaseModal.notes) phaseModal.notes.value = entry.notes || '';
+  if (phaseModal.lists) {
+    phaseModal.lists.innerHTML = [
+      renderListBlock('Attività', phase.activities),
+      renderListBlock('Deliverable da caricare', phase.deliverables),
+      renderListBlock('Go/No-Go', phase.go_no_go)
+    ].join('');
+  }
+  if (phaseModal.shortcuts) {
+    if (phase.id === 3) {
+      phaseModal.shortcuts.innerHTML = `
+        <button type="button" class="btn ghost" data-shortcut="plants">Vai alla tab Impianti</button>
+        <button type="button" class="btn" data-shortcut="recalc">Ricalcola periodo</button>
+      `;
+    } else {
+      phaseModal.shortcuts.innerHTML = '';
+    }
+  }
+  phaseModal.root.classList.add('open');
+}
+
+function closePhaseModal() {
+  phaseModal.root?.classList.remove('open');
+}
+
+function openGseModal() {
+  gseModal.root?.classList.add('open');
+}
+
+function closeGseModal() {
+  gseModal.root?.classList.remove('open');
+}
+
+function confirmAdvance(phaseId) {
+  const phase = CER_PHASES.find(p => p.id === phaseId);
+  if (!phase) return;
+  const ok = window.confirm(`Segnare come completata "${phase.title}"?`);
+  if (!ok) return;
+  advancePhase(activeCerId, phaseId, 'done').then(() => {
+    emit('cer:notify', `${phase.title} contrassegnata come completata.`);
+  }).catch(err => {
+    emit('cer:notify', err.message || 'Errore durante l’aggiornamento della fase.');
+  });
+}
+
+async function fetchWorkflows(cerId) {
+  const data = await apiFetch(`${API_BASE}/workflows?entity_type=cer&entity_id=${encodeURIComponent(cerId)}`);
+  const map = new Map();
+  (Array.isArray(data) ? data : []).forEach(item => {
+    map.set(Number(item.phase), item);
+  });
+  workflowCache.set(cerId, map);
+  return map;
+}
+
+function renderPhaseCards(workflows = new Map()) {
+  if (!containerEl) return;
+  containerEl.innerHTML = '';
+  CER_PHASES.forEach(phase => {
+    const entry = workflows.get(phase.id) || {};
+    const status = entry.status || 'todo';
+    const badgeClass = getBadgeClass(status);
+    const badgeLabel = getStatusLabel(status);
+    const owner = entry.owner ? escapeHtml(entry.owner) : 'Non assegnato';
+    const due = entry.due_date ? formatDate(entry.due_date) : '—';
+    const notes = entry.notes ? `<br/><strong>Note:</strong> ${escapeHtml(entry.notes).replace(/\n/g, '<br/>')}` : '';
+    const card = document.createElement('article');
+    card.className = 'card soft phase-card';
+    card.dataset.phase = String(phase.id);
+    card.innerHTML = `
+      <div class="row-between">
+        <div>
+          <h3>${phase.title}</h3>
+          <p class="info-text">${phase.description}</p>
+        </div>
+        <span class="badge ${badgeClass}">${badgeLabel}</span>
+      </div>
+      <p class="info-text"><strong>Referente:</strong> ${owner}<br/><strong>Scadenza:</strong> ${due}${notes}</p>
+      ${renderListBlock('Attività', phase.activities)}
+      ${renderListBlock('Deliverable (da caricare)', phase.deliverables)}
+      ${renderListBlock('Go/No-Go', phase.go_no_go)}
+      <div class="actions">
+        <button class="btn ghost" data-action="checklist" data-phase="${phase.id}">Vedi checklist</button>
+        <button class="btn ghost" data-action="upload" data-phase="${phase.id}">Carica documento</button>
+        <button class="btn" data-action="complete" data-phase="${phase.id}">Segna come completata</button>
+      </div>
+      ${phase.id === 4 ? '<div class="actions"><button class="btn ghost" data-action="gse-info">Apri portale GSE (info)</button></div>' : ''}
+    `;
+    containerEl.appendChild(card);
+  });
+}
+
+function renderListBlock(title, items) {
+  const list = (items || []).map(item => `<li>${escapeHtml(item)}</li>`).join('');
+  return `
+    <div class="phase-block">
+      <h4>${title}</h4>
+      <ul>${list}</ul>
+    </div>
+  `;
+}
+
+function getPhaseState(cerId, phase) {
+  return workflowCache.get(cerId)?.get(phase);
+}
+
+function upsertWorkflowCache(cerId, entry) {
+  let map = workflowCache.get(cerId);
+  if (!map) {
+    map = new Map();
+    workflowCache.set(cerId, map);
+  }
+  map.set(Number(entry.phase), entry);
+}
+
+async function apiFetch(url, options = {}) {
+  const res = await fetch(url, options);
+  let payload;
+  try {
+    payload = await res.json();
+  } catch (err) {
+    throw new Error('Risposta JSON non valida');
+  }
+  if (!res.ok || payload.ok === false) {
+    const error = payload.error || {};
+    const message = error.message || payload.error || 'Errore API';
+    const err = new Error(message);
+    err.details = error.details;
+    throw err;
+  }
+  return payload.data;
+}
+
+function getBadgeClass(status) {
+  if (status === 'in-review') return 'blue';
+  if (status === 'done') return 'green';
+  return '';
+}
+
+function getStatusLabel(status) {
+  switch (status) {
+    case 'in-review':
+      return 'In revisione';
+    case 'done':
+      return 'Completata';
+    default:
+      return 'Da avviare';
+  }
+}
+
+function formatDate(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('it-IT');
+}
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function sanitizeCsv(value) {
+  const str = String(value || '');
+  if (str.includes(';') || str.includes('"')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+function setFeedback(message, isError = false) {
+  if (!feedbackEl) return;
+  feedbackEl.textContent = message || '';
+  feedbackEl.classList.toggle('error-text', Boolean(isError && message));
+}
+
+function emit(name, detail) {
+  window.dispatchEvent(new CustomEvent(name, { detail }));
+}
+
