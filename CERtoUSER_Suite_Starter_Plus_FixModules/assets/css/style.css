@@ -258,9 +258,33 @@ main.container {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
-.stack {
+.crono-grid {
   display: grid;
   gap: var(--space-4);
+}
+
+.plant-phase .table-wrap {
+  margin-top: var(--space-4);
+}
+
+.plant-phase .doc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.plant-phase .doc-actions .btn {
+  margin: 0;
+}
+
+.plant-phase .data-table th,
+.plant-phase .data-table td {
+  white-space: nowrap;
+}
+
+.plant-phase .data-table td:nth-child(2) {
+  white-space: normal;
 }
 
 main.cer-layout {

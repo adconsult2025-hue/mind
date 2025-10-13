@@ -1,5 +1,5 @@
 const { listDocs, addDoc, updateDocStatus } = require('./_data');
-const { listPlantDocs, upsertPlantDoc, markPlantDocStatus } = require('./_plant_store');
+const { listPlantDocs, uploadPlantDoc, markPlantDoc, findPlantDoc } = require('./plant_docs');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -9,6 +9,20 @@ const headers = () => ({
 });
 
 const ALLOWED_EXT = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png'];
+
+function normalizePlantPhase(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'string') {
+    const upper = value.toUpperCase();
+    if (/^P[0-4]$/.test(upper)) return upper;
+    const numeric = Number(upper);
+    if (Number.isFinite(numeric)) return `P${numeric}`;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `P${value}`;
+  }
+  return null;
+}
 
 exports.handler = async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
@@ -22,7 +36,7 @@ exports.handler = async function handler(event) {
       const filter = {
         entity_type: params.entity_type,
         entity_id: params.entity_id,
-        phase: phaseParam !== undefined ? phaseParam : undefined
+        phase: params.phase
       };
       if (filter.entity_type !== 'plant' && filter.phase !== undefined) {
         filter.phase = Number(filter.phase);
@@ -35,13 +49,17 @@ exports.handler = async function handler(event) {
         };
       }
       if (filter.entity_type === 'plant') {
-        const data = listPlantDocs(filter.entity_id).filter(doc => {
-          if (filter.phase === undefined) return true;
-          return String(doc.phase) === String(filter.phase);
-        });
+        const phase = normalizePlantPhase(filter.phase);
+        const data = listPlantDocs(filter.entity_id, { phase: phase || undefined });
         return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data }) };
       }
-      const data = listDocs(filter);
+      const parsedFilter = {
+        ...filter,
+        phase: filter.phase !== undefined && filter.phase !== null && filter.phase !== ''
+          ? Number(filter.phase)
+          : undefined
+      };
+      const data = listDocs(parsedFilter);
       return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data }) };
     }
 
@@ -66,9 +84,10 @@ exports.handler = async function handler(event) {
             body: JSON.stringify({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Status non valido' } })
           };
         }
-        const plantUpdated = markPlantDocStatus(doc_id, status);
-        if (plantUpdated) {
-          return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data: plantUpdated }) };
+        const plantDoc = findPlantDoc(doc_id);
+        if (plantDoc) {
+          const updatedPlantDoc = markPlantDoc(doc_id, status);
+          return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data: updatedPlantDoc }) };
         }
         const updated = updateDocStatus(doc_id, status);
         if (!updated) {
@@ -99,23 +118,16 @@ exports.handler = async function handler(event) {
           };
         }
         if (entity_type === 'plant') {
-          try {
-            const doc = upsertPlantDoc(entity_id, {
-              id: doc_id,
-              code,
-              name,
-              phase,
-              status: 'uploaded',
-              url: `https://storage.mock/docs/plant/${entity_id}/${Date.now()}_${filename}`
-            });
-            return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data: doc }) };
-          } catch (err) {
+          const plantPhase = normalizePlantPhase(phase);
+          if (!plantPhase) {
             return {
               statusCode: 400,
               headers: headers(),
-              body: JSON.stringify({ ok: false, error: { code: 'UPLOAD_ERROR', message: err.message || 'Errore registrazione documento' } })
+              body: JSON.stringify({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'phase non valida per impianto' } })
             };
           }
+          const doc = uploadPlantDoc({ plant_id: entity_id, phase: plantPhase, filename });
+          return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data: doc }) };
         }
         const docId = `doc_${Date.now()}`;
         const doc = addDoc({
