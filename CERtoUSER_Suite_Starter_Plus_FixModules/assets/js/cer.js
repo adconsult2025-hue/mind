@@ -113,11 +113,186 @@ function bindCerForm() {
   };
 }
 
+function selectedMembers() {
+  return [...membersBox.querySelectorAll('.member-pick')]
+    .map(row => {
+      const cb = row.querySelector('input[type=checkbox]');
+      if (!cb.checked) return null;
+      const id = cb.dataset.id;
+      const role = row.querySelector('.role').value;
+      const customer = customers.find(x => x.id === id) || {};
+      return {
+        id,
+        nome: customer.nome || 'Membro',
+        pod: customer.pod || '',
+        comune: customer.comune || '',
+        ruolo: role
+      };
+    })
+    .filter(Boolean);
+}
+
+function eligibleOwners() {
+  return selectedMembers().filter(m => m.ruolo === 'Produttore' || m.ruolo === 'Prosumer');
+}
+
+function refreshPlantOwners(plant) {
+  const ownerSelect = plant.querySelector('.owner');
+  if (!ownerSelect) return;
+  const current = ownerSelect.value;
+  const owners = eligibleOwners();
+  ownerSelect.innerHTML = '<option value="">Seleziona membro</option>';
+  owners.forEach(owner => {
+    const opt = document.createElement('option');
+    opt.value = owner.id;
+    opt.textContent = `${owner.nome} — ${owner.ruolo}`;
+    if (owner.id === current) opt.selected = true;
+    ownerSelect.appendChild(opt);
+  });
+  if (!ownerSelect.value && owners.length === 1) {
+    ownerSelect.value = owners[0].id;
+  }
+}
+
+function refreshPlantShares(plant) {
+  const wrap = plant.querySelector('.shares-grid');
+  if (!wrap) return;
+  const previous = new Map([...wrap.querySelectorAll('input[data-member]')].map(inp => [inp.dataset.member, inp.value]));
+  wrap.innerHTML = '';
+  const members = selectedMembers();
+  if (!members.length) {
+    wrap.innerHTML = '<p class="note">Seleziona membri per definire le percentuali di riparto.</p>';
+    return;
+  }
+  members.forEach(member => {
+    const label = document.createElement('label');
+    const title = document.createElement('span');
+    title.textContent = member.nome;
+    const role = document.createElement('small');
+    role.textContent = member.ruolo;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.max = '100';
+    input.step = '0.1';
+    input.dataset.member = member.id;
+    input.name = `share_${plant.dataset.id}_${member.id}`;
+    const prev = previous.get(member.id);
+    input.value = prev !== undefined ? prev : '0';
+    label.appendChild(title);
+    label.appendChild(role);
+    label.appendChild(input);
+    wrap.appendChild(label);
+  });
+}
+
+function refreshAllPlants() {
+  [...plantsBox.querySelectorAll('.plant')].forEach(plant => {
+    refreshPlantOwners(plant);
+    refreshPlantShares(plant);
+  });
+}
+
+function handleMemberChange() {
+  refreshAllPlants();
+}
+
+function addPlant(data = {}) {
+  const plant = document.createElement('div');
+  plant.className = 'plant';
+  const pid = data.id || uid('plant');
+  plant.dataset.id = pid;
+  plant.innerHTML = `
+    <div class="plant-grid">
+      <label>Nome impianto
+        <input type="text" data-k="name" value="${data.nome || ''}" required/>
+      </label>
+      <label>Potenza (kWp)
+        <input type="number" min="0" step="0.1" data-k="kwp" value="${data.potenza_kwp || ''}"/>
+      </label>
+      <label>Titolare impianto
+        <select class="owner" data-k="owner" required>
+          <option value="">Seleziona membro</option>
+        </select>
+      </label>
+    </div>
+    <div class="plant-shares">
+      <h4>Ripartizione percentuale</h4>
+      <div class="shares-grid" data-k="shares"></div>
+    </div>
+    <button type="button" class="btn danger remove-plant">Rimuovi impianto</button>
+  `;
+  const ownerSelect = plant.querySelector('.owner');
+  if (data.titolareId) ownerSelect.value = data.titolareId;
+  plantsBox.appendChild(plant);
+  refreshPlantOwners(plant);
+  refreshPlantShares(plant);
+  plant.querySelector('.remove-plant').onclick = () => {
+    plant.remove();
+  };
+  return plant;
+}
+
+function serializePlant(plant, members) {
+  const nameInput = plant.querySelector('[data-k="name"]');
+  const kwpInput = plant.querySelector('[data-k="kwp"]');
+  const ownerSelect = plant.querySelector('.owner');
+  const name = (nameInput.value || '').trim();
+  if (!name) {
+    alert('Inserisci un nome per ogni impianto fotovoltaico.');
+    nameInput.focus();
+    return null;
+  }
+  const ownerId = ownerSelect.value;
+  if (!ownerId) {
+    alert(`Seleziona il titolare dell'impianto "${name}".`);
+    ownerSelect.focus();
+    return null;
+  }
+  const ownerMember = members.find(m => m.id === ownerId);
+  if (!ownerMember || (ownerMember.ruolo !== 'Produttore' && ownerMember.ruolo !== 'Prosumer')) {
+    alert('Il titolare di un impianto deve essere un Prosumer o un Produttore.');
+    ownerSelect.focus();
+    return null;
+  }
+  const shareInputs = [...plant.querySelectorAll('.shares-grid input[data-member]')];
+  if (!shareInputs.length) {
+    alert(`Seleziona almeno un membro per ripartire l'impianto "${name}".`);
+    return null;
+  }
+  let total = 0;
+  const shares = shareInputs.map(input => {
+    const value = Number(input.value || 0);
+    total += value;
+    return { membroId: input.dataset.member, percentuale: value };
+  });
+  if (!shares.some(s => s.percentuale > 0)) {
+    alert(`Definisci le percentuali di riparto per l'impianto "${name}".`);
+    return null;
+  }
+  const totalRounded = Math.round(total * 100) / 100;
+  if (Math.abs(totalRounded - 100) > 0.01) {
+    alert(`La somma delle percentuali per l'impianto "${name}" deve essere 100%. Attuale: ${totalRounded.toFixed(2)}%.`);
+    return null;
+  }
+  const kwp = kwpInput.value ? Number(kwpInput.value) : null;
+  return {
+    id: plant.dataset.id,
+    nome: name,
+    potenza_kwp: kwp,
+    titolareId: ownerId,
+    titolareNome: ownerMember.nome,
+    titolareRuolo: ownerMember.ruolo,
+    shares
+  };
+}
+
 function renderMembersPicker() {
   if (!membersBox) return;
   membersBox.innerHTML = '';
   if (!customers.length) {
     membersBox.innerHTML = '<p class="note">Non ci sono clienti. Vai al CRM per crearli.</p>';
+    handleMemberChange();
     return;
   }
   customers.forEach(c => {
@@ -134,7 +309,15 @@ function renderMembersPicker() {
       <span class="badge">${c.comune || ''} · ${c.cabina || ''}</span>
     `;
     membersBox.appendChild(row);
+    const cb = row.querySelector('input[type=checkbox]');
+    const roleSel = row.querySelector('.role');
+    cb.onchange = handleMemberChange;
+    roleSel.onchange = () => {
+      c.ruolo = roleSel.value;
+      handleMemberChange();
+    };
   });
+  handleMemberChange();
 }
 
 function renderCERList() {
@@ -154,11 +337,13 @@ function renderCERList() {
       const rip = cer.riparto === 'Personalizzato'
         ? `P${cer.rp_prod}/S${cer.rp_pros}/CER${cer.rp_cer}`
         : cer.riparto;
+      const impCount = cer.impianti ? cer.impianti.length : 0;
+      const impBadge = `<span class="badge ${impCount ? 'green' : ''}">${impCount} impianto${impCount === 1 ? '' : 'i'}</span>`;
       r.innerHTML = `
         <div><strong>${cer.nome}</strong><br/><small>${cer.cf || ''}</small></div>
         <div>${cer.cabina}</div>
         <div>${cer.comune}</div>
-        <div>${rip}</div>
+        <div>${rip}<br/>${impBadge}</div>
         <div>${cer.quota}%</div>
         <div class="actions">
           <button class="btn ghost" data-docs="${cer.id}">Documenti</button>
