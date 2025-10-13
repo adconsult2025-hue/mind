@@ -4,7 +4,9 @@ const state = {
   plants: [],
   filterCerId: '',
   selectedPlantId: '',
-  production: new Map()
+  production: new Map(),
+  workflows: new Map(),
+  docs: new Map()
 };
 
 let tableBody;
@@ -27,6 +29,28 @@ let productionFeedback;
 let refreshPlantsBtn;
 let refreshDetailBtn;
 let tabs;
+let cronoContainer;
+let cronoFeedback;
+let exportChecklistBtn;
+let presetButtons;
+
+const docModal = {
+  root: null,
+  title: null,
+  form: null,
+  filename: null,
+  phaseLabel: null,
+  phaseValue: null,
+  error: null
+};
+
+const PLANT_PHASES = [
+  { id: 'P0', title: 'Fase P0 — Pre-analisi impianto', description: 'Raccolta dati di base, titolarità e requisiti minimi.' },
+  { id: 'P1', title: 'Fase P1 — Governance locale', description: 'Allineamento documentale su deleghe, delibere e ruoli operativi.' },
+  { id: 'P2', title: 'Fase P2 — Tecnica & connessioni', description: 'Verifica schemi elettrici, contratti di connessione e layout aggiornati.' },
+  { id: 'P3', title: 'Fase P3 — Riparti e onboarding', description: 'Approvazione riparti economici e caricamento checklist documentale.' },
+  { id: 'P4', title: 'Fase P4 — Pratiche GSE', description: 'Upload documenti definitivi per invio domanda e monitoraggio riscontri.' }
+];
 
 function init() {
   tableBody = document.querySelector('#impianti-table tbody');
@@ -49,6 +73,10 @@ function init() {
   refreshPlantsBtn = document.getElementById('btn-refresh-plants');
   refreshDetailBtn = document.getElementById('btn-refresh-detail');
   tabs = document.getElementById('plant-detail-tabs');
+  cronoContainer = document.getElementById('plant-crono-content');
+  cronoFeedback = document.getElementById('plant-crono-feedback');
+  exportChecklistBtn = document.getElementById('btn-export-plant-checklist');
+  presetButtons = document.querySelectorAll('[data-plant-preset]');
 
   cerSelect?.addEventListener('change', () => {
     state.filterCerId = cerSelect.value || '';
@@ -60,6 +88,28 @@ function init() {
   });
   productionForm?.addEventListener('submit', submitProductionForm);
   tabs?.addEventListener('click', onTabClick);
+  cronoContainer?.addEventListener('click', onCronoAction);
+
+  presetButtons?.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.plantPreset;
+      if (!state.selectedPlantId) {
+        toast('Seleziona un impianto prima di applicare il preset.');
+        return;
+      }
+      applyPreset(state.selectedPlantId, type);
+    });
+  });
+
+  exportChecklistBtn?.addEventListener('click', () => {
+    if (!state.selectedPlantId) {
+      toast('Seleziona un impianto per esportare la checklist.');
+      return;
+    }
+    exportPlantChecklistCSV(state.selectedPlantId);
+  });
+
+  setupDocModal();
 
   loadPlants();
 }
@@ -83,10 +133,12 @@ async function loadPlants(force = false) {
         selectPlant(state.plants[0].id);
       } else if (exists) {
         renderPlantsTable();
+        renderPlantCrono(state.selectedPlantId);
       }
     }
     if (!state.plants.length) {
       detailCard?.setAttribute('hidden', 'hidden');
+      clearPlantCrono();
     }
     setFeedback(state.plants.length ? `${state.plants.length} impianti disponibili` : 'Nessun impianto configurato');
   } catch (err) {
@@ -157,6 +209,7 @@ function selectPlant(plantId) {
   state.selectedPlantId = plantId;
   renderPlantsTable();
   loadPlantProduction(plantId);
+  renderPlantCrono(plantId);
 }
 
 async function loadPlantProduction(plantId, force = false) {
@@ -179,6 +232,7 @@ function renderPlantDetail() {
   const prod = state.production.get(state.selectedPlantId);
   if (!plant) {
     detailCard.setAttribute('hidden', 'hidden');
+    clearPlantCrono();
     return;
   }
   detailCard.removeAttribute('hidden');
@@ -273,14 +327,392 @@ function formatLastReading(reading, includeStatus = false) {
   return when;
 }
 
-function toast(message) {
-  const el = document.createElement('div');
-  el.className = 'toast';
-  el.textContent = message;
-  document.body.appendChild(el);
-  requestAnimationFrame(() => el.classList.add('visible'));
+function setCronoFeedback(message, error = false) {
+  if (!cronoFeedback) return;
+  cronoFeedback.textContent = message;
+  cronoFeedback.classList.toggle('error-text', !!error);
+}
+
+function clearPlantCrono() {
+  if (!cronoContainer) return;
+  cronoContainer.innerHTML = '';
+  setCronoFeedback('Seleziona un impianto per consultare il cronoprogramma.');
+}
+
+async function renderPlantCrono(plantId) {
+  if (!cronoContainer) return;
+  if (!plantId) {
+    clearPlantCrono();
+    return;
+  }
+  setCronoFeedback('Caricamento cronoprogramma…');
+  try {
+    const [workflows, docs] = await Promise.all([
+      apiFetch(`${API_BASE}/plants/workflows?plant_id=${encodeURIComponent(plantId)}`),
+      apiFetch(`${API_BASE}/docs?entity_type=plant&entity_id=${encodeURIComponent(plantId)}`)
+    ]);
+    state.workflows.set(plantId, Array.isArray(workflows) ? workflows : []);
+    state.docs.set(plantId, Array.isArray(docs) ? docs : []);
+    buildPlantCronoUI(plantId);
+    setCronoFeedback('Cronoprogramma aggiornato.');
+  } catch (err) {
+    setCronoFeedback(err.message || 'Errore nel caricamento del cronoprogramma', true);
+  }
+}
+
+function buildPlantCronoUI(plantId) {
+  if (!cronoContainer) return;
+  const workflows = new Map((state.workflows.get(plantId) || []).map(item => [item.phase, item]));
+  const docs = state.docs.get(plantId) || [];
+  cronoContainer.innerHTML = '';
+  PLANT_PHASES.forEach(phase => {
+    const entry = workflows.get(phase.id) || { status: 'todo', owner: '', due_date: '' };
+    const card = document.createElement('article');
+    card.className = 'card soft plant-phase';
+    card.dataset.phase = phase.id;
+    card.innerHTML = renderPhaseTemplate(phase, entry, docs.filter(doc => doc.phase === phase.id));
+    cronoContainer.appendChild(card);
+  });
+}
+
+function renderPhaseTemplate(phase, entry, docs) {
+  const statusInfo = getPhaseStatusInfo(entry.status);
+  const owner = entry.owner ? escapeHtml(entry.owner) : 'Non assegnato';
+  const due = entry.due_date ? formatDate(entry.due_date) : '—';
+  const reviewLabel = entry.status === 'done' ? 'Riapri revisione' : 'Segna in revisione';
+  const completeDisabled = entry.status === 'todo' ? 'disabled' : '';
+  return `
+    <div class="row-between">
+      <div>
+        <h3>${escapeHtml(phase.title)}</h3>
+        <p class="info-text">${escapeHtml(phase.description)}</p>
+      </div>
+      <span class="badge ${statusInfo.className}">${statusInfo.label}</span>
+    </div>
+    <p class="info-text"><strong>Referente:</strong> ${owner}<br/><strong>Scadenza:</strong> ${due}</p>
+    ${renderDocsTable(phase.id, docs)}
+    <div class="actions">
+      <button class="btn ghost" type="button" data-action="upload-doc" data-phase="${phase.id}">Carica documento</button>
+      <button class="btn ghost" type="button" data-action="advance-phase" data-phase="${phase.id}" data-status="in-review">${reviewLabel}</button>
+      <button class="btn" type="button" data-action="advance-phase" data-phase="${phase.id}" data-status="done" ${completeDisabled}>Completa fase</button>
+    </div>
+  `;
+}
+
+function renderDocsTable(phaseId, docs) {
+  if (!docs.length) {
+    return `
+      <div class="table-wrap">
+        <table class="data-table plant-docs-table">
+          <thead>
+            <tr><th>Codice</th><th>Nome</th><th>Stato</th><th>Azioni</th></tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="4"><p class="info-text">Nessun documento associato alla fase.</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+  const rows = docs
+    .slice()
+    .sort((a, b) => (a.code || '').localeCompare(b.code || ''))
+    .map(doc => {
+      const statusInfo = getDocStatusInfo(doc.status);
+      const openLink = doc.url ? `<a class="btn ghost" href="${escapeHtml(doc.url)}" target="_blank" rel="noopener">Apri</a>` : '';
+      const actions = `
+        <div class="doc-actions">
+          ${openLink}
+          <button class="btn ghost" type="button" data-action="mark-doc" data-status="approved" data-doc="${doc.doc_id}" data-phase="${phaseId}">Approva</button>
+          <button class="btn ghost" type="button" data-action="mark-doc" data-status="rejected" data-doc="${doc.doc_id}" data-phase="${phaseId}">Rifiuta</button>
+        </div>
+      `;
+      return `
+        <tr data-doc="${doc.doc_id}">
+          <td>${escapeHtml(doc.code || '-')}</td>
+          <td>${escapeHtml(doc.name || doc.filename || '-')}</td>
+          <td><span class="badge ${statusInfo.className}">${statusInfo.label}</span></td>
+          <td>${actions}</td>
+        </tr>
+      `;
+    }).join('');
+  return `
+    <div class="table-wrap">
+      <table class="data-table plant-docs-table">
+        <thead>
+          <tr><th>Codice</th><th>Nome</th><th>Stato</th><th>Azioni</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function getPhaseStatusInfo(status = 'todo') {
+  switch (status) {
+    case 'done':
+      return { label: 'Completata', className: 'green' };
+    case 'in-review':
+      return { label: 'In revisione', className: 'warn' };
+    default:
+      return { label: 'Da avviare', className: 'muted' };
+  }
+}
+
+function getDocStatusInfo(status = 'uploaded') {
+  switch (status) {
+    case 'approved':
+      return { label: 'Approvato', className: 'green' };
+    case 'rejected':
+      return { label: 'Respinto', className: 'warn' };
+    default:
+      return { label: 'Caricato', className: 'blue' };
+  }
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatDate(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('it-IT');
+}
+
+function onCronoAction(event) {
+  const button = event.target.closest('button[data-action]');
+  if (!button) return;
+  const action = button.dataset.action;
+  const phase = button.dataset.phase;
+  if (action === 'upload-doc') {
+    openDocModal(phase);
+    return;
+  }
+  if (!state.selectedPlantId) {
+    toast('Seleziona un impianto per continuare.');
+    return;
+  }
+  if (action === 'advance-phase') {
+    const status = button.dataset.status;
+    advancePlantPhase(state.selectedPlantId, phase, status);
+    return;
+  }
+  if (action === 'mark-doc') {
+    const docId = button.dataset.doc;
+    const status = button.dataset.status;
+    markDoc(docId, status);
+  }
+}
+
+function setupDocModal() {
+  docModal.root = document.getElementById('plant-doc-modal');
+  if (!docModal.root) return;
+  docModal.title = docModal.root.querySelector('[data-modal-title]');
+  docModal.form = document.getElementById('plant-doc-form');
+  docModal.filename = document.getElementById('plant-doc-filename');
+  docModal.phaseLabel = document.getElementById('plant-doc-phase-label');
+  docModal.phaseValue = document.getElementById('plant-doc-phase-value');
+  docModal.error = document.getElementById('plant-doc-error');
+  docModal.root.querySelectorAll('[data-close-modal]').forEach(btn => {
+    btn.addEventListener('click', () => closeDocModal());
+  });
+  docModal.form?.addEventListener('submit', submitDocForm);
+}
+
+function openDocModal(phase) {
+  if (!docModal.root) return;
+  docModal.phaseValue.value = phase || '';
+  docModal.phaseLabel.textContent = phase || '-';
+  if (docModal.title) {
+    docModal.title.textContent = 'Carica documento fase ' + (phase || '');
+  }
+  if (docModal.filename) {
+    docModal.filename.value = '';
+    docModal.filename.focus();
+  }
+  if (docModal.error) docModal.error.textContent = '';
+  docModal.root.classList.add('open');
+  docModal.root.setAttribute('aria-hidden', 'false');
+}
+
+function closeDocModal() {
+  if (!docModal.root) return;
+  docModal.root.classList.remove('open');
+  docModal.root.setAttribute('aria-hidden', 'true');
+}
+
+async function submitDocForm(event) {
+  event.preventDefault();
+  if (!state.selectedPlantId) {
+    if (docModal.error) docModal.error.textContent = 'Seleziona un impianto prima di caricare documenti.';
+    return;
+  }
+  const filename = docModal.filename?.value?.trim();
+  if (!filename) {
+    if (docModal.error) docModal.error.textContent = 'Inserisci il nome del file da caricare (es. documento.pdf).';
+    return;
+  }
+  if (docModal.error) docModal.error.textContent = '';
+  try {
+    await uploadPlantDoc(state.selectedPlantId, docModal.phaseValue?.value, filename);
+    closeDocModal();
+  } catch (err) {
+    if (docModal.error) docModal.error.textContent = err.message || 'Errore durante il caricamento del documento';
+  }
+}
+
+async function applyPreset(plantId, type) {
+  if (!plantId || !type) return;
+  setCronoFeedback('Applicazione preset documentale…');
+  try {
+    await apiFetch(`${API_BASE}/plants/docs/preset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plant_id: plantId, type })
+    });
+    toast('Preset documentale applicato.');
+    await renderPlantCrono(plantId);
+  } catch (err) {
+    setCronoFeedback(err.message || 'Errore durante l\'applicazione del preset', true);
+  }
+}
+
+async function uploadPlantDoc(plantId, phase, filename) {
+  if (!plantId || !phase) throw new Error('Fase o impianto non valido');
+  try {
+    await apiFetch(`${API_BASE}/docs/upload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entity_type: 'plant', entity_id: plantId, phase, filename })
+    });
+    toast('Documento caricato correttamente.');
+    await renderPlantCrono(plantId);
+  } catch (err) {
+    setCronoFeedback(err.message || 'Errore durante il caricamento del documento', true);
+    throw err;
+  }
+}
+
+async function markDoc(docId, status) {
+  if (!docId || !status) return;
+  try {
+    await apiFetch(`${API_BASE}/docs/mark`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ doc_id: docId, status })
+    });
+    toast(status === 'approved' ? 'Documento approvato.' : 'Documento respinto.');
+    await renderPlantCrono(state.selectedPlantId);
+  } catch (err) {
+    setCronoFeedback(err.message || 'Errore durante l\'aggiornamento del documento', true);
+  }
+}
+
+async function advancePlantPhase(plantId, phase, status) {
+  if (!plantId || !phase || !status) return;
+  try {
+    await apiFetch(`${API_BASE}/plants/workflows/advance`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plant_id: plantId, phase, status })
+    });
+    toast('Stato fase aggiornato.');
+    await renderPlantCrono(plantId);
+  } catch (err) {
+    if (err.code === 'GATE_NOT_MET') {
+      const missing = Array.isArray(err.details?.missing_docs) ? err.details.missing_docs.join(', ') : '';
+      const message = missing ? `${err.message}. Mancanti: ${missing}` : err.message || 'Gate non superato.';
+      toast(message);
+      setCronoFeedback(message, true);
+    } else {
+      setCronoFeedback(err.message || 'Errore durante l\'aggiornamento della fase', true);
+    }
+  }
+}
+
+function exportPlantChecklistCSV(plantId) {
+  const docs = state.docs.get(plantId) || [];
+  const workflows = new Map((state.workflows.get(plantId) || []).map(item => [item.phase, item]));
+  const rows = [];
+  if (!docs.length) {
+    PLANT_PHASES.forEach(phase => {
+      const wf = workflows.get(phase.id) || {};
+      rows.push([
+        plantId,
+        phase.id,
+        '',
+        '',
+        wf.status || 'todo',
+        wf.owner || '',
+        wf.due_date || ''
+      ]);
+    });
+  } else {
+    docs.forEach(doc => {
+      const wf = workflows.get(doc.phase) || {};
+      rows.push([
+        plantId,
+        doc.phase,
+        doc.code || '',
+        doc.name || doc.filename || '',
+        doc.status || '',
+        wf.owner || '',
+        wf.due_date || ''
+      ]);
+    });
+  }
+  const header = ['plant_id', 'phase', 'code', 'name', 'status', 'owner', 'due_date'];
+  const csv = [header, ...rows]
+    .map(row => row.map(csvEscape).join(','))
+    .join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${plantId}_checklist.csv`;
+  document.body.appendChild(link);
+  link.click();
   setTimeout(() => {
-    el.classList.remove('visible');
-    setTimeout(() => el.remove(), 200);
-  }, 3000);
+    URL.revokeObjectURL(link.href);
+    link.remove();
+  }, 500);
+}
+
+function csvEscape(value) {
+  if (value === null || value === undefined) return '';
+  const str = String(value).replace(/"/g, '""');
+  if (/[",\n\r]/.test(str)) {
+    return `"${str}"`;
+  }
+  return str;
+}
+
+async function apiFetch(url, options = {}) {
+  const res = await fetch(url, options);
+  let payload;
+  try {
+    payload = await res.json();
+  } catch (err) {
+    const error = new Error('Risposta JSON non valida');
+    error.code = 'INVALID_JSON';
+    throw error;
+  }
+  if (!res.ok || payload.ok === false) {
+    const error = new Error(payload.error?.message || 'Errore API');
+    error.code = payload.error?.code;
+    error.details = payload.error?.details;
+    throw error;
+  }
+  return payload.data;
+}
+
+function toast(message) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('cer:notify', { detail: message }));
 }

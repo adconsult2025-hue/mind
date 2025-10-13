@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>MIND — Suite</title>
   <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/css/style.css?v=15"/>
-  <script type="module" src="/assets/js/app.js?v=15"></script>
-  <script type="module" src="/assets/js/storage.js?v=15"></script>
-  <script type="module" src="/assets/js/impianti.js?v=15"></script>
+  <link rel="stylesheet" href="/assets/css/style.css?v=18"/>
+  <script type="module" src="/assets/js/app.js?v=18"></script>
+  <script type="module" src="/assets/js/storage.js?v=18"></script>
+  <script type="module" src="/assets/js/impianti.js?v=18"></script>
 </head>
 <body class="dark">
   <header class="app-header">
@@ -77,6 +77,7 @@
 
       <div class="tabs" id="plant-detail-tabs">
         <button class="tab-btn active" type="button" data-tab="production">Produzione</button>
+        <button class="tab-btn" type="button" data-tab="cronoprogramma">Cronoprogramma</button>
         <button class="tab-btn" type="button" data-tab="inverter">Inverter</button>
       </div>
 
@@ -120,6 +121,23 @@
         </form>
       </section>
 
+      <section class="tab-panel" data-panel="cronoprogramma">
+        <div class="card soft">
+          <div class="row-between">
+            <div>
+              <h3>Cronoprogramma impianto</h3>
+              <p class="info-text" id="plant-crono-feedback">Carica un preset documentale o aggiorna gli stati di fase.</p>
+            </div>
+            <div class="actions">
+              <button class="btn ghost" type="button" data-plant-preset="producer">Preset Produttore</button>
+              <button class="btn ghost" type="button" data-plant-preset="prosumer">Preset Prosumer</button>
+              <button class="btn" type="button" id="btn-export-plant-checklist">Esporta checklist CSV</button>
+            </div>
+          </div>
+          <div id="plant-crono-content" class="crono-grid"></div>
+        </div>
+      </section>
+
       <section class="tab-panel" data-panel="inverter">
         <div class="card soft">
           <h3>Webhook inverter</h3>
@@ -138,5 +156,28 @@
   <footer class="footer">
     <small>© 2025 MIND Suite</small>
   </footer>
+
+  <div id="plant-doc-modal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h3 data-modal-title>Carica documento</h3>
+        <button class="close-btn" type="button" aria-label="Chiudi" data-close-modal>&times;</button>
+      </div>
+      <form id="plant-doc-form">
+        <p class="info-text"><strong>Fase:</strong> <span id="plant-doc-phase-label">-</span></p>
+        <input type="hidden" id="plant-doc-phase-value" />
+        <label>Nome file
+          <input type="text" id="plant-doc-filename" required placeholder="documento.pdf" />
+        </label>
+        <p class="info-text">Il file verrà salvato su uno storage mock (<code>https://storage.mock</code>).</p>
+        <p class="error-text" id="plant-doc-error"></p>
+        <div class="modal-actions">
+          <button class="btn ghost" type="button" data-close-modal>Annulla</button>
+          <button class="btn" type="submit">Carica documento</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </body>
 </html>
