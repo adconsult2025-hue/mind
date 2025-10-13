@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>CER — CERtoUSER Suite</title>
-  <link rel="icon" href="/assets/img/favicon.png">
-  <!-- USA PERCORSI ASSOLUTI + VERSIONE PER BYPASS CACHE -->
-  <link rel="stylesheet" href="/assets/css/style.css?v=8"/>
-  <script type="module" src="/assets/js/storage.js?v=8"></script>
-  <script type="module" src="/assets/js/docs.js?v=8"></script>
-  <script type="module" src="/assets/js/cer.js?v=8"></script>
+  <title>MIND — Suite</title>
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/css/style.css?v=12"/>
+  <script type="module" src="/assets/js/app.js?v=12"></script>
+  <script type="module" src="/assets/js/storage.js?v=12"></script>
+  <script type="module" src="/assets/js/docs.js?v=12"></script>
+  <script type="module" src="/assets/js/cer.js?v=12"></script>
 </head>
 <body class="dark">
   <header class="app-header">
     <div class="brand">
-      <a href="index.html" class="brand-link">
-        <img src="/assets/img/logo.svg" alt="CERtoUSER" class="logo"/>
+      <a href="/" class="brand-link">
+        <img src="/assets/img/mind.svg" alt="MIND" class="logo"/>
       </a>
       <div class="titles">
         <h1>Gestione CER</h1>
@@ -23,19 +23,21 @@
       </div>
     </div>
     <nav class="toolbar">
-      <a class="btn" href="crm.html">CRM</a>
-      <a class="btn" href="cer.html">CER</a>
-      <a class="btn ghost" href="index.html">HUB</a>
+      <a class="btn" href="/modules/crm/">CRM</a>
+      <a class="btn" href="/modules/cer/">CER</a>
+      <a class="btn" href="/modules/modelli/">MODELLI</a>
+      <a class="btn" href="/modules/contratti/">CONTRATTI</a>
+      <a class="btn ghost" href="/">HUB</a>
     </nav>
   </header>
 
-  <main class="container">
+  <main class="container wide grid-2 cer-layout">
     <div class="tabs">
-      <button class="tab-btn active" data-tab="setup">Configurazione CER</button>
-      <button class="tab-btn" data-tab="plants">Impianti fotovoltaici</button>
-      <button class="tab-btn" data-tab="documents">Documenti</button>
-      <button class="tab-btn" data-tab="allocations">Riparti</button>
-      <button class="tab-btn" data-tab="cronoprogramma">Cronoprogramma CER</button>
+      <button class="tab-btn active" type="button" data-tab="setup">Configurazione CER</button>
+      <button class="tab-btn" type="button" data-tab="plants">Impianti fotovoltaici</button>
+      <button class="tab-btn" type="button" data-tab="documents">Documenti</button>
+      <button class="tab-btn" type="button" data-tab="allocations">Riparti</button>
+      <button class="tab-btn" type="button" data-tab="cronoprogramma">Cronoprogramma CER</button>
     </div>
 
     <section class="tab-panel active grid-2" data-panel="setup">
@@ -70,6 +72,11 @@
             </label>
             <label>Note
               <input type="text" name="note" placeholder="Es. modello franchising, regole particolari..."/>
+            </label>
+            <label>Pacchetto modelli CER
+              <select name="template_code" id="cer-template-select">
+                <option value="">Nessun modello attivo</option>
+              </select>
             </label>
           </div>
 
@@ -106,7 +113,9 @@
           <h2>CER esistenti</h2>
           <input id="search-cer" class="search" placeholder="Cerca per nome, cabina, comune..."/>
         </div>
-        <div id="cer-list" class="table"></div>
+        <div class="table-wrap">
+          <div id="cer-list" class="table"></div>
+        </div>
       </section>
     </section>
 
@@ -135,7 +144,7 @@
 
         <p id="plants-feedback" class="info-text"></p>
 
-        <div class="table-wrapper mt-4">
+        <div class="table-wrap mt-4">
           <table class="data-table" id="plants-table">
             <thead>
               <tr>
@@ -337,7 +346,7 @@
   </div>
 
   <footer class="footer">
-    <small>© 2025 CERtoUSER</small>
+    <small>© 2025 MIND Suite</small>
   </footer>
 </body>
 </html>

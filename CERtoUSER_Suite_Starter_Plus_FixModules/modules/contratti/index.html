@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MIND — Suite</title>
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/css/style.css?v=12"/>
+  <script type="module" src="/assets/js/app.js?v=12"></script>
+  <script type="module" src="/assets/js/storage.js?v=12"></script>
+  <script type="module" src="/assets/js/contratti.js?v=12"></script>
+</head>
+<body class="dark">
+  <header class="app-header">
+    <div class="brand">
+      <a href="/" class="brand-link">
+        <img src="/assets/img/mind.svg" alt="MIND" class="logo"/>
+      </a>
+      <div class="titles">
+        <h1>Contratti & integrazioni</h1>
+        <p class="subtitle">Generazione documenti e caricamento firmati</p>
+      </div>
+    </div>
+    <nav class="toolbar">
+      <a class="btn" href="/modules/crm/">CRM</a>
+      <a class="btn" href="/modules/cer/">CER</a>
+      <a class="btn" href="/modules/modelli/">MODELLI</a>
+      <a class="btn" href="/modules/contratti/">CONTRATTI</a>
+      <a class="btn ghost" href="/">HUB</a>
+    </nav>
+  </header>
+
+  <main class="container wide grid-2">
+    <section class="card">
+      <h2>Genera da modello</h2>
+      <p class="info-text">Seleziona un modello attivo per i contratti, scegli i dati di riferimento e ottieni un'anteprima personalizzata.</p>
+      <form id="contract-generator" class="grid-2">
+        <label>Modello attivo
+          <select id="contract-template-select" required>
+            <option value="">Seleziona modello</option>
+          </select>
+        </label>
+        <label>Cliente (CRM)
+          <select id="contract-customer-select">
+            <option value="">Seleziona cliente</option>
+          </select>
+        </label>
+        <label>CER collegata
+          <select id="contract-cer-select">
+            <option value="">Seleziona CER</option>
+          </select>
+        </label>
+        <label>Periodo di riferimento
+          <input type="month" id="contract-period"/>
+        </label>
+      </form>
+      <div class="actions">
+        <button class="btn" id="contract-generate" type="button">Genera</button>
+        <button class="btn ghost" id="contract-print" type="button">Scarica PDF</button>
+        <button class="btn ghost" id="contract-upload" type="button">Carica firmato</button>
+        <input type="file" id="contract-file" class="hidden" accept="application/pdf,.doc,.docx"/>
+      </div>
+      <div id="contract-output" class="card soft mt-4">
+        <p class="info-text">L'anteprima del contratto apparirà qui dopo la generazione.</p>
+      </div>
+      <div id="contract-upload-feedback" class="note"></div>
+    </section>
+
+    <aside class="card soft">
+      <h2>Placeholder disponibili</h2>
+      <p class="info-text">I modelli possono utilizzare le seguenti variabili. La generazione sostituisce automaticamente i valori, se disponibili.</p>
+      <ul class="placeholder-list">
+        <li><strong>cliente</strong>: {{cliente.nome}}, {{cliente.piva}}, {{cliente.email}}, {{cliente.telefono}}, {{cliente.indirizzo}}</li>
+        <li><strong>pod</strong>: {{pod}}, {{cabina}}</li>
+        <li><strong>cer</strong>: {{cer.nome}}, {{cer.comune}}, {{cer.trader}}, {{cer.quota_condivisa}}</li>
+        <li><strong>impianto</strong>: {{impianto.nome}}, {{impianto.potenza_kw}}</li>
+        <li><strong>sistema</strong>: {{data}}, {{oggi}}, {{anno}}, {{sistema.periodo}}</li>
+      </ul>
+      <div class="card soft mt-4">
+        <h3>Best practice</h3>
+        <ul>
+          <li>Usa placeholder coerenti con il naming sopra indicato.</li>
+          <li>Aggiungi note operative direttamente nel modello per guidare i consulenti.</li>
+          <li>Collega i modelli alle CER dal modulo configurazione (campo "Pacchetto modelli").</li>
+        </ul>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <small>© 2025 MIND Suite</small>
+  </footer>
+</body>
+</html>

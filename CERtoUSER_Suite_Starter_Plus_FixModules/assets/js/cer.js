@@ -1,6 +1,6 @@
 import { allCustomers, allCER, saveCER, uid, progressCERs, saveProgressCERs } from './storage.js';
 import { saveDocFile, statutoTemplate, regolamentoTemplate, attoCostitutivoTemplate, adesioneTemplate, delegaGSETemplate, contrattoTraderTemplate, informativaGDPRTemplate } from './docs.js';
-import { initCronoprogrammaUI, renderCronoprogramma } from './cronoprogramma.js?v=8';
+import { initCronoprogrammaUI, renderCronoprogramma } from './cronoprogramma.js?v=12';
 
 const API_BASE = '/api';
 
@@ -8,6 +8,7 @@ let form;
 let membersBox;
 let listEl;
 let searchEl;
+let templateSelect;
 
 let docsCerSelect;
 let docsActions;
@@ -27,6 +28,7 @@ let tabPanels = [];
 
 let customers = [];
 let cers = [];
+let cerTemplates = [];
 
 const plantState = {
   period: currentPeriod(),
@@ -64,6 +66,7 @@ function init() {
   membersBox = document.getElementById('members-picker');
   listEl = document.getElementById('cer-list');
   searchEl = document.getElementById('search-cer');
+  templateSelect = document.getElementById('cer-template-select');
 
   customers = allCustomers();
   cers = allCER();
@@ -85,6 +88,39 @@ function init() {
   initDocumentsModule();
   initCronoprogrammaModule();
   initAllocationsShortcuts();
+  loadCerTemplates();
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) loadCerTemplates();
+  });
+}
+
+async function loadCerTemplates() {
+  if (!templateSelect) return;
+  try {
+    const res = await fetch(`${API_BASE}/templates?module=cer&status=active`);
+    const payload = await res.json();
+    if (!res.ok || payload.ok === false) throw new Error(payload.error?.message || 'Impossibile caricare i modelli CER');
+    cerTemplates = payload.data || [];
+  } catch (err) {
+    cerTemplates = [];
+    console.error(err);
+  }
+  populateCerTemplateSelect();
+}
+
+function populateCerTemplateSelect() {
+  if (!templateSelect) return;
+  const current = templateSelect.value;
+  templateSelect.innerHTML = '<option value="">Nessun modello attivo</option>';
+  cerTemplates
+    .filter(tpl => tpl.status === 'active' || typeof tpl.status === 'undefined')
+    .forEach(tpl => {
+      const opt = document.createElement('option');
+      opt.value = tpl.code;
+      opt.textContent = `${tpl.code} · v${tpl.version}`;
+      if (current && current === tpl.code) opt.selected = true;
+      templateSelect.appendChild(opt);
+    });
 }
 
 // -----------------------------
@@ -96,6 +132,14 @@ function bindCerForm() {
     const fd = new FormData(form);
     const cer = Object.fromEntries(fd.entries());
     cer.id = uid('cer');
+
+    if (cer.template_code) {
+      const activeTemplate = cerTemplates.find(tpl => tpl.code === cer.template_code);
+      if (activeTemplate) {
+        cer.template_version = activeTemplate.version;
+        cer.template_url = activeTemplate.url;
+      }
+    }
 
     if (cer.riparto !== 'Personalizzato') {
       if (cer.riparto === 'Produttore85_CER15') {
@@ -364,8 +408,11 @@ function renderCERList() {
         : cer.riparto;
       const impCount = cer.impianti ? cer.impianti.length : 0;
       const impBadge = `<span class="badge ${impCount ? 'green' : ''}">${impCount} impianto${impCount === 1 ? '' : 'i'}</span>`;
+      const templateBadge = cer.template_code
+        ? `<span class="badge badge-accent">Modello ${cer.template_code}${cer.template_version ? ` · v${cer.template_version}` : ''}</span>`
+        : '<span class="badge muted">Modello non assegnato</span>';
       r.innerHTML = `
-        <div><strong>${cer.nome}</strong><br/><small>${cer.cf || ''}</small></div>
+        <div><strong>${cer.nome}</strong><br/><small>${cer.cf || ''}</small><br/>${templateBadge}</div>
         <div>${cer.cabina}</div>
         <div>${cer.comune}</div>
         <div>${rip}<br/>${impBadge}</div>

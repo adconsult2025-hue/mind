@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>CRM — CERtoUSER Suite</title>
-  <link rel="icon" href="/assets/img/favicon.png">
-  <!-- USA PERCORSI ASSOLUTI + VERSIONE PER BYPASS CACHE -->
-  <link rel="stylesheet" href="/assets/css/style.css?v=8"/>
-  <script type="module" src="/assets/js/storage.js?v=8"></script>
-  <script type="module" src="/assets/js/crm.js?v=8"></script>
+  <title>MIND — Suite</title>
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/css/style.css?v=12"/>
+  <script type="module" src="/assets/js/app.js?v=12"></script>
+  <script type="module" src="/assets/js/storage.js?v=12"></script>
+  <script type="module" src="/assets/js/crm.js?v=12"></script>
 </head>
 <body class="dark">
   <header class="app-header">
     <div class="brand">
-      <a href="index.html" class="brand-link">
-        <img src="/assets/img/logo.svg" alt="CERtoUSER" class="logo"/>
+      <a href="/" class="brand-link">
+        <img src="/assets/img/mind.svg" alt="MIND" class="logo"/>
       </a>
       <div class="titles">
         <h1>CRM</h1>
@@ -22,13 +22,15 @@
       </div>
     </div>
     <nav class="toolbar">
-      <a class="btn" href="crm.html">CRM</a>
-      <a class="btn" href="cer.html">CER</a>
-      <a class="btn ghost" href="index.html">HUB</a>
+      <a class="btn" href="/modules/crm/">CRM</a>
+      <a class="btn" href="/modules/cer/">CER</a>
+      <a class="btn" href="/modules/modelli/">MODELLI</a>
+      <a class="btn" href="/modules/contratti/">CONTRATTI</a>
+      <a class="btn ghost" href="/">HUB</a>
     </nav>
   </header>
 
-  <main class="container grid-2">
+  <main class="container wide grid-2">
     <section class="card">
       <h2>Nuovo cliente</h2>
       <form id="form-customer">
@@ -80,12 +82,14 @@
         <h2>Elenco clienti</h2>
         <input id="search" class="search" placeholder="Cerca per nome, POD, comune..."/>
       </div>
-      <div id="customers-list" class="table"></div>
+      <div class="table-wrap">
+        <div id="customers-list" class="table"></div>
+      </div>
     </section>
   </main>
 
   <footer class="footer">
-    <small>© 2025 CERtoUSER</small>
+    <small>© 2025 MIND Suite</small>
   </footer>
 </body>
 </html>
