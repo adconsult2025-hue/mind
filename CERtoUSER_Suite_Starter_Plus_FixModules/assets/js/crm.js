@@ -1,4 +1,5 @@
 import { allCustomers, saveCustomers, uid, progressCustomers, saveProgressCustomers } from './storage.js';
+import { safeGuardAction } from './safe.js';
 
 const API_BASE = '/api';
 
@@ -328,7 +329,7 @@ async function submitConsumiForm(event) {
   try {
     consumiFeedback.textContent = 'Salvataggio in corso…';
     consumiFeedback.classList.remove('error-text');
-    const res = await fetch(`${API_BASE}/consumi`, {
+    const res = await safeGuardAction(() => fetch(`${API_BASE}/consumi`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -342,7 +343,7 @@ async function submitConsumiForm(event) {
         kwh_total: total,
         source: 'manual'
       })
-    });
+    }));
     const payload = await res.json();
     if (!res.ok || payload.ok === false) {
       if (payload.code === 'DUPLICATE_PERIOD') {
@@ -611,11 +612,11 @@ async function uploadBill() {
   state.uploadInfo.innerHTML = '<p class="info-text">Caricamento in corso...</p>';
   state.parseButton.disabled = true;
   try {
-    const res = await fetch('/api/bills/upload', {
+    const res = await safeGuardAction(() => fetch('/api/bills/upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ client_id: state.currentCustomer.id, filename: file.name })
-    });
+    }));
     const json = await res.json();
     if (!res.ok || !json.ok) {
       throw new Error(json.error || 'Caricamento bolletta fallito');
@@ -673,11 +674,11 @@ async function parseBill() {
   state.review.classList.remove('hidden');
   state.review.innerHTML = '<p class="info-text">Estrazione in corso...</p>';
   try {
-    const res = await fetch('/api/bills/parse', {
+    const res = await safeGuardAction(() => fetch('/api/bills/parse', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bill_id: state.billId })
-    });
+    }));
     const json = await res.json();
     if (!res.ok || !json.ok) {
       throw new Error(json.error || 'Parsing bolletta fallito');
@@ -762,11 +763,11 @@ async function saveConsumi() {
   };
   state.saveButton.disabled = true;
   try {
-    const res = await fetch('/api/consumi', {
+    const res = await safeGuardAction(() => fetch('/api/consumi', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
-    });
+    }));
     const json = await res.json();
     if (!res.ok || !json.ok) {
       if (json.code === 'DUPLICATE_PERIOD' && json.existing) {

@@ -1,4 +1,5 @@
 const { CT3_PHASES, composeDocs } = require('./ct3_rules');
+const { guard } = require('./_safe');
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -15,7 +16,7 @@ function clonePhases(phases) {
   return phases.map((phase) => ({ ...phase }));
 }
 
-exports.handler = async function handler(event) {
+exports.handler = guard(async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: headers(), body: '' };
   }
@@ -43,4 +44,4 @@ exports.handler = async function handler(event) {
       body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: err.message || 'Errore interno' } })
     };
   }
-};
+});

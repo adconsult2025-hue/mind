@@ -1,4 +1,5 @@
 import { allCustomers, allCER } from './storage.js';
+import { safeGuardAction } from './safe.js';
 
 const TEMPLATE_API = '/api/templates';
 const DOCS_API = '/api/docs/upload';
@@ -239,11 +240,11 @@ async function handleUpload(event) {
       phase: 'firma',
       filename: file.name,
     };
-    const res = await fetch(DOCS_API, {
+    const res = await safeGuardAction(() => fetch(DOCS_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-    });
+    }));
     const data = await res.json();
     if (!res.ok || data.ok === false) throw new Error(data.error?.message || 'Upload mock fallito');
     feedbackBox.textContent = `Upload simulato: ${data.data.upload_url} (scade ${formatDateTime(data.data.expires_at)})`;

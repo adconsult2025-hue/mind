@@ -1,3 +1,5 @@
+import { safeGuardAction } from './safe.js';
+
 const API_BASE = '/api';
 
 const PLANT_PHASES = [
@@ -304,11 +306,11 @@ async function submitProductionForm(event) {
   try {
     productionFeedback.textContent = 'Invio in corso…';
     productionFeedback.classList.remove('error-text');
-    const res = await fetch(`${API_BASE}/plants/${encodeURIComponent(state.selectedPlantId)}/production`, {
+    const res = await safeGuardAction(() => fetch(`${API_BASE}/plants/${encodeURIComponent(state.selectedPlantId)}/production`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ date: dateValue, kwh: kwhValue })
-    });
+    }));
     const payload = await res.json();
     if (!res.ok || payload.ok === false) throw new Error(payload.error?.message || 'Errore salvataggio produzione');
     state.production.set(state.selectedPlantId, payload.data);
@@ -726,7 +728,9 @@ function csvEscape(value) {
 }
 
 async function apiFetch(url, options = {}) {
-  const res = await fetch(url, options);
+  const method = (options.method || 'GET').toUpperCase();
+  const executor = () => fetch(url, options);
+  const res = await (method !== 'GET' ? safeGuardAction(executor) : executor());
   let payload;
   try {
     payload = await res.json();

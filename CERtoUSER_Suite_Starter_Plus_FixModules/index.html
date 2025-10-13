@@ -49,6 +49,14 @@
   <footer class="footer">
     <small>© 2025 MIND Suite — Demo locale. DM 7/12/2023 e regolazioni ARERA/GSE: verificare aggiornamenti.</small>
   </footer>
+  <script>window.__SAFE_MODE__ = location.hostname.includes('preview') || location.hostname.includes('staging');</script>
+  <div id="envBanner" class="env-banner" hidden></div>
+  <script>
+    (function(){ try{
+      const el=document.getElementById('envBanner');
+      if (window.__SAFE_MODE__) { el.hidden=false; el.classList.add('safe'); el.textContent='SAFE MODE attivo: tutte le operazioni di scrittura sono in DRY-RUN.'; }
+    }catch(e){}})();
+  </script>
   <script type="module" src="/assets/js/app.js?v=22"></script>
 </body>
 </html>

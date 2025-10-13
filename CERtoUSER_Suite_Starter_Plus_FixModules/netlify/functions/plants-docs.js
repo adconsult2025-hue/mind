@@ -1,4 +1,5 @@
 const { listPlantDocs, applyPlantDocPreset } = require('./_plant_store');
+const { guard } = require('./_safe');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -11,7 +12,7 @@ function respond(statusCode, payload) {
   return { statusCode, headers: headers(), body: JSON.stringify(payload) };
 }
 
-exports.handler = async function handler(event) {
+exports.handler = guard(async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: headers(), body: '' };
   }
@@ -49,4 +50,4 @@ exports.handler = async function handler(event) {
   } catch (err) {
     return respond(500, { ok: false, error: { code: 'SERVER_ERROR', message: err.message || 'Errore interno' } });
   }
-};
+});

@@ -1,3 +1,5 @@
+import { safeGuardAction } from './safe.js';
+
 const API_BASE = '/api/templates';
 
 let templates = [];
@@ -151,11 +153,11 @@ async function submitUpload(event) {
   }
 
   try {
-    const res = await fetch(`${API_BASE}/upload`, {
+    const res = await safeGuardAction(() => fetch(`${API_BASE}/upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-    });
+    }));
     const data = await res.json();
     if (!res.ok || data.ok === false) throw new Error(data.error?.message || 'Upload non riuscito');
     templates = data.data || templates;
@@ -170,11 +172,11 @@ async function submitUpload(event) {
 
 async function activateTemplate(tpl) {
   try {
-    const res = await fetch(`${API_BASE}/activate`, {
+    const res = await safeGuardAction(() => fetch(`${API_BASE}/activate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: tpl.id }),
-    });
+    }));
     const data = await res.json();
     if (!res.ok || data.ok === false) throw new Error(data.error?.message || 'Impossibile attivare il modello');
     templates = data.data || templates;
@@ -197,9 +199,9 @@ function downloadTemplate(tpl) {
 async function deleteTemplate(tpl) {
   if (!confirm(`Eliminare la versione ${tpl.code} v${tpl.version}?`)) return;
   try {
-    const res = await fetch(`${API_BASE}/${encodeURIComponent(tpl.id)}`, {
+    const res = await safeGuardAction(() => fetch(`${API_BASE}/${encodeURIComponent(tpl.id)}`, {
       method: 'DELETE',
-    });
+    }));
     const data = await res.json();
     if (!res.ok || data.ok === false) throw new Error(data.error?.message || 'Impossibile eliminare il modello');
     templates = data.data || templates.filter((t) => t.id !== tpl.id);

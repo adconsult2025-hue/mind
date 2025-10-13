@@ -1,3 +1,5 @@
+import { safeGuardAction } from './safe.js';
+
 const API_BASE = '/api';
 
 export const CER_PHASES = [
@@ -631,7 +633,9 @@ function upsertWorkflowCache(cerId, entry) {
 }
 
 async function apiFetch(url, options = {}) {
-  const res = await fetch(url, options);
+  const method = (options.method || 'GET').toUpperCase();
+  const executor = () => fetch(url, options);
+  const res = await (method !== 'GET' ? safeGuardAction(executor) : executor());
   let payload;
   try {
     payload = await res.json();

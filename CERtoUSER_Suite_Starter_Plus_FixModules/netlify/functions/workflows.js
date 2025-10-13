@@ -1,6 +1,7 @@
 const { listWorkflows, upsertWorkflow, getPlants } = require('./_data');
 const plantWorkflows = require('./plant_workflows');
 const plantDocs = require('./plant_docs');
+const { guard } = require('./_safe');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -9,7 +10,7 @@ const headers = () => ({
   'Access-Control-Allow-Headers': 'Content-Type'
 });
 
-exports.handler = async function handler(event) {
+exports.handler = guard(async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: headers(), body: '' };
   }
@@ -74,7 +75,7 @@ exports.handler = async function handler(event) {
       body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: err.message || 'Errore interno' } })
     };
   }
-};
+});
 
 function checkCerPhaseThree(cerId, targetStatus) {
   if (!['in-review', 'done'].includes(targetStatus)) {

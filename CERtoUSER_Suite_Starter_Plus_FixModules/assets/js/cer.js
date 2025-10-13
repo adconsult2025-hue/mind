@@ -1,6 +1,7 @@
 import { allCustomers, allCER, saveCER, uid, progressCERs, saveProgressCERs } from './storage.js';
 import { saveDocFile, statutoTemplate, regolamentoTemplate, attoCostitutivoTemplate, adesioneTemplate, delegaGSETemplate, contrattoTraderTemplate, informativaGDPRTemplate } from './docs.js';
 import { initCronoprogrammaUI, renderCronoprogramma } from './cronoprogramma.js?v=18';
+import { safeGuardAction } from './safe.js';
 
 const API_BASE = '/api';
 
@@ -1146,11 +1147,11 @@ async function savePlantConfiguration() {
     return;
   }
   try {
-    const res = await fetch(`${API_BASE}/plants/${encodeURIComponent(plantState.modalPlantId)}`, {
+    const res = await safeGuardAction(() => fetch(`${API_BASE}/plants/${encodeURIComponent(plantState.modalPlantId)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tipologia, pct_cer: pctCer, pct_contra: pctContra })
-    });
+    }));
     const payload = await res.json();
     if (!res.ok || payload.ok === false) throw new Error(payload.error || 'Errore salvataggio impianto');
     const idx = plantState.plants.findIndex(p => p.id === plantState.modalPlantId);
@@ -1176,11 +1177,11 @@ async function postRecalc(confirm) {
     return;
   }
   try {
-    const res = await fetch(`${API_BASE}/allocations/recalc`, {
+    const res = await safeGuardAction(() => fetch(`${API_BASE}/allocations/recalc`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cer_id: plantState.selectedCerId, period: plantState.period, confirm })
-    });
+    }));
     const payload = await res.json();
     if (!res.ok || payload.ok === false) {
       if (payload?.details?.length) {

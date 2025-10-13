@@ -5,6 +5,7 @@ import {
   getFallbackPhases,
   getFallbackPresetDocs
 } from './ct3_rules.js?v=21';
+import { safeGuardAction } from './safe.js';
 
 const API_BASE = '/api';
 const STORAGE_CLIENTS_KEY = 'customers';
@@ -498,11 +499,11 @@ function canEvaluateEligibility() {
 async function saveCase() {
   const payload = createCasePayload();
   try {
-    const res = await fetch(`${API_BASE}/ct3/cases`, {
+    const res = await safeGuardAction(() => fetch(`${API_BASE}/ct3/cases`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
-    });
+    }));
     const json = await res.json();
     if (!res.ok || !json?.ok) throw new Error(json?.error?.message || 'Salvataggio fallito');
     const saved = enrichCase(json.data || {});
@@ -526,11 +527,11 @@ async function handleStatusChange() {
   state.currentCase.status = elements.statusSelect.value;
   if (!state.caseId) return;
   try {
-    const res = await fetch(`${API_BASE}/ct3/cases/${encodeURIComponent(state.caseId)}/status`, {
+    const res = await safeGuardAction(() => fetch(`${API_BASE}/ct3/cases/${encodeURIComponent(state.caseId)}/status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: state.currentCase.status })
-    });
+    }));
     const json = await res.json();
     if (!res.ok || !json?.ok) throw new Error(json?.error?.message || 'Cambio stato non riuscito');
     notify('Stato pratica aggiornato.');
@@ -551,11 +552,11 @@ async function runEligibility() {
   }
   let response;
   try {
-    const res = await fetch(`${API_BASE}/ct3/rules/check`, {
+    const res = await safeGuardAction(() => fetch(`${API_BASE}/ct3/rules/check`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ case: payload })
-    });
+    }));
     const json = await res.json();
     if (!res.ok || !json?.ok) throw new Error(json?.error?.message || 'Motore regole non disponibile');
     response = json.data;
@@ -861,7 +862,7 @@ function handleUploadDoc(phaseId, doc) {
     const filename = file?.name || prompt('Nome file da allegare (mock upload)');
     if (!filename) return;
     try {
-      const res = await fetch(`${API_BASE}/docs/upload`, {
+      const res = await safeGuardAction(() => fetch(`${API_BASE}/docs/upload`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -872,7 +873,7 @@ function handleUploadDoc(phaseId, doc) {
           name: doc.name,
           filename
         })
-      });
+      }));
       const json = await res.json();
       if (!res.ok || !json?.ok) throw new Error(json?.error?.message || 'Upload fallito');
       const uploaded = json.data;
@@ -894,11 +895,11 @@ async function markDocStatus(doc, status) {
     return;
   }
   try {
-    const res = await fetch(`${API_BASE}/docs/mark`, {
+    const res = await safeGuardAction(() => fetch(`${API_BASE}/docs/mark`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ doc_id: existing.doc_id, status })
-    });
+    }));
     const json = await res.json();
     if (!res.ok || !json?.ok) throw new Error(json?.error?.message || 'Aggiornamento stato fallito');
     registerUploadedDoc(json.data, { phase: doc.phase, code: doc.code, name: doc.name });

@@ -6,6 +6,7 @@
   <title>MIND — Suite</title>
   <link rel="icon" href="/MIND.png">
   <link rel="stylesheet" href="/assets/css/style.css?v=16"/>
+  <script>window.__SAFE_MODE__ = location.hostname.includes('preview') || location.hostname.includes('staging');</script>
   <script type="module" src="/assets/js/app.js?v=18"></script>
   <script type="module" src="/assets/js/storage.js?v=18"></script>
   <script type="module" src="/assets/js/crm.js?v=16"></script>
@@ -213,5 +214,12 @@
       </section>
     </div>
   </div>
+  <div id="envBanner" class="env-banner" hidden></div>
+  <script>
+    (function(){ try{
+      const el=document.getElementById('envBanner');
+      if (window.__SAFE_MODE__) { el.hidden=false; el.classList.add('safe'); el.textContent='SAFE MODE attivo: tutte le operazioni di scrittura sono in DRY-RUN.'; }
+    }catch(e){}})();
+  </script>
 </body>
 </html>
