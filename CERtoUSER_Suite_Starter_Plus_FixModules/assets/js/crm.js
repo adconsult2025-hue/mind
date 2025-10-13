@@ -10,6 +10,7 @@ const detailName = document.getElementById('detail-name');
 const detailInfo = document.getElementById('detail-info');
 const detailCloseBtn = document.getElementById('detail-close');
 const consumiForm = document.getElementById('consumi-form');
+const consumiPeriod = document.getElementById('consumi-period');
 const consumiYear = document.getElementById('consumi-year');
 const consumiF1 = document.getElementById('consumi-f1');
 const consumiF2 = document.getElementById('consumi-f2');
@@ -17,12 +18,6 @@ const consumiF3 = document.getElementById('consumi-f3');
 const consumiFeedback = document.getElementById('consumi-feedback');
 const consumiHistory = document.getElementById('consumi-history');
 const importBillBtn = document.getElementById('btn-import-bill');
-const billModal = document.getElementById('modal-bill-import');
-const billFileInput = document.getElementById('bill-file');
-const billFeedback = document.getElementById('bill-import-feedback');
-const billUploadBtn = document.getElementById('btn-bill-upload');
-const billParseBtn = document.getElementById('btn-bill-parse');
-const billSaveBtn = document.getElementById('btn-bill-save');
 
 const state = {
   modal: document.getElementById('modal-consumi'),
@@ -51,8 +46,6 @@ const state = {
 
 let customers = allCustomers();
 let selectedCustomer = null;
-let pendingBill = null;
-
 function notify(message) {
   if (!message) return;
   window.dispatchEvent(new CustomEvent('cer:notify', { detail: message }));
@@ -237,6 +230,10 @@ function openCustomerDetail(c) {
   detailInfo.textContent = metaParts.join(' · ');
   if (consumiForm) {
     const now = new Date();
+    if (consumiPeriod) {
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      consumiPeriod.value = `${now.getFullYear()}-${month}`;
+    }
     consumiYear.value = now.getFullYear();
     consumiF1.value = '';
     consumiF2.value = '';
@@ -246,7 +243,7 @@ function openCustomerDetail(c) {
       consumiFeedback.classList.remove('error-text');
     }
   }
-  loadConsumi(c.id);
+  loadConsumiForDetail(c.id);
 }
 
 function closeCustomerDetail() {
@@ -255,20 +252,20 @@ function closeCustomerDetail() {
   if (consumiHistory) consumiHistory.innerHTML = '';
 }
 
-async function loadConsumi(clientId) {
+async function loadConsumiForDetail(clientId) {
   if (!consumiHistory) return;
   consumiHistory.innerHTML = '<tr><td colspan="5">Caricamento…</td></tr>';
   try {
     const res = await fetch(`${API_BASE}/consumi?client_id=${encodeURIComponent(clientId)}`);
     const payload = await res.json();
     if (!res.ok || payload.ok === false) throw new Error(payload.error?.message || 'Errore caricamento consumi');
-    renderConsumiHistory(Array.isArray(payload.data) ? payload.data : []);
+    renderConsumiHistoryTable(Array.isArray(payload.data) ? payload.data : []);
   } catch (err) {
     consumiHistory.innerHTML = `<tr><td colspan="5" class="error-text">${err.message || 'Errore caricamento consumi'}</td></tr>`;
   }
 }
 
-function renderConsumiHistory(rows) {
+function renderConsumiHistoryTable(rows) {
   if (!consumiHistory) return;
   const sorted = [...rows].sort((a, b) => Number(b.year || b.anno || 0) - Number(a.year || a.anno || 0));
   if (!sorted.length) {
@@ -281,10 +278,10 @@ function renderConsumiHistory(rows) {
     const year = item.year || item.anno;
     tr.innerHTML = `
       <td>${year}</td>
-      <td>${formatKwh(item.f1_kwh)} kWh</td>
-      <td>${formatKwh(item.f2_kwh)} kWh</td>
-      <td>${formatKwh(item.f3_kwh)} kWh</td>
-      <td>${formatKwh(item.total)} kWh</td>
+      <td>${formatKwh(item.f1_kwh)}</td>
+      <td>${formatKwh(item.f2_kwh)}</td>
+      <td>${formatKwh(item.f3_kwh)}</td>
+      <td>${formatKwh(item.kwh_total ?? item.total)}</td>
     `;
     consumiHistory.appendChild(tr);
   });
@@ -293,15 +290,26 @@ function renderConsumiHistory(rows) {
 async function submitConsumiForm(event) {
   event.preventDefault();
   if (!selectedCustomer) {
-    toast('Seleziona un cliente per salvare i consumi');
+    notify('Seleziona un cliente per salvare i consumi');
     return;
   }
+  const period = String(consumiPeriod?.value || '').trim();
   const year = String(consumiYear.value || '').trim();
   const f1 = Number(consumiF1.value || 0);
   const f2 = Number(consumiF2.value || 0);
   const f3 = Number(consumiF3.value || 0);
+  if (!validPeriod(period)) {
+    consumiFeedback.textContent = 'Periodo non valido. Usa il formato YYYY-MM.';
+    consumiFeedback.classList.add('error-text');
+    return;
+  }
   if (!/^\d{4}$/.test(year)) {
     consumiFeedback.textContent = 'Anno non valido (4 cifre).';
+    consumiFeedback.classList.add('error-text');
+    return;
+  }
+  if (Number(period.split('-')[0]) !== Number(year)) {
+    consumiFeedback.textContent = 'Anno e periodo devono coincidere.';
     consumiFeedback.classList.add('error-text');
     return;
   }
@@ -310,6 +318,13 @@ async function submitConsumiForm(event) {
     consumiFeedback.classList.add('error-text');
     return;
   }
+  const pod = sanitizePOD(selectedCustomer.pod);
+  if (!pod) {
+    consumiFeedback.textContent = 'POD cliente non valido. Aggiorna i dati anagrafici.';
+    consumiFeedback.classList.add('error-text');
+    return;
+  }
+  const total = Number((f1 + f2 + f3).toFixed(2));
   try {
     consumiFeedback.textContent = 'Salvataggio in corso…';
     consumiFeedback.classList.remove('error-text');
@@ -318,164 +333,34 @@ async function submitConsumiForm(event) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         client_id: selectedCustomer.id,
-        year,
-        f1_kwh: f1,
-        f2_kwh: f2,
-        f3_kwh: f3
+        pod_id: pod,
+        period,
+        year: Number(year),
+        kwh_f1: Number(f1.toFixed(2)),
+        kwh_f2: Number(f2.toFixed(2)),
+        kwh_f3: Number(f3.toFixed(2)),
+        kwh_total: total,
+        source: 'manual'
       })
     });
     const payload = await res.json();
-    if (!res.ok || payload.ok === false) throw new Error(payload.error?.message || 'Errore salvataggio consumi');
+    if (!res.ok || payload.ok === false) {
+      if (payload.code === 'DUPLICATE_PERIOD') {
+        consumiFeedback.textContent = 'Periodo già presente. Usa l\'import bolletta o abilita la sovrascrittura nel wizard.';
+        consumiFeedback.classList.add('error-text');
+        return;
+      }
+      consumiFeedback.textContent = payload.error?.message || 'Errore salvataggio consumi';
+      consumiFeedback.classList.add('error-text');
+      return;
+    }
     consumiFeedback.textContent = 'Consumi salvati correttamente';
-    toast('Consumi aggiornati');
-    loadConsumi(selectedCustomer.id);
+    notify('Consumi aggiornati');
+    loadConsumiForDetail(selectedCustomer.id);
   } catch (err) {
     consumiFeedback.textContent = err.message || 'Errore durante il salvataggio';
     consumiFeedback.classList.add('error-text');
   }
-}
-
-function openBillModal() {
-  if (!selectedCustomer) {
-    toast('Apri la scheda cliente prima di importare una bolletta');
-    return;
-  }
-  pendingBill = { client_id: selectedCustomer.id, bill_id: null, parsed: null };
-  if (billFileInput) billFileInput.value = '';
-  billFeedback.textContent = 'Seleziona un file PDF/JPG/PNG (mock).';
-  billFeedback.classList.remove('error-text');
-  billParseBtn.disabled = true;
-  billSaveBtn.disabled = true;
-  toggleModal(billModal, true);
-}
-
-function closeBillModal() {
-  toggleModal(billModal, false);
-  pendingBill = null;
-  billParseBtn.disabled = true;
-  billSaveBtn.disabled = true;
-  billFeedback.textContent = '';
-}
-
-async function uploadBillMeta() {
-  if (!pendingBill || !selectedCustomer) {
-    toast('Seleziona un cliente.');
-    return;
-  }
-  const fileName = billFileInput?.files?.[0]?.name || (billFileInput?.value || '').split('\\').pop();
-  if (!fileName) {
-    billFeedback.textContent = 'Seleziona un file da caricare.';
-    billFeedback.classList.add('error-text');
-    return;
-  }
-  try {
-    billFeedback.textContent = 'Caricamento metadati…';
-    billFeedback.classList.remove('error-text');
-    const res = await fetch(`${API_BASE}/bills/upload`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client_id: selectedCustomer.id, filename: fileName })
-    });
-    const payload = await res.json();
-    if (!res.ok || payload.ok === false) throw new Error(payload.error?.message || 'Errore caricamento bolletta');
-    pendingBill.bill_id = payload.data.bill_id;
-    billFeedback.textContent = 'File caricato (mock). Ora estrai i dati.';
-    billParseBtn.disabled = false;
-  } catch (err) {
-    billFeedback.textContent = err.message || 'Errore caricamento bolletta';
-    billFeedback.classList.add('error-text');
-  }
-}
-
-async function parseBillData() {
-  if (!pendingBill?.bill_id) {
-    billFeedback.textContent = 'Carica prima la bolletta.';
-    billFeedback.classList.add('error-text');
-    return;
-  }
-  try {
-    billFeedback.textContent = 'Estrazione dati (stub)…';
-    billFeedback.classList.remove('error-text');
-    const res = await fetch(`${API_BASE}/bills/parse`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bill_id: pendingBill.bill_id })
-    });
-    const payload = await res.json();
-    if (!res.ok || payload.ok === false) throw new Error(payload.error?.message || 'Errore parsing bolletta');
-    pendingBill.parsed = payload.data;
-    consumiYear.value = payload.data.anno;
-    consumiF1.value = payload.data.f1_kwh;
-    consumiF2.value = payload.data.f2_kwh;
-    consumiF3.value = payload.data.f3_kwh;
-    billFeedback.textContent = 'Dati estratti. Puoi salvarli come consumi.';
-    billSaveBtn.disabled = false;
-    toast('Dati bolletta importati nella scheda consumi');
-  } catch (err) {
-    billFeedback.textContent = err.message || 'Errore durante il parsing';
-    billFeedback.classList.add('error-text');
-  }
-}
-
-async function saveBillConsumi() {
-  if (!pendingBill?.parsed || !selectedCustomer) {
-    billFeedback.textContent = 'Estrai prima i dati dalla bolletta.';
-    billFeedback.classList.add('error-text');
-    return;
-  }
-  try {
-    billFeedback.textContent = 'Salvataggio consumi…';
-    billFeedback.classList.remove('error-text');
-    const payloadData = {
-      client_id: selectedCustomer.id,
-      year: pendingBill.parsed.anno,
-      f1_kwh: pendingBill.parsed.f1_kwh,
-      f2_kwh: pendingBill.parsed.f2_kwh,
-      f3_kwh: pendingBill.parsed.f3_kwh
-    };
-    const res = await fetch(`${API_BASE}/consumi`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payloadData)
-    });
-    const payload = await res.json();
-    if (!res.ok || payload.ok === false) throw new Error(payload.error?.message || 'Errore salvataggio consumi');
-    billFeedback.textContent = 'Consumi salvati dalla bolletta.';
-    toast('Consumi da bolletta registrati');
-    closeBillModal();
-    loadConsumi(selectedCustomer.id);
-  } catch (err) {
-    billFeedback.textContent = err.message || 'Errore durante il salvataggio';
-    billFeedback.classList.add('error-text');
-  }
-}
-
-function toggleModal(modal, show) {
-  if (!modal) return;
-  if (show) {
-    modal.style.display = 'flex';
-    modal.removeAttribute('aria-hidden');
-  } else {
-    modal.style.display = 'none';
-    modal.setAttribute('aria-hidden', 'true');
-  }
-}
-
-function formatKwh(value) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return '-';
-  return Number(value).toFixed(2);
-}
-
-function toast(message) {
-  const el = document.createElement('div');
-  el.className = 'toast';
-  el.textContent = message;
-  document.body.appendChild(el);
-  requestAnimationFrame(() => el.classList.add('visible'));
-  setTimeout(() => {
-    el.classList.remove('visible');
-    setTimeout(() => el.remove(), 200);
-  }, 3000);
 }
 
 function editCustomer(c) {
@@ -508,7 +393,7 @@ function openConsumiModal(customer) {
   state.modal.setAttribute('aria-hidden', 'false');
   resetWizard();
   renderConsumiTable();
-  loadConsumi();
+  loadConsumiForModal();
   notify('Verifica CP: apri la mappa GSE col pulsante CP e confronta POD/Cabina.');
 }
 
@@ -538,7 +423,7 @@ function resetWizard() {
   }
 }
 
-async function loadConsumi(showToast = false) {
+async function loadConsumiForModal(showToast = false) {
   if (!state.currentCustomer || !state.table) return;
   state.table.innerHTML = '<p class="info-text">Caricamento storico consumi...</p>';
   try {
@@ -907,7 +792,7 @@ async function saveConsumi() {
       throw new Error(json.error || 'Salvataggio consumi fallito');
     }
     notify('Consumi salvati con successo.');
-    await loadConsumi(true);
+    await loadConsumiForModal(true);
     resetWizard();
   } catch (err) {
     notify(err.message || 'Salvataggio consumi fallito');
@@ -929,7 +814,7 @@ if (state.modal) {
 }
 
 if (state.btnRefresh) {
-  state.btnRefresh.addEventListener('click', () => loadConsumi(true));
+  state.btnRefresh.addEventListener('click', () => loadConsumiForModal(true));
 }
 if (state.uploadButton) {
   state.uploadButton.addEventListener('click', uploadBill);
@@ -939,6 +824,24 @@ if (state.parseButton) {
 }
 if (state.saveButton) {
   state.saveButton.addEventListener('click', saveConsumi);
+}
+
+if (importBillBtn) {
+  importBillBtn.addEventListener('click', () => {
+    if (!selectedCustomer) {
+      notify('Apri la scheda cliente prima di importare una bolletta');
+      return;
+    }
+    openConsumiModal(selectedCustomer);
+  });
+}
+
+if (detailCloseBtn) {
+  detailCloseBtn.addEventListener('click', closeCustomerDetail);
+}
+
+if (consumiForm) {
+  consumiForm.addEventListener('submit', submitConsumiForm);
 }
 
 if (form) {
