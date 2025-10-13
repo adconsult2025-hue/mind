@@ -1,4 +1,4 @@
-const { saveBill, getBill } = require('./_data');
+const { billsStore, uid } = require('./_store');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -7,14 +7,27 @@ const headers = () => ({
   'Access-Control-Allow-Headers': 'Content-Type'
 });
 
-const ALLOWED_EXT = ['pdf', 'jpg', 'jpeg', 'png'];
+function response(statusCode, body) {
+  return { statusCode, headers: headers(), body: JSON.stringify(body) };
+}
 
-function randomFromString(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i += 1) {
-    hash = (hash * 31 + str.charCodeAt(i)) % 100000;
+function parseSubPath(event) {
+  const sources = [event.path, event.rawUrl];
+  for (const source of sources) {
+    if (!source) continue;
+    const match = source.match(/bills(?:\/([^/?#]+))?/);
+    if (match && match[1]) {
+      return `/${match[1]}`;
+    }
   }
-  return hash;
+  return '/';
+}
+
+function sanitizePod(value) {
+  if (!value) return '';
+  const cleaned = String(value).toUpperCase().replace(/\s+/g, '');
+  if (!/^IT[A-Z0-9]{12,16}$/.test(cleaned)) return cleaned;
+  return cleaned;
 }
 
 exports.handler = async function handler(event) {
@@ -22,79 +35,73 @@ exports.handler = async function handler(event) {
     return { statusCode: 204, headers: headers(), body: '' };
   }
 
-  if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: headers(),
-      body: JSON.stringify({ ok: false, error: { code: 'METHOD_NOT_ALLOWED', message: 'Metodo non supportato' } })
-    };
-  }
+  const method = event.httpMethod;
+  const subPath = parseSubPath(event);
 
   try {
-    const body = JSON.parse(event.body || '{}');
-
-    if (event.path.endsWith('/parse') || event.rawUrl?.includes('/parse')) {
-      const { bill_id } = body;
-      if (!bill_id) {
-        return {
-          statusCode: 400,
-          headers: headers(),
-          body: JSON.stringify({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'bill_id obbligatorio' } })
-        };
+    if (method === 'POST' && subPath === '/upload') {
+      const body = JSON.parse(event.body || '{}');
+      const { client_id: clientId, filename } = body;
+      if (!clientId || !filename) {
+        return response(400, { ok: false, error: 'client_id e filename sono obbligatori' });
       }
-      const meta = getBill(bill_id);
-      if (!meta) {
-        return {
-          statusCode: 404,
-          headers: headers(),
-          body: JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'Bolletta non trovata' } })
-        };
-      }
-      const seed = randomFromString(bill_id + meta.filename);
-      const year = new Date(meta.uploaded_at || Date.now()).getFullYear();
-      const payload = {
-        anno: year,
-        f1_kwh: Number((800 + (seed % 400)).toFixed(0)),
-        f2_kwh: Number((600 + (seed % 300)).toFixed(0)),
-        f3_kwh: Number((400 + (seed % 200)).toFixed(0))
+      const billId = uid('bill');
+      const record = {
+        id: billId,
+        client_id: clientId,
+        filename,
+        url: `/mock/bills/${billId}/${encodeURIComponent(filename)}`,
+        uploaded_at: new Date().toISOString()
       };
-      return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data: payload }) };
+      billsStore.set(billId, record);
+      return response(200, { ok: true, data: { bill_id: billId, url: record.url } });
     }
 
-    const { client_id, filename } = body;
-    if (!client_id || !filename) {
-      return {
-        statusCode: 400,
-        headers: headers(),
-        body: JSON.stringify({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'client_id e filename sono obbligatori' } })
+    if (method === 'POST' && subPath === '/parse') {
+      const body = JSON.parse(event.body || '{}');
+      const { bill_id: billId } = body;
+      if (!billId) {
+        return response(400, { ok: false, error: 'bill_id mancante' });
+      }
+      if (!billsStore.has(billId)) {
+        return response(404, { ok: false, error: 'Bolletta non trovata' });
+      }
+      const stub = {
+        customer_name: 'Cliente Demo Energia',
+        tax_code: 'RSSMRA85M01H501U',
+        vat: '01234567890',
+        pod: 'IT001E1234567890',
+        supply_address: 'Via Roma 10, 00100 Roma (RM)',
+        supplier: 'Energia Plus',
+        bill_number: `BILL-${billId.slice(-6).toUpperCase()}`,
+        period_start: '2024-03-01',
+        period_end: '2024-03-31',
+        issue_date: '2024-04-05',
+        due_date: '2024-04-20',
+        contracted_power_kw: 4.5,
+        tariff_code: 'D2',
+        kwh_f1: 120.5,
+        kwh_f2: 95.2,
+        kwh_f3: 80.3,
+        kwh_total: null,
+        total_amount_eur: 185.75,
+        iva_rate: 10,
+        confidence: {
+          pod: 0.95,
+          period: 0.9,
+          f1: 0.88,
+          f2: 0.9,
+          f3: 0.92
+        }
       };
+      const kwhTotal = Number((stub.kwh_f1 + stub.kwh_f2 + stub.kwh_f3).toFixed(2));
+      stub.kwh_total = kwhTotal;
+      stub.pod = sanitizePod(stub.pod);
+      return response(200, { ok: true, data: stub });
     }
-    const ext = filename.split('.').pop().toLowerCase();
-    if (!ALLOWED_EXT.includes(ext)) {
-      return {
-        statusCode: 400,
-        headers: headers(),
-        body: JSON.stringify({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Estensione file non supportata' } })
-      };
-    }
-    const billId = `bill_${Date.now()}`;
-    const meta = saveBill({
-      bill_id: billId,
-      client_id,
-      filename,
-      url: `https://storage.mock/bills/${client_id}/${billId}.${ext}`,
-      uploaded_at: new Date().toISOString()
-    });
-    return {
-      statusCode: 200,
-      headers: headers(),
-      body: JSON.stringify({ ok: true, data: { bill_id: meta.bill_id, url: meta.url } })
-    };
-  } catch (err) {
-    return {
-      statusCode: 500,
-      headers: headers(),
-      body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: err.message || 'Errore interno' } })
-    };
+
+    return response(405, { ok: false, error: 'Metodo non supportato' });
+  } catch (error) {
+    return response(500, { ok: false, error: error.message || 'Errore server' });
   }
 };
