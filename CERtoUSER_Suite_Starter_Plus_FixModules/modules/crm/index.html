@@ -222,6 +222,33 @@
         </div>
       </div>
     </section>
+    <section class="card soft" id="client-crono-card" hidden>
+      <div class="row-between">
+        <div>
+          <h3>Cronoprogramma documentale</h3>
+          <p class="info-text">Carica e approva i documenti associati alle fasi CRM del cliente.</p>
+        </div>
+        <div class="actions" data-entity="client">
+          <button class="btn btn-light" type="button" data-doc-upload data-entity="client" data-phase="F1">Carica F1</button>
+          <button class="btn btn-light" type="button" data-doc-upload data-entity="client" data-phase="F2">Carica F2</button>
+          <button class="btn btn-light" type="button" data-doc-upload data-entity="client" data-phase="F3">Carica F3</button>
+        </div>
+      </div>
+      <div class="table-wrap mt-2">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Fase</th>
+              <th>Documento</th>
+              <th>Stato</th>
+              <th class="nowrap">Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="client-crono-docs"></tbody>
+        </table>
+      </div>
+      <p class="info-text" id="client-crono-empty">Nessun documento registrato per il cliente selezionato.</p>
+    </section>
   </main>
 
   <footer class="footer">

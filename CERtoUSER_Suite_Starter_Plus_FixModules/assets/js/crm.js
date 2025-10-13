@@ -3,6 +3,8 @@ import { safeGuardAction } from './safe.js';
 
 const API_BASE = '/api';
 
+const SAFE_MODE = typeof window !== 'undefined' && String(window.SAFE_MODE).toLowerCase() === 'true';
+
 const form = document.getElementById('form-customer');
 const listEl = document.getElementById('customers-list');
 const searchEl = document.getElementById('search');
@@ -19,6 +21,10 @@ const consumiF3 = document.getElementById('consumi-f3');
 const consumiFeedback = document.getElementById('consumi-feedback');
 const consumiHistory = document.getElementById('consumi-history');
 const importBillBtn = document.getElementById('btn-import-bill');
+const clientCronoCard = document.getElementById('client-crono-card');
+const clientCronoTable = document.getElementById('client-crono-docs');
+const clientCronoEmpty = document.getElementById('client-crono-empty');
+const clientCronoButtons = document.querySelectorAll('[data-doc-upload][data-entity="client"]');
 
 const state = {
   modal: document.getElementById('modal-consumi'),
@@ -47,10 +53,25 @@ const state = {
 
 let customers = allCustomers();
 let selectedCustomer = null;
+const clientDocsStore = new Map();
 function notify(message) {
   if (!message) return;
   window.dispatchEvent(new CustomEvent('cer:notify', { detail: message }));
 }
+
+document.addEventListener('click', (event) => {
+  const btn = event.target.closest('[data-open-client]');
+  if (!btn) return;
+  event.preventDefault();
+  const id = btn.getAttribute('data-open-client');
+  if (!id) return;
+  const url = `/modules/crm/index.html?client_id=${encodeURIComponent(id)}`;
+  if (window.location.href.includes(url)) {
+    loadClientDetail(id);
+    return;
+  }
+  window.location.href = url;
+});
 
 export function sanitizePOD(value) {
   if (!value) return null;
@@ -102,6 +123,15 @@ function formatDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString('it-IT');
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function computeAverageConfidence(confidence = {}) {
@@ -173,7 +203,7 @@ function rowItem(c) {
     <div>${c.cabina || ''}</div>
     <div><span class="badge green">${c.ruolo || 'Consumer'}</span></div>
     <div class="actions">
-      <button class="btn ghost" data-detail="${c.id}">Scheda</button>
+      <button class="btn ghost" data-open-client="${c.id}">Scheda</button>
       <button class="btn ghost" data-edit="${c.id}">Modifica</button>
       <button class="btn ghost" data-consumi="${c.id}">Consumi</button>
       <button class="btn ghost" data-prog="${c.id}">Cronoprogramma</button>
@@ -207,6 +237,23 @@ function rowItem(c) {
   };
 
   return r;
+}
+
+function loadClientDetail(clientId) {
+  if (!clientId) return null;
+  const cid = String(clientId);
+  let customer = customers.find((cust) => String(cust.id) === cid);
+  if (!customer) {
+    customers = allCustomers();
+    customer = customers.find((cust) => String(cust.id) === cid) || null;
+  }
+  if (!customer) {
+    notify('Cliente non trovato nel CRM locale.');
+    return null;
+  }
+  render();
+  openCustomerDetail(customer);
+  return customer;
 }
 
 function render() {
@@ -244,6 +291,18 @@ function openCustomerDetail(c) {
       consumiFeedback.classList.remove('error-text');
     }
   }
+  CRONO_STATE.currentClientId = c.id;
+  if (clientCronoButtons.length) {
+    clientCronoButtons.forEach((btn) => btn.setAttribute('data-entity-id', c.id));
+  }
+  if (clientCronoTable) {
+    clientCronoTable.dataset.entityId = String(c.id);
+  }
+  if (clientCronoCard) {
+    clientCronoCard.hidden = false;
+  }
+  renderClientDocs(c.id);
+  loadClientDocs(c.id);
   loadConsumiForDetail(c.id);
 }
 
@@ -251,6 +310,97 @@ function closeCustomerDetail() {
   selectedCustomer = null;
   if (detailCard) detailCard.hidden = true;
   if (consumiHistory) consumiHistory.innerHTML = '';
+  if (clientCronoTable) clientCronoTable.innerHTML = '';
+  if (clientCronoEmpty) clientCronoEmpty.hidden = false;
+  if (clientCronoCard) clientCronoCard.hidden = true;
+  CRONO_STATE.currentClientId = null;
+}
+
+function clientDocStatusBadge(status = 'uploaded') {
+  const value = String(status || 'uploaded');
+  if (value === 'approved') return '<span class="badge green">Approvato</span>';
+  if (value === 'rejected') return '<span class="badge danger">Respinto</span>';
+  return '<span class="badge blue">Caricato</span>';
+}
+
+function renderClientDocs(clientId) {
+  if (!clientCronoTable) return;
+  const cid = String(clientId || '');
+  const docs = clientDocsStore.get(cid) || [];
+  clientCronoTable.innerHTML = '';
+  clientCronoTable.dataset.entityId = cid;
+  if (!docs.length) {
+    if (clientCronoEmpty) clientCronoEmpty.hidden = false;
+    return;
+  }
+  if (clientCronoEmpty) clientCronoEmpty.hidden = true;
+  const sorted = docs.slice().sort((a, b) => {
+    const aTime = new Date(a.uploaded_at || a.created_at || 0).getTime();
+    const bTime = new Date(b.uploaded_at || b.created_at || 0).getTime();
+    return bTime - aTime;
+  });
+  sorted.forEach((doc) => {
+    const tr = document.createElement('tr');
+    const phase = doc.phase || '-';
+    const url = doc.url || '#';
+    tr.dataset.docId = doc.doc_id;
+    tr.innerHTML = `
+      <td>${phase}</td>
+      <td>${escapeHtml(String(doc.filename || doc.name || 'Documento'))}</td>
+      <td>${clientDocStatusBadge(doc.status)}</td>
+      <td class="nowrap actions">
+        <a class="btn ghost" href="${url}" target="_blank" rel="noopener">Apri</a>
+        <button class="btn ghost" type="button" data-doc-mark="${doc.doc_id}" data-status="approved" data-entity="client" data-entity-id="${cid}" data-phase="${phase}">Approva</button>
+        <button class="btn ghost" type="button" data-doc-mark="${doc.doc_id}" data-status="rejected" data-entity="client" data-entity-id="${cid}" data-phase="${phase}">Rifiuta</button>
+      </td>
+    `;
+    clientCronoTable.appendChild(tr);
+  });
+}
+
+async function loadClientDocs(clientId) {
+  if (!clientId || !clientCronoTable) return;
+  const cid = String(clientId);
+  clientCronoTable.innerHTML = '<tr><td colspan="4">Caricamento documenti…</td></tr>';
+  try {
+    const res = await fetch(`${API_BASE}/docs?entity_type=client&entity_id=${encodeURIComponent(cid)}`);
+    const payload = await res.json();
+    if (!res.ok || payload.ok === false) {
+      throw new Error(payload.error?.message || 'Errore caricamento documenti');
+    }
+    const list = Array.isArray(payload.data) ? payload.data.map((doc) => ({ ...doc, entity_type: 'client', entity_id: cid })) : [];
+    clientDocsStore.set(cid, list);
+    renderClientDocs(cid);
+  } catch (err) {
+    clientCronoTable.innerHTML = `<tr><td colspan="4" class="error-text">${escapeHtml(err.message || 'Errore caricamento documenti')}</td></tr>`;
+  }
+}
+
+function upsertClientDoc(doc) {
+  if (!doc || String(doc.entity_type || '') !== 'client') return;
+  const cid = String(doc.entity_id || '');
+  if (!cid) return;
+  const list = clientDocsStore.get(cid) || [];
+  const index = list.findIndex((item) => item.doc_id === doc.doc_id);
+  if (index >= 0) {
+    list[index] = { ...list[index], ...doc };
+  } else {
+    list.push(doc);
+  }
+  clientDocsStore.set(cid, list);
+  if (selectedCustomer && String(selectedCustomer.id) === cid) {
+    renderClientDocs(cid);
+  }
+}
+
+function handleClientDocEvent(detail) {
+  if (!detail || String(detail.entity_type || '') !== 'client') return;
+  const normalized = {
+    ...detail,
+    entity_type: 'client',
+    entity_id: String(detail.entity_id || detail.client_id || '')
+  };
+  upsertClientDoc(normalized);
 }
 
 async function loadConsumiForDetail(clientId) {
@@ -541,7 +691,11 @@ function renderBillReview() {
 
   const avgPercent = Math.round(state.averageConfidence * 100);
   state.review.classList.remove('hidden');
+  const headerMessage = SAFE_MODE
+    ? '<p class="warning-text">Anteprima (dry-run): i dati NON vengono salvati finché non disattivi il SAFE_MODE.</p>'
+    : '<p class="info-text">Verifica i dati estratti prima di salvare i consumi.</p>';
   state.review.innerHTML = `
+    ${headerMessage}
     <div class="review-grid">
       ${rows
         .map((row) => {
@@ -683,35 +837,7 @@ async function parseBill() {
     if (!res.ok || !json.ok) {
       throw new Error(json.error || 'Parsing bolletta fallito');
     }
-    state.billData = normalizeParsedBill(json.data || {});
-    state.blockReasons = [];
-    state.periodInvalid = false;
-    if (!state.billData.pod) {
-      state.blockReasons.push('POD estratto non valido.');
-    }
-    if (!state.billData.period || !validPeriod(state.billData.period)) {
-      state.blockReasons.push('Periodo non valido: formato atteso YYYY-MM.');
-      state.periodInvalid = true;
-    }
-    if (state.billData.period_start && state.billData.period_end) {
-      const start = new Date(state.billData.period_start);
-      const end = new Date(state.billData.period_end);
-      if (start > end) {
-        state.blockReasons.push('Intervallo periodo non valido (inizio successivo alla fine).');
-        state.periodInvalid = true;
-      }
-    }
-    state.averageConfidence = computeAverageConfidence(state.billData.confidence);
-    if (state.averageConfidence < 0.8) {
-      state.blockReasons.push('Confidenza media < 0.80: revisione manuale obbligatoria.');
-      notify('Dati estratti con confidenza bassa: revisione manuale obbligatoria.');
-    }
-    state.duplicateEntry = detectDuplicate(state.billData.period, state.billData.pod);
-    renderBillReview();
-    renderDuplicateWarning(state.duplicateEntry);
-    prepareChecklist();
-    updateBlockedMessage();
-    updateSaveState();
+    renderBillPreview(json.data || {});
   } catch (err) {
     state.review.innerHTML = `<p class="error-text">${err.message || 'Parsing bolletta fallito'}</p>`;
     state.blockReasons = [];
@@ -724,6 +850,38 @@ async function parseBill() {
   } finally {
     state.parseButton.disabled = false;
   }
+}
+
+function renderBillPreview(rawData) {
+  state.billData = normalizeParsedBill(rawData || {});
+  state.blockReasons = [];
+  state.periodInvalid = false;
+  if (!state.billData.pod) {
+    state.blockReasons.push('POD estratto non valido.');
+  }
+  if (!state.billData.period || !validPeriod(state.billData.period)) {
+    state.blockReasons.push('Periodo non valido: formato atteso YYYY-MM.');
+    state.periodInvalid = true;
+  }
+  if (state.billData.period_start && state.billData.period_end) {
+    const start = new Date(state.billData.period_start);
+    const end = new Date(state.billData.period_end);
+    if (start > end) {
+      state.blockReasons.push('Intervallo periodo non valido (inizio successivo alla fine).');
+      state.periodInvalid = true;
+    }
+  }
+  state.averageConfidence = computeAverageConfidence(state.billData.confidence);
+  if (state.averageConfidence < 0.8) {
+    state.blockReasons.push('Confidenza media < 0.80: revisione manuale obbligatoria.');
+    notify('Dati estratti con confidenza bassa: revisione manuale obbligatoria.');
+  }
+  state.duplicateEntry = detectDuplicate(state.billData.period, state.billData.pod);
+  renderBillReview();
+  renderDuplicateWarning(state.duplicateEntry);
+  prepareChecklist();
+  updateBlockedMessage();
+  updateSaveState();
 }
 
 async function saveConsumi() {
@@ -761,6 +919,10 @@ async function saveConsumi() {
     bill_period: period,
     bill_id: state.billId
   };
+  if (SAFE_MODE) {
+    notify('SAFE_MODE attivo: anteprima dry-run, nessun dato è stato salvato.');
+    return;
+  }
   state.saveButton.disabled = true;
   try {
     const res = await safeGuardAction(() => fetch('/api/consumi', {
@@ -813,6 +975,14 @@ if (state.modal) {
     }
   });
 }
+
+window.addEventListener('cronoprogramma:doc-added', (event) => {
+  handleClientDocEvent(event.detail);
+});
+
+window.addEventListener('cronoprogramma:doc-updated', (event) => {
+  handleClientDocEvent(event.detail);
+});
 
 if (state.btnRefresh) {
   state.btnRefresh.addEventListener('click', () => loadConsumiForModal(true));
@@ -888,4 +1058,15 @@ if (searchEl) {
   searchEl.oninput = render;
 }
 
-render();
+function init() {
+  render();
+  const params = new URLSearchParams(window.location.search);
+  const cid = params.get('client_id');
+  if (cid) {
+    loadClientDetail(cid);
+  }
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', init);
+}

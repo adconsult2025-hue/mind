@@ -2,6 +2,8 @@ const { listDocs, addDoc, updateDocStatus } = require('./_data');
 const { listPlantDocs, uploadPlantDoc, markPlantDoc, findPlantDoc } = require('./plant_docs');
 const { guard } = require('./_safe');
 
+const SAFE_MODE = String(process.env.SAFE_MODE || '').toLowerCase() === 'true';
+
 const headers = () => ({
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
@@ -101,6 +103,9 @@ exports.handler = guard(async function handler(event) {
             body: JSON.stringify({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Status non valido' } })
           };
         }
+        if (SAFE_MODE) {
+          return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, dryRun: true, data: { doc_id, status } }) };
+        }
         const plantDoc = findPlantDoc(doc_id);
         if (plantDoc) {
           const updatedPlantDoc = markPlantDoc(doc_id, status);
@@ -126,6 +131,13 @@ exports.handler = guard(async function handler(event) {
             body: JSON.stringify({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Parametri obbligatori mancanti' } })
           };
         }
+        if (!['client', 'cer', 'plant', 'ct3_case'].includes(entity_type)) {
+          return {
+            statusCode: 400,
+            headers: headers(),
+            body: JSON.stringify({ ok: false, error: { code: 'ENTITY_TYPE_NOT_ALLOWED', message: 'Tipo entità non supportato' } })
+          };
+        }
         const ext = filename.split('.').pop().toLowerCase();
         if (!ALLOWED_EXT.includes(ext)) {
           return {
@@ -134,6 +146,7 @@ exports.handler = guard(async function handler(event) {
             body: JSON.stringify({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'Estensione file non supportata' } })
           };
         }
+        const docId = doc_id || `doc_${Date.now()}`;
         if (entity_type === 'plant') {
           const plantPhase = normalizePlantPhase(phase);
           if (!plantPhase) {
@@ -143,12 +156,25 @@ exports.handler = guard(async function handler(event) {
               body: JSON.stringify({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'phase non valida per impianto' } })
             };
           }
+          const mockDoc = {
+            doc_id: docId,
+            plant_id: entity_id,
+            entity_type: 'plant',
+            entity_id,
+            phase: plantPhase,
+            filename,
+            url: `https://storage.mock/docs/plant/${entity_id}/${docId}.${ext}`,
+            status: 'uploaded',
+            uploaded_at: new Date().toISOString()
+          };
+          if (SAFE_MODE) {
+            return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, dryRun: true, data: mockDoc }) };
+          }
           const doc = uploadPlantDoc({ plant_id: entity_id, phase: plantPhase, filename });
-          return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data: doc }) };
+          return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data: { ...doc, entity_type: 'plant', entity_id } }) };
         }
-        const docId = `doc_${Date.now()}`;
         const parsedPhase = parseGenericPhase(phase);
-        const doc = addDoc({
+        const baseDoc = {
           doc_id: docId,
           entity_type,
           entity_id,
@@ -160,8 +186,12 @@ exports.handler = guard(async function handler(event) {
           status: 'uploaded',
           uploaded_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
-        });
-        return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data: doc }) };
+        };
+        if (SAFE_MODE) {
+          return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, dryRun: true, data: baseDoc }) };
+        }
+        const doc = addDoc(baseDoc);
+        return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data: { ...doc, entity_type, entity_id } }) };
       }
 
       return {
