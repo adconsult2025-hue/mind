@@ -19,6 +19,14 @@ export function saveCustomers(list) { DB.set('customers', list); }
 export function allCER() { return DB.get('cers', []); }
 export function saveCER(list) { DB.set('cers', list); }
 
+// --- Allegati clienti ---
+export function attachmentsCustomers() {
+  return DB.get('attachments_customers', {});
+}
+export function saveAttachmentsCustomers(obj) {
+  DB.set('attachments_customers', obj);
+}
+
 // --- UID ---
 export function uid(prefix='id') {
   return prefix + '_' + Math.random().toString(36).slice(2,10);
