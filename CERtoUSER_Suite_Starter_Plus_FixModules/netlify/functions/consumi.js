@@ -36,9 +36,13 @@ function findExisting(clientId, podId, period) {
 }
 
 function ensureClientPod(clientId, podId) {
-  const registry = clientPods.get(clientId);
+  let registry = clientPods.get(clientId);
   if (!registry) {
-    clientPods.set(clientId, new Set([podId]));
+    registry = new Set();
+    clientPods.set(clientId, registry);
+  }
+  if (registry.size === 0) {
+    registry.add(podId);
     return true;
   }
   if (registry.has(podId)) return true;
@@ -123,6 +127,10 @@ exports.handler = async function handler(event) {
       if (!ensureClientPod(clientId, podInput)) {
         return response(403, { ok: false, error: 'Il POD non appartiene al cliente', code: 'POD_CLIENT_MISMATCH' });
       }
+
+      const registry = clientPods.get(clientId) || new Set();
+      registry.add(podInput);
+      clientPods.set(clientId, registry);
 
       const existing = findExisting(clientId, podInput, period);
       if (existing && !overwrite) {

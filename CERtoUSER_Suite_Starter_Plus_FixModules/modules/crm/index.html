@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>MIND — Suite</title>
   <link rel="icon" href="/MIND.png">
-  <link rel="stylesheet" href="/assets/css/style.css?v=18"/>
+  <link rel="stylesheet" href="/assets/css/style.css?v=16"/>
   <script type="module" src="/assets/js/app.js?v=18"></script>
   <script type="module" src="/assets/js/storage.js?v=18"></script>
-  <script type="module" src="/assets/js/crm.js?v=18"></script>
+  <script type="module" src="/assets/js/crm.js?v=16"></script>
 </head>
 <body class="dark">
   <header class="app-header">
@@ -107,6 +107,9 @@
         <form id="consumi-form" class="card soft">
           <h3>Consumi annui</h3>
           <div class="grid-2">
+            <label>Periodo (YYYY-MM)
+              <input type="month" name="period" id="consumi-period" required />
+            </label>
             <label>Anno di riferimento
               <input type="number" name="year" id="consumi-year" min="2000" max="2100" required />
             </label>
@@ -148,27 +151,6 @@
     </section>
   </main>
 
-  <div class="modal" id="modal-bill-import" aria-hidden="true" role="dialog" aria-modal="true">
-    <div class="modal-backdrop" data-close-modal="bill"></div>
-    <div class="modal-panel">
-      <div class="modal-header">
-        <h3>Importa bolletta</h3>
-        <button class="close-btn" type="button" data-close-modal="bill">×</button>
-      </div>
-      <div class="stack">
-        <label>File bolletta (PDF/JPG/PNG)
-          <input type="file" id="bill-file" accept=".pdf,.jpg,.jpeg,.png" />
-        </label>
-        <p class="info-text" id="bill-import-feedback"></p>
-      </div>
-      <div class="modal-actions">
-        <button class="btn ghost" type="button" id="btn-bill-upload">Carica</button>
-        <button class="btn ghost" type="button" id="btn-bill-parse" disabled>Estrai dati</button>
-        <button class="btn" type="button" id="btn-bill-save" disabled>Salva consumi</button>
-      </div>
-    </div>
-  </div>
-
   <footer class="footer">
     <small>© 2025 MIND Suite</small>
   </footer>
@@ -183,7 +165,7 @@
         <button class="close-btn" type="button" data-close-consumi aria-label="Chiudi">×</button>
       </div>
 
-      <section class="preview-block" id="consumi-history">
+      <section class="preview-block" id="consumi-history-modal">
         <header class="row-between">
           <h4>Storico consumi</h4>
           <button class="btn ghost" type="button" id="btn-refresh-consumi">Aggiorna</button>
