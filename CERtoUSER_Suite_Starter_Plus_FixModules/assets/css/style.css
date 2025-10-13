@@ -92,6 +92,8 @@ img {
 
 .brand-link {
   display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
   border-radius: var(--radius-xl);
   padding: var(--space-2);
   background: rgba(53, 201, 201, 0.18);
@@ -102,6 +104,19 @@ img {
   height: 56px;
   width: auto;
   display: block;
+}
+
+.brand-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 640px) {
+  .logo {
+    height: 44px;
+  }
 }
 
 .titles h1 {
