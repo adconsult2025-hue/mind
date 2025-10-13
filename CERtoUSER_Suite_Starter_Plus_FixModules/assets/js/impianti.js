@@ -371,6 +371,9 @@ function clearPlantCrono() {
   setCronoFeedback('Seleziona un impianto per consultare il cronoprogramma.');
 }
 
+const PLANT_WORKFLOWS_API = `${API_BASE}/plant_workflows`;
+const PLANT_DOCS_API = `${API_BASE}/plant_docs`;
+
 async function renderPlantCrono(plantId) {
   if (!cronoContainer) return;
   if (!plantId) {
@@ -380,7 +383,7 @@ async function renderPlantCrono(plantId) {
   setCronoFeedback('Caricamento cronoprogramma…');
   try {
     const [workflows, docs] = await Promise.all([
-      apiFetch(`${API_BASE}/plants/workflows?plant_id=${encodeURIComponent(plantId)}`),
+      apiFetch(`${PLANT_WORKFLOWS_API}?plant_id=${encodeURIComponent(plantId)}`),
       apiFetch(`${API_BASE}/docs?entity_type=plant&entity_id=${encodeURIComponent(plantId)}`)
     ]);
     state.workflows.set(plantId, Array.isArray(workflows) ? workflows : []);
@@ -604,7 +607,7 @@ async function applyPreset(plantId, type) {
   if (!plantId || !type) return;
   setCronoFeedback('Applicazione preset documentale…');
   try {
-    await apiFetch(`${API_BASE}/plants/docs/preset`, {
+    await apiFetch(`${PLANT_DOCS_API}/preset`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ plant_id: plantId, type })
@@ -650,7 +653,7 @@ async function markDoc(docId, status) {
 async function advancePlantPhase(plantId, phase, status) {
   if (!plantId || !phase || !status) return;
   try {
-    await apiFetch(`${API_BASE}/plants/workflows/advance`, {
+    await apiFetch(`${PLANT_WORKFLOWS_API}/advance`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ plant_id: plantId, phase, status })
