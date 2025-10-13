@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { consumiStore, clientPods, logs, uid } = require('./_store');
+const { guard } = require('./_safe');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -63,7 +64,7 @@ function auditLog(clientId, actor, payload) {
   });
 }
 
-exports.handler = async function handler(event) {
+exports.handler = guard(async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: headers(), body: '' };
   }
@@ -171,4 +172,4 @@ exports.handler = async function handler(event) {
   } catch (error) {
     return response(500, { ok: false, error: error.message || 'Errore server' });
   }
-};
+});

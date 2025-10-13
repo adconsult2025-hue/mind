@@ -1,4 +1,5 @@
 const { uid } = require('./_store');
+const { guard } = require('./_safe');
 
 const CT3_CASES = [];
 
@@ -152,7 +153,7 @@ function upsertCase(payload) {
   return cloneCase(merged);
 }
 
-exports.handler = async function handler(event) {
+exports.handler = guard(async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: headers(), body: '' };
   }
@@ -239,4 +240,4 @@ exports.handler = async function handler(event) {
       body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: err.message || 'Errore interno' } })
     };
   }
-};
+});

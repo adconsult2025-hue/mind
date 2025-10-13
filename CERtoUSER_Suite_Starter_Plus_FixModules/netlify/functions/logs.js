@@ -1,4 +1,5 @@
 const { logs } = require('./_store');
+const { guard } = require('./_safe');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -11,7 +12,7 @@ function response(statusCode, body) {
   return { statusCode, headers: headers(), body: JSON.stringify(body) };
 }
 
-exports.handler = async function handler(event) {
+exports.handler = guard(async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: headers(), body: '' };
   }
@@ -32,4 +33,4 @@ exports.handler = async function handler(event) {
     .map((entry) => ({ ...entry }));
 
   return response(200, { ok: true, data: filtered });
-};
+});

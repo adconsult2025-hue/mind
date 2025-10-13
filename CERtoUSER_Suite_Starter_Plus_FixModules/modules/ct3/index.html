@@ -5,10 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>MIND — Suite</title>
   <link rel="icon" href="/assets/img/mind.png">
-  <link rel="stylesheet" href="/assets/css/style.css?v=24"/>
-  <script type="module" src="/assets/js/app.js?v=24"></script>
-  <script type="module" src="/assets/js/ct3_rules.js?v=24"></script>
-  <script type="module" src="/assets/js/ct3.js?v=24"></script>
+  <link rel="stylesheet" href="/assets/css/style.css?v=22"/>
+  <script>
+    (function(){
+      const host = location.hostname.toLowerCase();
+      const envValue = (typeof window !== 'undefined' && window._env_ && typeof window._env_.SAFE_MODE !== 'undefined')
+        ? window._env_.SAFE_MODE
+        : undefined;
+      const parseFlag = (val) => {
+        if (typeof val === 'string') { return val.toLowerCase() === 'true'; }
+        if (typeof val === 'boolean') { return val; }
+        return null;
+      };
+      const resolvedEnv = parseFlag(envValue);
+      const netlifyPreview = host.endsWith('.netlify.app') && host.includes('--');
+      const heuristics = host.includes('preview') || host.includes('staging') || netlifyPreview;
+      window.__SAFE_MODE__ = (resolvedEnv ?? heuristics);
+    })();
+  </script>
+  <script type="module" src="/assets/js/app.js?v=22"></script>
+  <script type="module" src="/assets/js/ct3_rules.js?v=22"></script>
+  <script type="module" src="/assets/js/ct3.js?v=22"></script>
 </head>
 <body class="dark">
   <header class="app-header">
@@ -249,5 +266,12 @@
       <p class="info-text">Le API sono mock Netlify Functions. I dati demo rimangono in memoria della sessione.</p>
     </div>
   </main>
+  <div id="envBanner" class="env-banner" hidden></div>
+  <script>
+    (function(){ try{
+      const el=document.getElementById('envBanner');
+      if (window.__SAFE_MODE__) { el.hidden=false; el.classList.add('safe'); el.textContent='SAFE MODE attivo: tutte le operazioni di scrittura sono in DRY-RUN.'; }
+    }catch(e){}})();
+  </script>
 </body>
 </html>
