@@ -32,11 +32,15 @@ exports.handler = async function handler(event) {
   try {
     if (event.httpMethod === 'GET') {
       const params = event.queryStringParameters || {};
+      const phaseParam = params.phase;
       const filter = {
         entity_type: params.entity_type,
         entity_id: params.entity_id,
         phase: params.phase
       };
+      if (filter.entity_type !== 'plant' && filter.phase !== undefined) {
+        filter.phase = Number(filter.phase);
+      }
       if (!filter.entity_type || !filter.entity_id) {
         return {
           statusCode: 400,
@@ -97,7 +101,7 @@ exports.handler = async function handler(event) {
       }
 
       if (isUpload) {
-        const { entity_type, entity_id, phase, filename } = body;
+        const { entity_type, entity_id, phase, filename, code, name, doc_id } = body;
         if (!entity_type || !entity_id || !filename) {
           return {
             statusCode: 400,

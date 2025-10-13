@@ -1,5 +1,37 @@
 const API_BASE = '/api';
 
+const PLANT_PHASES = [
+  { id: 'P0', title: 'Fase P0 — Audit preliminare' },
+  { id: 'P1', title: 'Fase P1 — Documenti costitutivi' },
+  { id: 'P2', title: 'Fase P2 — Ingegneria & connessioni' },
+  { id: 'P3', title: 'Fase P3 — Configurazione riparti CER' },
+  { id: 'P4', title: 'Fase P4 — Pratiche GSE' }
+];
+
+const STATUS_LABELS = {
+  'todo': 'Da avviare',
+  'in-review': 'In revisione',
+  'done': 'Completata'
+};
+
+const STATUS_BADGE_CLASS = {
+  'todo': 'warn',
+  'in-review': '',
+  'done': ''
+};
+
+const DOC_STATUS_LABELS = {
+  uploaded: 'Caricato',
+  approved: 'Approvato',
+  rejected: 'Respinto'
+};
+
+const DOC_STATUS_BADGE = {
+  uploaded: 'warn',
+  approved: '',
+  rejected: 'error'
+};
+
 const state = {
   plants: [],
   filterCerId: '',

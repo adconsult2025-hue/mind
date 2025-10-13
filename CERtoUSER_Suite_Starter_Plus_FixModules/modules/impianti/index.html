@@ -79,6 +79,7 @@
         <button class="tab-btn active" type="button" data-tab="production">Produzione</button>
         <button class="tab-btn" type="button" data-tab="cronoprogramma">Cronoprogramma</button>
         <button class="tab-btn" type="button" data-tab="inverter">Inverter</button>
+        <button class="tab-btn" type="button" data-tab="cronoprogramma">Cronoprogramma</button>
       </div>
 
       <section class="tab-panel active" data-panel="production">
@@ -149,6 +150,24 @@
           </ul>
           <p class="info-text">Esempio payload JSON: <code>{ "plant_id": "...", "ts": "ISO8601", "kwh": 12.5 }</code></p>
         </div>
+      </section>
+
+      <section class="tab-panel" data-panel="cronoprogramma">
+        <div class="card soft">
+          <div class="row-between">
+            <div>
+              <h3>Cronoprogramma impianto</h3>
+              <p class="info-text">Monitora le fasi P0–P4 con stato e documentazione associata.</p>
+            </div>
+            <div class="actions">
+              <button class="btn ghost" type="button" data-preset-type="producer">Preset Produttore</button>
+              <button class="btn ghost" type="button" data-preset-type="prosumer">Preset Prosumer</button>
+              <button class="btn ghost" type="button" id="btn-export-plant-checklist">Esporta checklist</button>
+            </div>
+          </div>
+          <p class="info-text" id="plant-crono-feedback"></p>
+        </div>
+        <div id="plant-crono-cards" class="stack"></div>
       </section>
     </section>
   </main>
