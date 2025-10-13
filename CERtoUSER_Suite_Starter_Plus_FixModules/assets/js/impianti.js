@@ -316,13 +316,19 @@ async function submitProductionForm(event) {
   try {
     productionFeedback.textContent = 'Invio in corso…';
     productionFeedback.classList.remove('error-text');
-    const res = await fetch(`${API_BASE}/plants/${encodeURIComponent(state.selectedPlantId)}/production`, {
+    const res = await safeGuardAction(() => fetch(`${API_BASE}/plants/${encodeURIComponent(state.selectedPlantId)}/production`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ date: dateValue, kwh: kwhValue })
-    });
+    }));
     const payload = await res.json();
     if (!res.ok || payload.ok === false) throw new Error(payload.error?.message || 'Errore salvataggio produzione');
+    if (isDryRunResult(res, payload)) {
+      productionFeedback.textContent = 'SAFE MODE attivo: registrazione produzione simulata (nessun dato salvato).';
+      productionFeedback.classList.remove('error-text');
+      toast('SAFE MODE attivo: salvataggio produzione in dry-run.');
+      return;
+    }
     state.production.set(state.selectedPlantId, payload.data);
     // aggiorna entry in elenco
     const index = state.plants.findIndex(p => p.id === state.selectedPlantId);

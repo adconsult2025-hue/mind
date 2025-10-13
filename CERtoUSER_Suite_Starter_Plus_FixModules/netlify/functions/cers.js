@@ -1,4 +1,5 @@
 const { listCER, createCER, updateCER } = require('./_data');
+const { guard } = require('./_safe');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -67,7 +68,7 @@ function validateCerPayload(payload) {
   };
 }
 
-exports.handler = async function handler(event) {
+exports.handler = guard(async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: headers(), body: '' };
   }
@@ -157,4 +158,4 @@ exports.handler = async function handler(event) {
       body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: err.message || 'Errore interno' } })
     };
   }
-};
+});

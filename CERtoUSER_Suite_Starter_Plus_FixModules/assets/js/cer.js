@@ -1368,13 +1368,20 @@ async function savePlantConfiguration() {
     return;
   }
   try {
-    const res = await fetch(`${API_BASE}/plants/${encodeURIComponent(plantState.modalPlantId)}`, {
+    const res = await safeGuardAction(() => fetch(`${API_BASE}/plants/${encodeURIComponent(plantState.modalPlantId)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tipologia, pct_cer: pctCer, pct_contra: pctContra })
-    });
+    }));
     const payload = await res.json();
     if (!res.ok || payload.ok === false) throw new Error(payload.error || 'Errore salvataggio impianto');
+    if (isDryRunResult(res, payload)) {
+      plantState.lastResults = null;
+      hideAllocationsPreview();
+      toast('SAFE MODE attivo: configurazione impianto non persistita (dry-run).');
+      closePlantModal();
+      return;
+    }
     const idx = plantState.plants.findIndex(p => p.id === plantState.modalPlantId);
     if (idx !== -1) {
       plantState.plants[idx] = payload.data;
@@ -1398,11 +1405,11 @@ async function postRecalc(confirm) {
     return;
   }
   try {
-    const res = await fetch(`${API_BASE}/allocations/recalc`, {
+    const res = await safeGuardAction(() => fetch(`${API_BASE}/allocations/recalc`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cer_id: plantState.selectedCerId, period: plantState.period, confirm })
-    });
+    }));
     const payload = await res.json();
     if (!res.ok || payload.ok === false) {
       if (payload?.details?.length) {
@@ -1410,6 +1417,10 @@ async function postRecalc(confirm) {
         throw new Error(`${payload.error}\n${msg}`);
       }
       throw new Error(payload.error || 'Errore calcolo riparti');
+    }
+    if (isDryRunResult(res, payload)) {
+      setPlantsFeedback('SAFE MODE attivo: ricalcolo simulato, nessuna anteprima disponibile in dry-run.', true);
+      return;
     }
     plantState.lastResults = payload.data;
     renderAllocationsPreview(payload.data, confirm);

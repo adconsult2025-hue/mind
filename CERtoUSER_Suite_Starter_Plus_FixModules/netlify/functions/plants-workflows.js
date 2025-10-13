@@ -5,6 +5,7 @@ const {
   updatePlantWorkflowStatus,
   listPlantDocs
 } = require('./_plant_store');
+const { guard } = require('./_safe');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -45,7 +46,7 @@ function gateCheck(plantId, phase) {
   return null;
 }
 
-exports.handler = async function handler(event) {
+exports.handler = guard(async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: headers(), body: '' };
   }
@@ -106,4 +107,4 @@ exports.handler = async function handler(event) {
   } catch (err) {
     return respond(500, { ok: false, error: { code: 'SERVER_ERROR', message: err.message || 'Errore interno' } });
   }
-};
+});

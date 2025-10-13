@@ -201,5 +201,12 @@
       </form>
     </div>
   </div>
+  <div id="envBanner" class="env-banner" hidden></div>
+  <script>
+    (function(){ try{
+      const el=document.getElementById('envBanner');
+      if (window.__SAFE_MODE__) { el.hidden=false; el.classList.add('safe'); el.textContent='SAFE MODE attivo: tutte le operazioni di scrittura sono in DRY-RUN.'; }
+    }catch(e){}})();
+  </script>
 </body>
 </html>

@@ -1654,3 +1654,5 @@ body:not(.dark) code {
     scroll-behavior: auto !important;
   }
 }
+.env-banner{position:fixed;left:0;right:0;bottom:0;padding:.35rem .8rem;font-size:.85rem;background:#6b7280;color:#fff;z-index:9999;opacity:.92}
+.env-banner.safe{background:#92400e}

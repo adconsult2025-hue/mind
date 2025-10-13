@@ -1,5 +1,6 @@
 const { listDocs, addDoc, updateDocStatus } = require('./_data');
 const { listPlantDocs, uploadPlantDoc, markPlantDoc, findPlantDoc } = require('./plant_docs');
+const { guard } = require('./_safe');
 
 const SAFE_MODE = String(process.env.SAFE_MODE || '').toLowerCase() === 'true';
 
@@ -47,7 +48,7 @@ function parseGenericPhase(value) {
   return value;
 }
 
-exports.handler = async function handler(event) {
+exports.handler = guard(async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: headers(), body: '' };
   }
@@ -212,4 +213,4 @@ exports.handler = async function handler(event) {
       body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: err.message || 'Errore interno' } })
     };
   }
-};
+});

@@ -1,4 +1,5 @@
 import { allCustomers, allCER } from './storage.js';
+import { safeGuardAction, isDryRunResult } from './safe.js';
 
 const TEMPLATE_API = '/api/templates';
 const DOCS_API = '/api/docs/upload';
@@ -239,13 +240,18 @@ async function handleUpload(event) {
       phase: 'firma',
       filename: file.name,
     };
-    const res = await fetch(DOCS_API, {
+    const res = await safeGuardAction(() => fetch(DOCS_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-    });
+    }));
     const data = await res.json();
     if (!res.ok || data.ok === false) throw new Error(data.error?.message || 'Upload mock fallito');
+    if (isDryRunResult(res, data)) {
+      feedbackBox.textContent = 'SAFE MODE attivo: caricamento documento simulato, nessun URL generato.';
+      toast('SAFE MODE attivo: caricamento documento in dry-run.');
+      return;
+    }
     feedbackBox.textContent = `Upload simulato: ${data.data.upload_url} (scade ${formatDateTime(data.data.expires_at)})`;
     toast('Caricamento simulato completato');
   } catch (err) {

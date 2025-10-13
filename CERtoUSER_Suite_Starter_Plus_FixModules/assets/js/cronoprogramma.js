@@ -334,9 +334,14 @@ export async function openUploadDialog(cerId, phase) {
     const response = await apiFetch(`${API_BASE}/docs/upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entity_type: 'cer', entity_id: target, phase: phaseNumber, filename })
+      body: JSON.stringify({ entity_type: 'cer', entity_id: target, phase: phaseNumber, filename }),
+      __safeFallback: dryRunDoc
     });
-    emit('cer:notify', 'Documento registrato (mock). Usa il link per caricare il file reale.');
+    if (data?.dryRun) {
+      emit('cer:notify', 'SAFE MODE attivo: caricamento documento simulato (dry-run).');
+    } else {
+      emit('cer:notify', 'Documento registrato (mock). Usa il link per caricare il file reale.');
+    }
     const group = docsCache.get(target) || new Map();
     const key = phaseNumber === null ? -1 : phaseNumber;
     const list = group.get(key) || [];
@@ -353,15 +358,34 @@ export async function openUploadDialog(cerId, phase) {
 async function markDocument(docId, status) {
   if (!docId || !activeCerId) return;
   try {
-    await apiFetch(`${API_BASE}/docs/mark`, {
+    let cachedDoc = null;
+    const docGroups = docsCache.get(activeCerId);
+    if (docGroups instanceof Map) {
+      for (const list of docGroups.values()) {
+        if (!Array.isArray(list)) continue;
+        const found = list.find(item => item && item.doc_id === docId);
+        if (found) {
+          cachedDoc = found;
+          break;
+        }
+      }
+    }
+    const fallbackDoc = cachedDoc ? { ...cachedDoc, status, updated_at: new Date().toISOString(), dryRun: true } : null;
+    const data = await apiFetch(`${API_BASE}/docs/mark`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ doc_id: docId, status })
+      body: JSON.stringify({ doc_id: docId, status }),
+      __safeFallback: fallbackDoc
     });
+    if (data?.dryRun) {
+      emit('cer:notify', 'SAFE MODE attivo: aggiornamento stato documento simulato.');
+    }
     await loadDocs(activeCerId);
     renderPhaseCards(workflowCache.get(activeCerId) || new Map(), docsCache.get(activeCerId) || new Map());
     const label = status === 'approved' ? 'approvato' : 'rifiutato';
-    emit('cer:notify', `Documento ${label}.`);
+    if (!data?.dryRun) {
+      emit('cer:notify', `Documento ${label}.`);
+    }
   } catch (err) {
     emit('cer:notify', err.message || 'Errore durante l’aggiornamento del documento');
   }
