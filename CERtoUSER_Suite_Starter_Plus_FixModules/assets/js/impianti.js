@@ -1,3 +1,5 @@
+import { STATE as CRONO_STATE } from './cronoprogramma.js?v=24';
+
 const API_BASE = '/api';
 
 const PLANT_PHASES = [
@@ -148,6 +150,14 @@ function init() {
 
 document.addEventListener('DOMContentLoaded', init);
 
+window.addEventListener('cronoprogramma:doc-added', (event) => {
+  handlePlantDocEvent(event.detail);
+});
+
+window.addEventListener('cronoprogramma:doc-updated', (event) => {
+  handlePlantDocEvent(event.detail);
+});
+
 async function loadPlants(force = false) {
   try {
     setFeedback('Caricamento impianti…');
@@ -239,6 +249,7 @@ function renderPlantsTable() {
 
 function selectPlant(plantId) {
   state.selectedPlantId = plantId;
+  CRONO_STATE.currentPlantId = plantId;
   renderPlantsTable();
   loadPlantProduction(plantId);
   renderPlantCrono(plantId);
@@ -369,6 +380,7 @@ function clearPlantCrono() {
   if (!cronoContainer) return;
   cronoContainer.innerHTML = '';
   setCronoFeedback('Seleziona un impianto per consultare il cronoprogramma.');
+  CRONO_STATE.currentPlantId = '';
 }
 
 async function renderPlantCrono(plantId) {
@@ -390,6 +402,33 @@ async function renderPlantCrono(plantId) {
   } catch (err) {
     setCronoFeedback(err.message || 'Errore nel caricamento del cronoprogramma', true);
   }
+}
+
+function upsertPlantDoc(doc) {
+  const pid = String(doc.plant_id || doc.entity_id || '');
+  if (!pid) return;
+  const list = state.docs.get(pid) || [];
+  const index = list.findIndex(item => item.doc_id === doc.doc_id);
+  if (index >= 0) {
+    list[index] = { ...list[index], ...doc };
+  } else {
+    list.push(doc);
+  }
+  state.docs.set(pid, list);
+  if (pid === state.selectedPlantId) {
+    buildPlantCronoUI(pid);
+  }
+}
+
+function handlePlantDocEvent(detail) {
+  if (!detail || String(detail.entity_type || '') !== 'plant') return;
+  const normalized = {
+    ...detail,
+    plant_id: detail.entity_id || detail.plant_id,
+    entity_type: 'plant',
+    entity_id: String(detail.entity_id || detail.plant_id || '')
+  };
+  upsertPlantDoc(normalized);
 }
 
 function buildPlantCronoUI(plantId) {
@@ -424,7 +463,7 @@ function renderPhaseTemplate(phase, entry, docs) {
     <p class="info-text"><strong>Referente:</strong> ${owner}<br/><strong>Scadenza:</strong> ${due}</p>
     ${renderDocsTable(phase.id, docs)}
     <div class="actions">
-      <button class="btn ghost" type="button" data-action="upload-doc" data-phase="${phase.id}">Carica documento</button>
+      <button class="btn ghost" type="button" data-action="upload-doc" data-phase="${phase.id}" data-doc-upload data-entity="plant" data-entity-id="${state.selectedPlantId || ''}">Carica documento</button>
       <button class="btn ghost" type="button" data-action="advance-phase" data-phase="${phase.id}" data-status="in-review">${reviewLabel}</button>
       <button class="btn" type="button" data-action="advance-phase" data-phase="${phase.id}" data-status="done" ${completeDisabled}>Completa fase</button>
     </div>
@@ -452,11 +491,12 @@ function renderDocsTable(phaseId, docs) {
     .map(doc => {
       const statusInfo = getDocStatusInfo(doc.status);
       const openLink = doc.url ? `<a class="btn ghost" href="${escapeHtml(doc.url)}" target="_blank" rel="noopener">Apri</a>` : '';
+      const plantId = escapeHtml(doc.plant_id || state.selectedPlantId || '');
       const actions = `
         <div class="doc-actions">
           ${openLink}
-          <button class="btn ghost" type="button" data-action="mark-doc" data-status="approved" data-doc="${doc.doc_id}" data-phase="${phaseId}">Approva</button>
-          <button class="btn ghost" type="button" data-action="mark-doc" data-status="rejected" data-doc="${doc.doc_id}" data-phase="${phaseId}">Rifiuta</button>
+          <button class="btn ghost" type="button" data-action="mark-doc" data-status="approved" data-doc="${doc.doc_id}" data-phase="${phaseId}" data-doc-mark="${doc.doc_id}" data-entity="plant" data-entity-id="${plantId}">Approva</button>
+          <button class="btn ghost" type="button" data-action="mark-doc" data-status="rejected" data-doc="${doc.doc_id}" data-phase="${phaseId}" data-doc-mark="${doc.doc_id}" data-entity="plant" data-entity-id="${plantId}">Rifiuta</button>
         </div>
       `;
       return `

@@ -24,7 +24,7 @@ function init() {
     btn.addEventListener('click', () => {
       filterButtons.forEach((b) => b.classList.toggle('active', b === btn));
       filter = btn.dataset.filter || 'all';
-      renderTable();
+      fetchTemplates();
     });
   });
 
@@ -48,18 +48,16 @@ function init() {
 }
 
 async function fetchTemplates() {
+  const query = filter && filter !== 'all' ? `?module=${encodeURIComponent(filter)}` : '';
   try {
-    const res = await fetch(API_BASE);
-    const payload = await res.json();
-    if (!res.ok || payload.ok === false) throw new Error(payload.error?.message || 'Impossibile caricare i modelli');
+    const payload = await fetchJSON(`${API_BASE}${query}`);
     templates = payload.data || [];
-    renderTable();
   } catch (err) {
     console.error(err);
     templates = [];
-    renderTable();
-    toast('Errore durante il caricamento dei modelli');
+    toast(err.message || 'Errore durante il caricamento dei modelli');
   }
+  renderTable();
 }
 
 function renderTable() {
@@ -151,13 +149,11 @@ async function submitUpload(event) {
   }
 
   try {
-    const res = await fetch(`${API_BASE}/upload`, {
+    const data = await fetchJSON(`${API_BASE}/upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    const data = await res.json();
-    if (!res.ok || data.ok === false) throw new Error(data.error?.message || 'Upload non riuscito');
     templates = data.data || templates;
     closeModal();
     renderTable();
@@ -170,13 +166,11 @@ async function submitUpload(event) {
 
 async function activateTemplate(tpl) {
   try {
-    const res = await fetch(`${API_BASE}/activate`, {
+    const data = await fetchJSON(`${API_BASE}/activate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: tpl.id }),
     });
-    const data = await res.json();
-    if (!res.ok || data.ok === false) throw new Error(data.error?.message || 'Impossibile attivare il modello');
     templates = data.data || templates;
     renderTable();
     toast(`Modello ${tpl.code} attivato`);
@@ -197,11 +191,9 @@ function downloadTemplate(tpl) {
 async function deleteTemplate(tpl) {
   if (!confirm(`Eliminare la versione ${tpl.code} v${tpl.version}?`)) return;
   try {
-    const res = await fetch(`${API_BASE}/${encodeURIComponent(tpl.id)}`, {
+    const data = await fetchJSON(`${API_BASE}/${encodeURIComponent(tpl.id)}`, {
       method: 'DELETE',
     });
-    const data = await res.json();
-    if (!res.ok || data.ok === false) throw new Error(data.error?.message || 'Impossibile eliminare il modello');
     templates = data.data || templates.filter((t) => t.id !== tpl.id);
     renderTable();
     toast('Modello eliminato');
@@ -216,6 +208,39 @@ function parsePlaceholders(raw) {
     .split(/[,\n]/)
     .map((p) => p.trim())
     .filter(Boolean);
+}
+
+async function fetchJSON(url, options = {}) {
+  let response;
+  try {
+    response = await fetch(url, options);
+  } catch (err) {
+    const networkError = new Error(err?.message || 'Richiesta di rete fallita');
+    networkError.cause = err;
+    throw networkError;
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  let payload;
+  if (contentType.includes('application/json')) {
+    payload = await response.json();
+  } else {
+    const text = await response.text();
+    const error = new Error(`Risposta non JSON (${response.status})${text ? `: ${text.slice(0, 200)}` : ''}`);
+    error.status = response.status;
+    error.body = text;
+    throw error;
+  }
+
+  if (!response.ok || payload.ok === false) {
+    const apiError = payload?.error || {};
+    const message = apiError.message || payload?.message || 'Errore API';
+    const err = new Error(message);
+    err.payload = payload;
+    throw err;
+  }
+
+  return payload;
 }
 
 function toast(message) {
