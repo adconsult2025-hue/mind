@@ -1,7 +1,7 @@
 import { allCustomers, allCER, saveCER, uid, progressCERs, saveProgressCERs } from './storage.js';
 import { saveDocFile, statutoTemplate, regolamentoTemplate, attoCostitutivoTemplate, adesioneTemplate, delegaGSETemplate, contrattoTraderTemplate, informativaGDPRTemplate } from './docs.js';
 import { initCronoprogrammaUI, renderCronoprogramma } from './cronoprogramma.js?v=18';
-import { safeGuardAction } from './safe.js';
+import { safeGuardAction, isDryRunResult } from './safe.js';
 
 const API_BASE = '/api';
 
@@ -1154,6 +1154,13 @@ async function savePlantConfiguration() {
     }));
     const payload = await res.json();
     if (!res.ok || payload.ok === false) throw new Error(payload.error || 'Errore salvataggio impianto');
+    if (isDryRunResult(res, payload)) {
+      plantState.lastResults = null;
+      hideAllocationsPreview();
+      toast('SAFE MODE attivo: configurazione impianto non persistita (dry-run).');
+      closePlantModal();
+      return;
+    }
     const idx = plantState.plants.findIndex(p => p.id === plantState.modalPlantId);
     if (idx !== -1) {
       plantState.plants[idx] = payload.data;
@@ -1189,6 +1196,10 @@ async function postRecalc(confirm) {
         throw new Error(`${payload.error}\n${msg}`);
       }
       throw new Error(payload.error || 'Errore calcolo riparti');
+    }
+    if (isDryRunResult(res, payload)) {
+      setPlantsFeedback('SAFE MODE attivo: ricalcolo simulato, nessuna anteprima disponibile in dry-run.', true);
+      return;
     }
     plantState.lastResults = payload.data;
     renderAllocationsPreview(payload.data, confirm);

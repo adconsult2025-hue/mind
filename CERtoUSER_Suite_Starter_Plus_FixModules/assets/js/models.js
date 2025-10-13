@@ -1,4 +1,4 @@
-import { safeGuardAction } from './safe.js';
+import { safeGuardAction, isDryRunResult } from './safe.js';
 
 const API_BASE = '/api/templates';
 
@@ -160,6 +160,11 @@ async function submitUpload(event) {
     }));
     const data = await res.json();
     if (!res.ok || data.ok === false) throw new Error(data.error?.message || 'Upload non riuscito');
+    if (isDryRunResult(res, data)) {
+      toast('SAFE MODE attivo: caricamento modello simulato, nessuna versione salvata.');
+      closeModal();
+      return;
+    }
     templates = data.data || templates;
     closeModal();
     renderTable();
@@ -179,6 +184,10 @@ async function activateTemplate(tpl) {
     }));
     const data = await res.json();
     if (!res.ok || data.ok === false) throw new Error(data.error?.message || 'Impossibile attivare il modello');
+    if (isDryRunResult(res, data)) {
+      toast(`SAFE MODE attivo: attivazione modello ${tpl.code} simulata.`);
+      return;
+    }
     templates = data.data || templates;
     renderTable();
     toast(`Modello ${tpl.code} attivato`);
@@ -204,6 +213,10 @@ async function deleteTemplate(tpl) {
     }));
     const data = await res.json();
     if (!res.ok || data.ok === false) throw new Error(data.error?.message || 'Impossibile eliminare il modello');
+    if (isDryRunResult(res, data)) {
+      toast('SAFE MODE attivo: eliminazione modello simulata (dry-run).');
+      return;
+    }
     templates = data.data || templates.filter((t) => t.id !== tpl.id);
     renderTable();
     toast('Modello eliminato');

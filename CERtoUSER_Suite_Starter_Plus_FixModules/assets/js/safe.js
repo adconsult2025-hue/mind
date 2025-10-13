@@ -5,7 +5,7 @@ export function safeGuardAction(fn) {
   if (window.__SAFE_MODE__) {
     const name = fn.name || 'action';
     console.warn('SAFE_MODE: DRY-RUN', name);
-    const dryRunPayload = { ok: true, dryRun: true, data: { dryRun: true } };
+    const dryRunPayload = { ok: true, dryRun: true, data: null };
     const dryRunResponse = {
       ok: true,
       dryRun: true,
@@ -17,4 +17,8 @@ export function safeGuardAction(fn) {
     return Promise.resolve(dryRunResponse);
   }
   return fn();
+}
+
+export function isDryRunResult(response, payload) {
+  return Boolean((response && response.dryRun) || (payload && payload.dryRun));
 }
