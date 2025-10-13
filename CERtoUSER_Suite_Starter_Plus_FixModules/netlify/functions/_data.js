@@ -84,6 +84,42 @@ const allocations = [
   }
 ];
 
+const workflows = [
+  {
+    id: 'wf_cer_demo_001_0',
+    entity_type: 'cer',
+    entity_id: 'cer_demo_001',
+    phase: 0,
+    status: 'done',
+    owner: 'Team Scouting',
+    due_date: '2024-04-15',
+    notes: 'Analisi iniziale completata',
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'wf_cer_demo_001_3',
+    entity_type: 'cer',
+    entity_id: 'cer_demo_001',
+    phase: 3,
+    status: 'in-review',
+    owner: 'Responsabile Tecnico',
+    due_date: '2024-05-30',
+    notes: 'In attesa conferma riparti tipologia A',
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 'wf_cer_demo_002_1',
+    entity_type: 'cer',
+    entity_id: 'cer_demo_002',
+    phase: 1,
+    status: 'todo',
+    owner: '',
+    due_date: '',
+    notes: '',
+    updated_at: new Date().toISOString()
+  }
+];
+
 function getPlants() {
   return plants;
 }
@@ -124,11 +160,46 @@ function saveAllocationResult(plant_id, period, result) {
   return entry;
 }
 
+function listWorkflows(filter = {}) {
+  return workflows
+    .filter(w => !filter.entity_type || w.entity_type === filter.entity_type)
+    .filter(w => !filter.entity_id || w.entity_id === filter.entity_id)
+    .map(w => ({ ...w }));
+}
+
+function upsertWorkflow({ entity_type, entity_id, phase, status, owner, due_date, notes }) {
+  const phaseNumber = Number(phase);
+  let entry = workflows.find(w => w.entity_type === entity_type && w.entity_id === entity_id && Number(w.phase) === phaseNumber);
+  if (!entry) {
+    entry = {
+      id: `wf_${entity_type}_${entity_id}_${phaseNumber}`,
+      entity_type,
+      entity_id,
+      phase: phaseNumber,
+      status: status || 'todo',
+      owner: owner || '',
+      due_date: due_date || '',
+      notes: notes || '',
+      updated_at: new Date().toISOString()
+    };
+    workflows.push(entry);
+  } else {
+    if (status) entry.status = status;
+    if (owner !== undefined) entry.owner = owner || '';
+    if (due_date !== undefined) entry.due_date = due_date || '';
+    if (notes !== undefined) entry.notes = notes || '';
+    entry.updated_at = new Date().toISOString();
+  }
+  return { ...entry };
+}
+
 module.exports = {
   getPlants,
   updatePlant,
   getAllocations,
   findAllocation,
   ensureAllocation,
-  saveAllocationResult
+  saveAllocationResult,
+  listWorkflows,
+  upsertWorkflow
 };
