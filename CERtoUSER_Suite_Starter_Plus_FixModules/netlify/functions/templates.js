@@ -15,6 +15,12 @@ const headers = () => ({
   'Expires': '0'
 });
 
+const methodNotAllowed = (message = 'Metodo non supportato', extras = {}) => ({
+  statusCode: 405,
+  headers: headers(),
+  body: JSON.stringify({ ok: false, error: { code: 'METHOD_NOT_ALLOWED', message, ...extras } })
+});
+
 const ALLOWED_FILTER_MODULES = new Set(['cer', 'crm', 'ct3', 'contratti']);
 
 const templateSorter = (a, b) => {
@@ -22,9 +28,20 @@ const templateSorter = (a, b) => {
   return String(a.code || '').localeCompare(String(b.code || ''));
 };
 
-const DATA_FILE = path.join(__dirname, '../data/templates.json');
+const DEFAULT_DATA_FILE = path.join(__dirname, '../data/templates.json');
 const SEED_FILE = path.join(__dirname, 'templates.seed.json');
-const DATA_DIR = path.dirname(DATA_FILE);
+const DATA_DIR = path.dirname(DEFAULT_DATA_FILE);
+const ENV_DATA_FILE = process.env.TEMPLATES_DATA_FILE
+  ? path.resolve(process.env.TEMPLATES_DATA_FILE)
+  : null;
+const ENV_DATA_DIR = ENV_DATA_FILE ? path.dirname(ENV_DATA_FILE) : null;
+const TMP_DATA_DIR = path.join(os.tmpdir(), 'certouser_templates_data');
+const TMP_DATA_FILE = path.join(TMP_DATA_DIR, 'templates.json');
+const DATA_LOCATIONS = [
+  ENV_DATA_FILE ? { file: ENV_DATA_FILE, dir: ENV_DATA_DIR, scope: 'custom' } : null,
+  { file: DEFAULT_DATA_FILE, dir: DATA_DIR, scope: 'data' },
+  { file: TMP_DATA_FILE, dir: TMP_DATA_DIR, scope: 'tmp' },
+].filter(Boolean);
 const ENV_UPLOADS_DIR = process.env.TEMPLATES_UPLOADS_DIR
   ? path.resolve(process.env.TEMPLATES_UPLOADS_DIR)
   : null;
@@ -53,8 +70,61 @@ const loadTemplatesFromFile = (filePath, { label } = {}) => {
   }
 };
 
+const ensureDir = (dirPath) => {
+  if (!dirPath) return;
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+};
+
+const ensureDataDir = () => ensureDir(DATA_DIR);
+
+let cachedDataLocation = null;
+
+const resolveReadableDataLocation = () => {
+  if (cachedDataLocation && fs.existsSync(cachedDataLocation.file)) {
+    return cachedDataLocation;
+  }
+  for (const location of DATA_LOCATIONS) {
+    if (fs.existsSync(location.file)) {
+      cachedDataLocation = location;
+      return location;
+    }
+  }
+  return DATA_LOCATIONS[0] || null;
+};
+
+const ensureDataStorageLocation = () => {
+  if (cachedDataLocation) {
+    try {
+      ensureDir(cachedDataLocation.dir);
+      fs.accessSync(cachedDataLocation.dir, fs.constants.W_OK);
+      return cachedDataLocation;
+    } catch (error) {
+      console.warn('[templates] directory dati non disponibile:', cachedDataLocation.dir, error?.message || error);
+      cachedDataLocation = null;
+    }
+  }
+
+  for (const location of DATA_LOCATIONS) {
+    try {
+      ensureDir(location.dir);
+      fs.accessSync(location.dir, fs.constants.W_OK);
+      cachedDataLocation = location;
+      return cachedDataLocation;
+    } catch (error) {
+      console.warn('[templates] directory dati non disponibile:', location.dir, error?.message || error);
+    }
+  }
+
+  throw new Error('Area storage dati non disponibile');
+};
+
 const readSourceTemplates = () => {
-  const persisted = loadTemplatesFromFile(DATA_FILE, { label: 'persisted' });
+  const dataLocation = resolveReadableDataLocation();
+  const persisted = dataLocation
+    ? loadTemplatesFromFile(dataLocation.file, { label: dataLocation.scope || 'persisted' })
+    : [];
   if (persisted.length) return persisted;
   const seeded = loadTemplatesFromFile(SEED_FILE, { label: 'seed' });
   if (seeded.length) return seeded;
@@ -73,10 +143,29 @@ const loadTemplates = () => sortTemplates(readSourceTemplates()).map(cloneTempla
 
 let templatesCache = loadTemplates();
 
-const ensureDataDir = () => {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+let cachedUploadsLocation = null;
+
+const ensureUploadsDir = () => {
+  if (cachedUploadsLocation) return cachedUploadsLocation;
+
+  const candidates = [
+    ENV_UPLOADS_DIR ? { dir: ENV_UPLOADS_DIR, scope: 'custom' } : null,
+    { dir: DATA_UPLOADS_DIR, scope: 'data' },
+    { dir: TMP_UPLOADS_DIR, scope: 'tmp' },
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      if (candidate.scope === 'data') ensureDataDir();
+      fs.mkdirSync(candidate.dir, { recursive: true });
+      cachedUploadsLocation = candidate;
+      return cachedUploadsLocation;
+    } catch (error) {
+      console.warn('[templates] directory upload non disponibile:', candidate.dir, error?.message || error);
+    }
   }
+
+  throw new Error('Area storage upload non disponibile');
 };
 
 let cachedUploadsLocation = null;
@@ -106,9 +195,9 @@ const ensureUploadsDir = () => {
 
 const persistTemplates = () => {
   try {
-    ensureDataDir();
+    const dataLocation = ensureDataStorageLocation();
     const payload = JSON.stringify(sortTemplates(templatesCache).map(cloneTemplate), null, 2);
-    fs.writeFileSync(DATA_FILE, payload, 'utf8');
+    fs.writeFileSync(dataLocation.file, payload, 'utf8');
   } catch (error) {
     console.error('[templates] impossibile salvare i dati:', error?.message || error);
     throw new Error('Salvataggio non riuscito');
@@ -136,21 +225,38 @@ exports.handler = async function handler(event) {
 
   const pathSuffix = getPathSuffix(event.path || '');
 
-  if (event.httpMethod === 'GET' && (!pathSuffix || pathSuffix === '' || pathSuffix === '/')) {
-    try {
-      const params = event.queryStringParameters || {};
-      const moduleParam = typeof params.module === 'string' ? params.module.trim().toLowerCase() : null;
-      const invalidModule = moduleParam && !ALLOWED_FILTER_MODULES.has(moduleParam);
-      const moduleFilter = moduleParam && !invalidModule ? moduleParam : null;
-      const data = invalidModule ? [] : await readTemplates({ module: moduleFilter });
-      return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data }) };
-    } catch (err) {
+  if (event.httpMethod === 'GET') {
+    if (!pathSuffix || pathSuffix === '' || pathSuffix === '/') {
+      try {
+        const params = event.queryStringParameters || {};
+        const moduleParam = typeof params.module === 'string' ? params.module.trim().toLowerCase() : null;
+        const invalidModule = moduleParam && !ALLOWED_FILTER_MODULES.has(moduleParam);
+        const moduleFilter = moduleParam && !invalidModule ? moduleParam : null;
+        const data = invalidModule ? [] : await readTemplates({ module: moduleFilter });
+        return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data }) };
+      } catch (err) {
+        return {
+          statusCode: 500,
+          headers: headers(),
+          body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: err.message } })
+        };
+      }
+    }
+
+    if (pathSuffix === '/upload') {
       return {
-        statusCode: 500,
+        statusCode: 200,
         headers: headers(),
-        body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: err.message } })
+        body: JSON.stringify({
+          ok: true,
+          message: 'Endpoint attivo. Utilizzare il metodo POST su /api/templates/upload per caricare un modello.'
+        })
       };
     }
+
+    return methodNotAllowed('Metodo non supportato per questa risorsa', {
+      allowed: ['GET /api/templates', 'POST /api/templates/upload']
+    });
   }
 
   if (event.httpMethod === 'POST') {
@@ -176,11 +282,7 @@ exports.handler = async function handler(event) {
         return deleteTemplate(id);
       }
 
-      return {
-        statusCode: 405,
-        headers: headers(),
-        body: JSON.stringify({ ok: false, error: { code: 'METHOD_NOT_ALLOWED', message: 'Endpoint non supportato' } })
-      };
+      return methodNotAllowed('Endpoint non supportato');
     } catch (err) {
       return {
         statusCode: 500,
@@ -211,11 +313,7 @@ exports.handler = async function handler(event) {
     }
   }
 
-  return {
-    statusCode: 405,
-    headers: headers(),
-    body: JSON.stringify({ ok: false, error: { code: 'METHOD_NOT_ALLOWED', message: 'Metodo non supportato' } })
-  };
+  return methodNotAllowed();
 };
 
 async function uploadTemplate(event) {
