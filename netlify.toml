@@ -20,7 +20,7 @@
   SAFE_MODE = "false"
 
 [context.deploy-preview.environment]
-  SAFE_MODE = "true"
+  SAFE_MODE = "false"
 
 [context.branch-deploy.environment]
-  SAFE_MODE = "true"
+  SAFE_MODE = "false"
