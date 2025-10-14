@@ -2,6 +2,8 @@ const crypto = require('crypto');
 const { consumiStore, clientPods, logs, uid } = require('./_store');
 const { guard } = require('./_safe');
 
+const SAFE_MODE = String(process.env.SAFE_MODE || '').toLowerCase() === 'true';
+
 const headers = () => ({
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
@@ -67,6 +69,10 @@ function auditLog(clientId, actor, payload) {
 exports.handler = guard(async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: headers(), body: '' };
+  }
+
+  if (SAFE_MODE && event.httpMethod === 'GET') {
+    return response(200, { ok: true, data: [] });
   }
 
   try {
