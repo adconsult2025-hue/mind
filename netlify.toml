@@ -1,12 +1,21 @@
 [build]
-  base = "."
+  base = "CERtoUSER_Suite_Starter_Plus_FixModules"
   publish = "CERtoUSER_Suite_Starter_Plus_FixModules"
-  functions = "CERtoUSER_Suite_Starter_Plus_FixModules/netlify/functions"
+  functions = "netlify/functions"
 
 [[redirects]]
   from = "/api/*"
-  to   = "/.netlify/functions/:splat"
+  to = "/.netlify/functions/:splat"
   status = 200
+
+# disabilita cache su API
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET,POST,PATCH,OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"
 
 [context.production.environment]
   SAFE_MODE = "false"
