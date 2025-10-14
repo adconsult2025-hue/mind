@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const crypto = require('crypto');
 
 const SAFE_MODE = String(process.env.SAFE_MODE || '').toLowerCase() === 'true';
@@ -24,7 +25,11 @@ const templateSorter = (a, b) => {
 const DATA_FILE = path.join(__dirname, '../data/templates.json');
 const SEED_FILE = path.join(__dirname, 'templates.seed.json');
 const DATA_DIR = path.dirname(DATA_FILE);
-const UPLOADS_DIR = path.join(DATA_DIR, 'templates_uploads');
+const ENV_UPLOADS_DIR = process.env.TEMPLATES_UPLOADS_DIR
+  ? path.resolve(process.env.TEMPLATES_UPLOADS_DIR)
+  : null;
+const DATA_UPLOADS_DIR = path.join(DATA_DIR, 'templates_uploads');
+const TMP_UPLOADS_DIR = path.join(os.tmpdir(), 'certouser_templates_uploads');
 const MAX_UPLOAD_SIZE = 5 * 1024 * 1024; // 5 MB limite prudenziale
 
 const loadTemplatesFromFile = (filePath, { label } = {}) => {
@@ -74,11 +79,29 @@ const ensureDataDir = () => {
   }
 };
 
+let cachedUploadsLocation = null;
+
 const ensureUploadsDir = () => {
-  ensureDataDir();
-  if (!fs.existsSync(UPLOADS_DIR)) {
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  if (cachedUploadsLocation) return cachedUploadsLocation;
+
+  const candidates = [
+    ENV_UPLOADS_DIR ? { dir: ENV_UPLOADS_DIR, scope: 'custom' } : null,
+    { dir: DATA_UPLOADS_DIR, scope: 'data' },
+    { dir: TMP_UPLOADS_DIR, scope: 'tmp' },
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      if (candidate.scope === 'data') ensureDataDir();
+      fs.mkdirSync(candidate.dir, { recursive: true });
+      cachedUploadsLocation = candidate;
+      return cachedUploadsLocation;
+    } catch (error) {
+      console.warn('[templates] directory upload non disponibile:', candidate.dir, error?.message || error);
+    }
   }
+
+  throw new Error('Area storage upload non disponibile');
 };
 
 const persistTemplates = () => {
@@ -299,21 +322,49 @@ function persistUploadedFile({ id, fileName, ext, fileContent, fileType, fileSiz
       throw new Error('Dimensione file incoerente con i metadati inviati');
     }
   }
-  ensureUploadsDir();
+  let uploadsLocation;
+  try {
+    uploadsLocation = ensureUploadsDir();
+  } catch (error) {
+    throw new Error(error?.message || 'Area storage upload non disponibile');
+  }
+  const uploadsDir = uploadsLocation.dir;
   const safeId = String(id || `template-${Date.now()}`);
   const safeExt = ext ? String(ext).replace(/[^a-zA-Z0-9]/g, '') || 'bin' : 'bin';
   const baseName = `${safeId}.${safeExt}`.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const targetPath = path.join(UPLOADS_DIR, baseName);
-  fs.writeFileSync(targetPath, buffer);
+  const targetPath = path.join(uploadsDir, baseName);
+  try {
+    fs.writeFileSync(targetPath, buffer);
+  } catch (error) {
+    console.error('[templates] impossibile salvare file upload:', error?.message || error);
+    throw new Error('Salvataggio file non riuscito');
+  }
   const checksum = crypto.createHash('sha256').update(buffer).digest('hex');
+  const normalizedPath = formatStoredPath(targetPath, uploadsLocation);
   return {
     original_name: fileName ? String(fileName) : null,
-    path: path.relative(DATA_DIR, targetPath).replace(/\\/g, '/'),
+    path: normalizedPath,
     size: buffer.length,
     type: fileType || mimeType || 'application/octet-stream',
     checksum,
-    stored_at: new Date().toISOString()
+    stored_at: new Date().toISOString(),
+    storage_scope: uploadsLocation.scope,
   };
+}
+
+function formatStoredPath(targetPath, uploadsLocation) {
+  const absoluteTarget = path.resolve(targetPath);
+  const normalizedTarget = absoluteTarget.replace(/\\/g, '/');
+  if (!uploadsLocation || !uploadsLocation.dir) return normalizedTarget;
+  const root = path.resolve(uploadsLocation.dir).replace(/\\/g, '/');
+  if (normalizedTarget.startsWith(root)) {
+    const relative = normalizedTarget.slice(root.length).replace(/^\/+/, '');
+    if (uploadsLocation.scope === 'data') {
+      return path.join('templates_uploads', relative).replace(/\\/g, '/');
+    }
+    return relative || path.basename(normalizedTarget);
+  }
+  return normalizedTarget;
 }
 
 async function activateTemplate(event) {
@@ -461,7 +512,8 @@ function normalizeFileMeta(rawMeta, fallbackName) {
   const storedAt = storedAtValue && !Number.isNaN(storedAtValue.valueOf())
     ? storedAtValue.toISOString()
     : null;
-  if (!originalName && !pathValue && !typeValue && !checksumValue && !size && !storedAt) {
+  const scopeValue = rawMeta.storage_scope ? String(rawMeta.storage_scope).trim().toLowerCase() : null;
+  if (!originalName && !pathValue && !typeValue && !checksumValue && !size && !storedAt && !scopeValue) {
     return null;
   }
   return {
@@ -470,7 +522,8 @@ function normalizeFileMeta(rawMeta, fallbackName) {
     type: typeValue,
     checksum: checksumValue,
     size,
-    stored_at: storedAt || new Date().toISOString()
+    stored_at: storedAt || new Date().toISOString(),
+    storage_scope: scopeValue,
   };
 }
 
