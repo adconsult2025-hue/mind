@@ -17,7 +17,7 @@ const templateSorter = (a, b) => {
 
 const loadSeedTemplates = () => {
   try {
-    const filePath = path.join(__dirname, '../data/templates.json');
+    const filePath = path.join(__dirname, 'templates.seed.json');
     const raw = fs.readFileSync(filePath, 'utf8');
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
