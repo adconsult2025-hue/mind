@@ -8,7 +8,6 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
-# disabilita cache su API
 [[headers]]
   for = "/api/*"
   [headers.values]
