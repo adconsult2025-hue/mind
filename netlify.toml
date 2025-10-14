@@ -1,0 +1,15 @@
+[build]
+  base = "CERtoUSER_Suite_Starter_Plus_FixModules"
+  publish = "CERtoUSER_Suite_Starter_Plus_FixModules"
+  functions = "CERtoUSER_Suite_Starter_Plus_FixModules/netlify/functions"
+
+[[redirects]]
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200
+
+[context.production.environment]
+  SAFE_MODE = "false"
+
+[context.deploy-preview.environment]
+  SAFE_MODE = "true"
