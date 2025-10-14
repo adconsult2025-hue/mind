@@ -11,6 +11,11 @@ let uploadModal;
 let uploadForm;
 let openUploadBtn;
 let submitUploadBtn;
+let editModal;
+let editForm;
+let editSaveBtn;
+let editFields = {};
+let currentEditContext = null;
 
 document.addEventListener('DOMContentLoaded', init);
 
@@ -21,6 +26,16 @@ function init() {
   uploadForm = document.getElementById('upload-form');
   openUploadBtn = document.getElementById('btn-open-upload');
   submitUploadBtn = document.getElementById('btn-submit-upload');
+  editModal = document.getElementById('edit-modal');
+  editForm = document.getElementById('template-edit-form');
+  editSaveBtn = document.getElementById('tpl-edit-save');
+  editFields = {
+    code: document.getElementById('tpl-edit-code'),
+    module: document.getElementById('tpl-edit-module'),
+    version: document.getElementById('tpl-edit-version'),
+    content: document.getElementById('tpl-edit-content'),
+    placeholders: document.getElementById('tpl-edit-placeholders'),
+  };
 
   filterButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -30,21 +45,26 @@ function init() {
     });
   });
 
-  if (openUploadBtn) openUploadBtn.addEventListener('click', openModal);
+  if (openUploadBtn) openUploadBtn.addEventListener('click', () => openModal(uploadModal));
   if (submitUploadBtn) submitUploadBtn.addEventListener('click', submitUpload);
+  if (editSaveBtn) editSaveBtn.addEventListener('click', submitEdit);
 
   document.querySelectorAll('[data-dismiss="modal"]').forEach((btn) => {
-    btn.addEventListener('click', closeModal);
+    btn.addEventListener('click', () => {
+      const modal = btn.closest('.modal');
+      closeModal(modal);
+    });
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeModal();
   });
 
-  if (uploadModal) {
-    uploadModal.addEventListener('click', (event) => {
-      if (event.target === uploadModal) closeModal();
+  [uploadModal, editModal].forEach((modal) => {
+    if (!modal) return;
+    modal.addEventListener('click', (event) => {
+      if (event.target === modal) closeModal(modal);
     });
-  }
+  });
 
   fetchTemplates();
 }
@@ -88,6 +108,11 @@ function renderTable() {
       <td class="nowrap actions"></td>
     `;
     const actionsCell = row.querySelector('.actions');
+    const editBtn = actionButton('Modifica', () => openEditModal(tpl));
+    editBtn.dataset.code = tpl.code || '';
+    editBtn.dataset.module = tpl.module || '';
+    editBtn.dataset.version = tpl.version != null ? String(tpl.version) : '';
+    actionsCell.appendChild(editBtn);
     actionsCell.appendChild(actionButton('Attiva', () => activateTemplate(tpl), { disabled: tpl.status === 'active', tone: 'primary' }));
     actionsCell.appendChild(actionButton('Scarica', () => downloadTemplate(tpl)));
     actionsCell.appendChild(actionButton('Elimina', () => deleteTemplate(tpl), { tone: 'danger' }));
@@ -119,17 +144,131 @@ function actionButton(label, handler, options = {}) {
   return btn;
 }
 
-function openModal() {
-  if (!uploadModal) return;
-  uploadModal.classList.add('open');
-  uploadModal.setAttribute('aria-hidden', 'false');
+function openModal(modal = uploadModal) {
+  if (!modal) return;
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
 }
 
-function closeModal() {
-  if (!uploadModal) return;
-  uploadModal.classList.remove('open');
-  uploadModal.setAttribute('aria-hidden', 'true');
-  uploadForm?.reset();
+function closeModal(modal) {
+  const target = modal || document.querySelector('.modal.open');
+  if (!target) return;
+  target.classList.remove('open');
+  target.setAttribute('aria-hidden', 'true');
+  if (target === uploadModal) {
+    uploadForm?.reset();
+  }
+  if (target === editModal) {
+    editForm?.reset();
+    currentEditContext = null;
+  }
+}
+
+function openEditModal(tpl) {
+  if (!editModal) return;
+  const code = tpl?.code ? String(tpl.code).trim() : '';
+  const moduleValue = tpl?.module ? String(tpl.module).trim() : '';
+  if (!code || !moduleValue) {
+    toast('Template non valido per la modifica');
+    return;
+  }
+  const normalizedModule = moduleValue.toLowerCase();
+  currentEditContext = {
+    code: code.toUpperCase(),
+    module: normalizedModule,
+    version: tpl?.version != null ? Number(tpl.version) : null,
+  };
+  if (editFields.code) editFields.code.value = currentEditContext.code;
+  if (editFields.module) editFields.module.value = moduleValue.toUpperCase();
+  if (editFields.version) {
+    editFields.version.value = tpl?.version != null ? String(tpl.version) : '';
+  }
+  if (editFields.content) {
+    const html = typeof tpl?.content === 'string' && tpl.content
+      ? tpl.content
+      : typeof tpl?.contentHtml === 'string'
+        ? tpl.contentHtml
+        : '';
+    editFields.content.value = html;
+  }
+  if (editFields.placeholders) {
+    const placeholders = Array.isArray(tpl?.placeholders)
+      ? tpl.placeholders.map((p) => String(p).trim()).filter(Boolean)
+      : [];
+    editFields.placeholders.value = placeholders.join('\n');
+  }
+  openModal(editModal);
+  editFields.content?.focus?.();
+}
+
+function collectEditPayload() {
+  const codeInput = editFields.code?.value ? String(editFields.code.value).trim() : '';
+  const moduleInput = editFields.module?.value ? String(editFields.module.value).trim() : '';
+  const versionInput = editFields.version?.value ? String(editFields.version.value).trim() : '';
+  const contentValue = typeof editFields.content?.value === 'string' ? editFields.content.value : '';
+  const placeholdersValue = typeof editFields.placeholders?.value === 'string' ? editFields.placeholders.value : '';
+
+  const resolvedCode = (codeInput || currentEditContext?.code || '').toUpperCase();
+  const resolvedModule = (moduleInput || currentEditContext?.module || '').toLowerCase();
+  const payload = {
+    code: resolvedCode,
+    module: resolvedModule,
+    contentHtml: contentValue,
+    placeholders: placeholdersValue
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
+  };
+
+  if (versionInput) {
+    const parsedVersion = Number.parseInt(versionInput, 10);
+    payload.version = Number.isNaN(parsedVersion) ? versionInput : parsedVersion;
+  } else if (currentEditContext?.version != null) {
+    payload.version = currentEditContext.version;
+  }
+
+  return payload;
+}
+
+async function submitEdit(event) {
+  event?.preventDefault();
+  if (!editModal) return;
+  const payload = collectEditPayload();
+  if (!payload.code || !payload.module) {
+    toast('Codice e modulo sono obbligatori');
+    return;
+  }
+
+  setEditLoading(true);
+  try {
+    const result = await fetchJSON(`${API_BASE}/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (result.dryRun) {
+      toast('SAFE MODE attivo: modifica template simulata, nessuna scrittura eseguita.');
+    } else {
+      toast('Template aggiornato con successo');
+    }
+    closeModal(editModal);
+    await fetchTemplates();
+  } catch (err) {
+    console.error(err);
+    toast(err.message || 'Errore durante l\'aggiornamento del template');
+  } finally {
+    setEditLoading(false);
+  }
+}
+
+function setEditLoading(isLoading) {
+  if (!editSaveBtn) return;
+  editSaveBtn.disabled = Boolean(isLoading);
+  if (isLoading) {
+    editSaveBtn.classList.add('loading');
+  } else {
+    editSaveBtn.classList.remove('loading');
+  }
 }
 
 async function submitUpload(event) {
@@ -175,11 +314,11 @@ async function submitUpload(event) {
     if (!res.ok || data.ok === false) throw new Error(data.error?.message || 'Upload non riuscito');
     if (isDryRunResult(res, data)) {
       toast('SAFE MODE attivo: caricamento modello simulato, nessuna versione salvata.');
-      closeModal();
+      closeModal(uploadModal);
       return;
     }
     templates = data.data || templates;
-    closeModal();
+    closeModal(uploadModal);
     renderTable();
     toast('Nuova versione caricata');
   } catch (err) {
