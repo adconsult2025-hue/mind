@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const SAFE_MODE = String(process.env.SAFE_MODE || '').toLowerCase() === 'true';
 
@@ -23,6 +24,8 @@ const templateSorter = (a, b) => {
 const DATA_FILE = path.join(__dirname, '../data/templates.json');
 const SEED_FILE = path.join(__dirname, 'templates.seed.json');
 const DATA_DIR = path.dirname(DATA_FILE);
+const UPLOADS_DIR = path.join(DATA_DIR, 'templates_uploads');
+const MAX_UPLOAD_SIZE = 5 * 1024 * 1024; // 5 MB limite prudenziale
 
 const loadTemplatesFromFile = (filePath, { label } = {}) => {
   if (!fs.existsSync(filePath)) {
@@ -68,6 +71,13 @@ let templatesCache = loadTemplates();
 const ensureDataDir = () => {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+};
+
+const ensureUploadsDir = () => {
+  ensureDataDir();
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   }
 };
 
@@ -188,7 +198,17 @@ exports.handler = async function handler(event) {
 async function uploadTemplate(event) {
   const templates = refreshTemplates();
   const body = safeJson(event.body);
-  const { name, code, module, placeholders = [], content = '', fileName = null } = body;
+  const {
+    name,
+    code,
+    module,
+    placeholders = [],
+    content = '',
+    fileName = null,
+    fileContent = null,
+    fileType = null,
+    fileSize = null,
+  } = body;
   if (!name || !code || !module) {
     return {
       statusCode: 400,
@@ -203,6 +223,26 @@ async function uploadTemplate(event) {
   const ext = extractExtension(fileName) || 'html';
   const id = `${sanitizedCode}-v${version}-${Date.now()}`;
   const url = `https://storage.mock/templates/${sanitizedCode}-v${version}.${ext}`;
+  let fileMeta = null;
+
+  if (fileContent) {
+    try {
+      fileMeta = persistUploadedFile({
+        id,
+        fileName,
+        ext,
+        fileContent,
+        fileType,
+        fileSize,
+      });
+    } catch (error) {
+      return {
+        statusCode: 400,
+        headers: headers(),
+        body: JSON.stringify({ ok: false, error: { code: 'INVALID_FILE', message: error.message || 'File non valido' } })
+      };
+    }
+  }
   const normalized = normalizeTemplate({
     id,
     name,
@@ -213,6 +253,7 @@ async function uploadTemplate(event) {
     placeholders,
     content,
     fileName,
+    file_meta: fileMeta,
     url,
     uploaded_at: new Date().toISOString()
   });
@@ -235,6 +276,43 @@ async function uploadTemplate(event) {
     statusCode: 200,
     headers: headers(),
     body: JSON.stringify({ ok: true, data: sortTemplates(templatesCache).map(cloneTemplate) })
+  };
+}
+
+function persistUploadedFile({ id, fileName, ext, fileContent, fileType, fileSize }) {
+  const parsed = parseBase64Content(fileContent);
+  if (!parsed) {
+    throw new Error('Contenuto file non valido o vuoto');
+  }
+  const { buffer, mimeType } = parsed;
+  if (!buffer?.length) {
+    throw new Error('Il file risulta vuoto');
+  }
+  if (buffer.length > MAX_UPLOAD_SIZE) {
+    throw new Error(`File troppo grande (max ${Math.round(MAX_UPLOAD_SIZE / (1024 * 1024))}MB)`);
+  }
+  if (fileSize && Number.isFinite(Number(fileSize))) {
+    const declared = Number(fileSize);
+    const delta = Math.abs(declared - buffer.length);
+    const tolerance = Math.max(32, declared * 0.1);
+    if (delta > tolerance) {
+      throw new Error('Dimensione file incoerente con i metadati inviati');
+    }
+  }
+  ensureUploadsDir();
+  const safeId = String(id || `template-${Date.now()}`);
+  const safeExt = ext ? String(ext).replace(/[^a-zA-Z0-9]/g, '') || 'bin' : 'bin';
+  const baseName = `${safeId}.${safeExt}`.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const targetPath = path.join(UPLOADS_DIR, baseName);
+  fs.writeFileSync(targetPath, buffer);
+  const checksum = crypto.createHash('sha256').update(buffer).digest('hex');
+  return {
+    original_name: fileName ? String(fileName) : null,
+    path: path.relative(DATA_DIR, targetPath).replace(/\\/g, '/'),
+    size: buffer.length,
+    type: fileType || mimeType || 'application/octet-stream',
+    checksum,
+    stored_at: new Date().toISOString()
   };
 }
 
@@ -315,6 +393,7 @@ function normalizeTemplate(raw) {
   const placeholders = Array.isArray(raw.placeholders)
     ? raw.placeholders.map((p) => String(p).trim()).filter(Boolean)
     : [];
+  const fileMeta = normalizeFileMeta(raw.file_meta || raw.fileMeta || null, raw.fileName || raw.file_name || null);
   return {
     id: raw.id ? String(raw.id) : `${code}-v${version}-${Date.now()}`,
     name,
@@ -325,6 +404,7 @@ function normalizeTemplate(raw) {
     placeholders,
     content: raw.content ? String(raw.content) : '',
     fileName: raw.fileName ? String(raw.fileName) : null,
+    file_meta: fileMeta,
     url: raw.url ? String(raw.url) : null,
     uploaded_at: raw.uploaded_at ? String(raw.uploaded_at) : new Date().toISOString()
   };
@@ -338,6 +418,60 @@ function extractExtension(filename) {
   if (!filename) return null;
   const match = String(filename).match(/\.([a-zA-Z0-9]+)$/);
   return match ? match[1] : null;
+}
+
+function parseBase64Content(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const dataUrlMatch = trimmed.match(/^data:([^;,]+)?;base64,(.+)$/);
+  let base64 = trimmed;
+  let mimeType = null;
+  if (dataUrlMatch) {
+    mimeType = dataUrlMatch[1] || null;
+    base64 = dataUrlMatch[2];
+  }
+  const sanitized = base64.replace(/\s+/g, '');
+  if (!sanitized) return null;
+  let buffer;
+  try {
+    buffer = Buffer.from(sanitized, 'base64');
+  } catch (error) {
+    throw new Error('Impossibile decodificare il contenuto del file');
+  }
+  if (!buffer.length) {
+    return null;
+  }
+  return { buffer, mimeType };
+}
+
+function normalizeFileMeta(rawMeta, fallbackName) {
+  if (!rawMeta || typeof rawMeta !== 'object') return null;
+  const originalName = rawMeta.original_name
+    ? String(rawMeta.original_name).trim()
+    : fallbackName
+      ? String(fallbackName).trim()
+      : null;
+  const pathValue = rawMeta.path ? String(rawMeta.path).trim() : null;
+  const typeValue = rawMeta.type ? String(rawMeta.type).trim() : null;
+  const checksumValue = rawMeta.checksum ? String(rawMeta.checksum).trim() : null;
+  const sizeValue = Number(rawMeta.size);
+  const size = Number.isFinite(sizeValue) && sizeValue > 0 ? sizeValue : null;
+  const storedAtValue = rawMeta.stored_at ? new Date(rawMeta.stored_at) : null;
+  const storedAt = storedAtValue && !Number.isNaN(storedAtValue.valueOf())
+    ? storedAtValue.toISOString()
+    : null;
+  if (!originalName && !pathValue && !typeValue && !checksumValue && !size && !storedAt) {
+    return null;
+  }
+  return {
+    original_name: originalName,
+    path: pathValue,
+    type: typeValue,
+    checksum: checksumValue,
+    size,
+    stored_at: storedAt || new Date().toISOString()
+  };
 }
 
 function sortTemplates(list) {

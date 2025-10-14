@@ -136,13 +136,28 @@ async function submitUpload(event) {
   event?.preventDefault();
   if (!uploadForm) return;
   const fd = new FormData(uploadForm);
+  let filePayload = {};
+  try {
+    filePayload = await buildFilePayload(fd.get('file'));
+  } catch (err) {
+    console.error(err);
+    toast(err.message || 'Impossibile leggere il file selezionato');
+    return;
+  }
   const payload = {
     name: fd.get('name')?.toString().trim(),
     code: fd.get('code')?.toString().trim(),
     module: fd.get('module')?.toString().trim(),
     placeholders: parsePlaceholders(fd.get('placeholders')?.toString() || ''),
     content: fd.get('content')?.toString() || '',
-    fileName: fd.get('file') instanceof File && fd.get('file').name ? fd.get('file').name : null,
+    fileName: filePayload.fileName ?? null,
+    ...(filePayload.fileContent
+      ? {
+        fileContent: filePayload.fileContent,
+        fileType: filePayload.fileType,
+        fileSize: filePayload.fileSize,
+      }
+      : {}),
   };
 
   if (!payload.name || !payload.code || !payload.module) {
@@ -229,6 +244,57 @@ function parsePlaceholders(raw) {
     .split(/[,\n]/)
     .map((p) => p.trim())
     .filter(Boolean);
+}
+
+async function buildFilePayload(rawFile) {
+  if (!(rawFile instanceof File) || !rawFile.name) {
+    return { fileName: null };
+  }
+  let buffer;
+  try {
+    buffer = await rawFile.arrayBuffer();
+  } catch (error) {
+    const err = new Error('Impossibile leggere il file selezionato');
+    err.cause = error;
+    throw err;
+  }
+  const base64 = arrayBufferToBase64(buffer);
+  if (!base64) {
+    throw new Error('Contenuto del file non valido');
+  }
+  return {
+    fileName: rawFile.name,
+    fileContent: base64,
+    fileType: rawFile.type || guessMimeType(rawFile.name),
+    fileSize: buffer.byteLength,
+  };
+}
+
+function arrayBufferToBase64(buffer) {
+  if (!buffer) return '';
+  const bytes = new Uint8Array(buffer);
+  if (!bytes.length) return '';
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+function guessMimeType(fileName) {
+  if (!fileName) return 'application/octet-stream';
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  const map = {
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    pdf: 'application/pdf',
+    html: 'text/html',
+    htm: 'text/html',
+    txt: 'text/plain',
+  };
+  return map[ext] || 'application/octet-stream';
 }
 
 async function fetchJSON(url, options = {}) {

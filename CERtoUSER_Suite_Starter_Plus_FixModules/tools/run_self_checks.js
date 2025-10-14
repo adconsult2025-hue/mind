@@ -850,9 +850,15 @@ const scenarios = [
       if (parsed.statusCode !== 200) return fail(`status ${parsed.statusCode}`);
       if (!parsed.body?.ok) return fail('flag ok mancante');
       const dataFile = path.join(functionsDir, '..', 'data', 'templates.json');
+      const uploadsDir = path.join(functionsDir, '..', 'data', 'templates_uploads');
       cleanups.push(() => {
         try {
           fs.rmSync(dataFile, { force: true });
+        } catch (err) {
+          // ignore
+        }
+        try {
+          fs.rmSync(uploadsDir, { recursive: true, force: true });
         } catch (err) {
           // ignore
         }
