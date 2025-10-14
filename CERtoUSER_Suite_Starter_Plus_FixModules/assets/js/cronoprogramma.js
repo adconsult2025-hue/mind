@@ -1,4 +1,4 @@
-import { apiFetch } from './api.js?v=26';
+import { apiFetch } from './api.js?v=34';
 
 const API_BASE = '/api';
 
