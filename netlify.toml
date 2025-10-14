@@ -1,6 +1,7 @@
 [build]
-  publish = "CERtoUSER_Suite_Starter_Plus_FixModules"
-  functions = "CERtoUSER_Suite_Starter_Plus_FixModules/netlify/functions"
+  base = "CERtoUSER_Suite_Starter_Plus_FixModules"
+  publish = "."
+  functions = "netlify/functions"
 
 [[redirects]]
   from = "/api/*"
@@ -12,5 +13,6 @@
 
 [context.deploy-preview.environment]
   SAFE_MODE = "true"
+
 [context.branch-deploy.environment]
   SAFE_MODE = "true"
