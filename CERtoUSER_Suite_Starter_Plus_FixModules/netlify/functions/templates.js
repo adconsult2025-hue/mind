@@ -3,12 +3,12 @@ const path = require('path');
 
 const { guard } = require('./_safe');
 
-const headers = () => ({
+const headers = {
   'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
-  'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type'
-});
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
 
 const templateSorter = (a, b) => {
   if (a.code === b.code) return Number(b.version || 0) - Number(a.version || 0);
@@ -74,15 +74,22 @@ const refreshTemplates = () => {
 
 exports.handler = guard(async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: headers(), body: '' };
+    return { statusCode: 200, headers, body: '' };
   }
 
   const pathSuffix = event.path.replace(/^\/\.netlify\/functions\/templates/, '');
 
-  try {
-    if (event.httpMethod === 'GET' && (!pathSuffix || pathSuffix === '' || pathSuffix === '/')) {
-      return listTemplates(event);
+  if (event.httpMethod === 'GET' && (!pathSuffix || pathSuffix === '' || pathSuffix === '/')) {
+    try {
+      const qs = event.queryStringParameters || {};
+      const data = await listTemplates(qs);
+      return { statusCode: 200, headers, body: JSON.stringify(data) };
+    } catch (err) {
+      return { statusCode: 500, headers, body: JSON.stringify({ error: 'TEMPLATES_READ_ERROR', message: String(err?.message || err) }) };
     }
+  }
+
+  try {
 
     if (event.httpMethod === 'POST' && pathSuffix === '/upload') {
       return uploadTemplate(event);
@@ -99,32 +106,27 @@ exports.handler = guard(async function handler(event) {
 
     return {
       statusCode: 405,
-      headers: headers(),
+      headers,
       body: JSON.stringify({ ok: false, error: { code: 'METHOD_NOT_ALLOWED', message: 'Endpoint non supportato' } })
     };
   } catch (err) {
     return {
       statusCode: 500,
-      headers: headers(),
+      headers,
       body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: err.message || 'Errore interno' } })
     };
   }
 });
 
-function listTemplates(event) {
-  const { module, status } = event.queryStringParameters || {};
+function listTemplates(query = {}) {
+  const { module, status } = query;
   const templates = refreshTemplates();
   const filtered = templates.filter((tpl) => {
     const moduleOk = module ? tpl.module === module : true;
     const statusOk = status ? tpl.status === status : true;
     return moduleOk && statusOk;
   });
-  const sorted = sortTemplates(filtered).map(cloneTemplate);
-  return {
-    statusCode: 200,
-    headers: headers(),
-    body: JSON.stringify({ ok: true, data: sorted })
-  };
+  return sortTemplates(filtered).map(cloneTemplate);
 }
 
 async function uploadTemplate(event) {
@@ -134,7 +136,7 @@ async function uploadTemplate(event) {
   if (!name || !code || !module) {
     return {
       statusCode: 400,
-      headers: headers(),
+      headers,
       body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'name, code e module sono obbligatori' } })
     };
   }
@@ -161,7 +163,7 @@ async function uploadTemplate(event) {
   if (!normalized) {
     return {
       statusCode: 500,
-      headers: headers(),
+      headers,
       body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: 'Template non valido' } })
     };
   }
@@ -175,7 +177,7 @@ async function uploadTemplate(event) {
   }
   return {
     statusCode: 200,
-    headers: headers(),
+    headers,
     body: JSON.stringify({ ok: true, data: sortTemplates(templatesCache).map(cloneTemplate) })
   };
 }
@@ -187,7 +189,7 @@ async function activateTemplate(event) {
   if (!id) {
     return {
       statusCode: 400,
-      headers: headers(),
+      headers,
       body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'id mancante' } })
     };
   }
@@ -195,7 +197,7 @@ async function activateTemplate(event) {
   if (!target) {
     return {
       statusCode: 404,
-      headers: headers(),
+      headers,
       body: JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'Template non trovato' } })
     };
   }
@@ -212,7 +214,7 @@ async function activateTemplate(event) {
   }
   return {
     statusCode: 200,
-    headers: headers(),
+    headers,
     body: JSON.stringify({ ok: true, data: sortTemplates(templatesCache).map(cloneTemplate) })
   };
 }
@@ -223,7 +225,7 @@ function deleteTemplate(id) {
   if (index === -1) {
     return {
       statusCode: 404,
-      headers: headers(),
+      headers,
       body: JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'Template non trovato' } })
     };
   }
@@ -237,7 +239,7 @@ function deleteTemplate(id) {
   }
   return {
     statusCode: 200,
-    headers: headers(),
+    headers,
     body: JSON.stringify({ ok: true, data: sortTemplates(templatesCache).map(cloneTemplate) })
   };
 }
