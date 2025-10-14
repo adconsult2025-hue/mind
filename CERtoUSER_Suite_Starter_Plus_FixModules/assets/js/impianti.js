@@ -1,5 +1,5 @@
-import { STATE as CRONO_STATE } from './cronoprogramma.js?v=34';
-import { apiFetch } from './api.js?v=34';
+import { STATE as CRONO_STATE } from './cronoprogramma.js?v=36';
+import { apiFetch } from './api.js?v=36';
 
 const API_BASE = '/api';
 

@@ -4,7 +4,7 @@ import {
   getFallbackCatalog,
   getFallbackPhases,
   getFallbackPresetDocs
-} from './ct3_rules.js?v=34';
+} from './ct3_rules.js?v=36';
 
 const API_BASE = '/api';
 const STORAGE_CLIENTS_KEY = 'customers';
