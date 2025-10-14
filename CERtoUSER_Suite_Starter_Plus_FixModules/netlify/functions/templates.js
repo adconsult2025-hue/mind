@@ -116,6 +116,7 @@ function listTemplates(event) {
 }
 
 async function uploadTemplate(event) {
+  const templates = refreshTemplates();
   const body = safeJson(event.body);
   const { name, code, module, placeholders = [], content = '', fileName = null } = body;
   if (!name || !code || !module) {
@@ -127,7 +128,7 @@ async function uploadTemplate(event) {
   }
 
   const sanitizedCode = String(code).trim().toUpperCase();
-  const existing = templatesCache.filter((tpl) => tpl.code === sanitizedCode);
+  const existing = templates.filter((tpl) => tpl.code === sanitizedCode);
   const version = existing.length ? Math.max(...existing.map((tpl) => tpl.version)) + 1 : 1;
   const ext = extractExtension(fileName) || 'html';
   const id = `${sanitizedCode}-v${version}-${Date.now()}`;
@@ -152,7 +153,7 @@ async function uploadTemplate(event) {
       body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: 'Template non valido' } })
     };
   }
-  const nextTemplates = [...templatesCache, normalized];
+  const nextTemplates = [...templates, normalized];
   try {
     templatesCache = nextTemplates;
     persistTemplates();
@@ -168,6 +169,7 @@ async function uploadTemplate(event) {
 }
 
 async function activateTemplate(event) {
+  const templates = refreshTemplates();
   const body = safeJson(event.body);
   const { id } = body;
   if (!id) {
@@ -177,7 +179,7 @@ async function activateTemplate(event) {
       body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'id mancante' } })
     };
   }
-  const target = templatesCache.find((tpl) => tpl.id === id);
+  const target = templates.find((tpl) => tpl.id === id);
   if (!target) {
     return {
       statusCode: 404,
@@ -185,7 +187,7 @@ async function activateTemplate(event) {
       body: JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'Template non trovato' } })
     };
   }
-  const nextTemplates = templatesCache.map((tpl) => {
+  const nextTemplates = templates.map((tpl) => {
     if (tpl.code !== target.code) return tpl;
     return { ...tpl, status: tpl.id === id ? 'active' : 'inactive' };
   });
@@ -204,7 +206,8 @@ async function activateTemplate(event) {
 }
 
 function deleteTemplate(id) {
-  const index = templatesCache.findIndex((tpl) => tpl.id === id);
+  const templates = refreshTemplates();
+  const index = templates.findIndex((tpl) => tpl.id === id);
   if (index === -1) {
     return {
       statusCode: 404,
@@ -212,7 +215,7 @@ function deleteTemplate(id) {
       body: JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'Template non trovato' } })
     };
   }
-  const nextTemplates = templatesCache.filter((tpl) => tpl.id !== id);
+  const nextTemplates = templates.filter((tpl) => tpl.id !== id);
   try {
     templatesCache = nextTemplates;
     persistTemplates();
