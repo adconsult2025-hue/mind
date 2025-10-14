@@ -87,12 +87,21 @@ const refreshTemplates = () => {
   return templatesCache;
 };
 
+const getPathSuffix = (eventPath = '') => {
+  if (!eventPath) return '';
+  const normalized = eventPath.startsWith('/') ? eventPath : `/${eventPath}`;
+  return normalized
+    .replace(/^\/\.netlify\/functions\/templates(?=\/|$)/, '')
+    .replace(/^\/api\/templates(?=\/|$)/, '')
+    .replace(/^\/+/, '/');
+};
+
 exports.handler = async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers: headers(), body: '' };
   }
 
-  const pathSuffix = event.path.replace(/^\/\.netlify\/functions\/templates/, '');
+  const pathSuffix = getPathSuffix(event.path || '');
 
   if (event.httpMethod === 'GET' && (!pathSuffix || pathSuffix === '' || pathSuffix === '/')) {
     try {
