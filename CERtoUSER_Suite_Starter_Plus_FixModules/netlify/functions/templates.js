@@ -202,9 +202,12 @@ exports.handler = async function handler(event) {
   try {
     const baseUrl = event.rawUrl || (`https://x${event.path || ''}`);
     const url = new URL(baseUrl);
-    rawSuffix = url.pathname.replace(/^.*\/api\/templates/, '') || '';
+    rawSuffix = getPathSuffix(url.pathname) || '';
   } catch (error) {
     rawSuffix = '';
+  }
+  if (!rawSuffix) {
+    rawSuffix = getPathSuffix(event.path || '') || '';
   }
   const normalizedSuffix = rawSuffix && rawSuffix !== '/' ? rawSuffix.replace(/\/+$/, '') : rawSuffix;
 
