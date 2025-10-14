@@ -1,5 +1,5 @@
 import { allCustomers, saveCustomers, uid, progressCustomers, saveProgressCustomers } from './storage.js';
-import { STATE as CRONO_STATE } from './cronoprogramma.js?v=26';
+import { STATE as CRONO_STATE } from './cronoprogramma.js?v=34';
 
 const API_BASE = '/api';
 
