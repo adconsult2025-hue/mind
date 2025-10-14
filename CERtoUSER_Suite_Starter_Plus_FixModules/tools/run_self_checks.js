@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 process.env.SAFE_MODE = 'false';
 
@@ -850,14 +851,72 @@ const scenarios = [
       if (parsed.statusCode !== 200) return fail(`status ${parsed.statusCode}`);
       if (!parsed.body?.ok) return fail('flag ok mancante');
       const dataFile = path.join(functionsDir, '..', 'data', 'templates.json');
+      const uploadsDir = path.join(functionsDir, '..', 'data', 'templates_uploads');
       cleanups.push(() => {
         try {
           fs.rmSync(dataFile, { force: true });
         } catch (err) {
           // ignore
         }
+        try {
+          fs.rmSync(uploadsDir, { recursive: true, force: true });
+        } catch (err) {
+          // ignore
+        }
       });
       return ok('template caricato');
+    }
+  },
+  {
+    name: 'templates → POST upload con file',
+    module: 'templates.js',
+    prepare: () => ({
+      ...defaultContext(),
+      httpMethod: 'POST',
+      path: '/.netlify/functions/templates/upload',
+      rawUrl: 'https://demo.local/.netlify/functions/templates/upload',
+      body: JSON.stringify({
+        name: 'Template File',
+        code: 'TMP-FILE',
+        module: 'crm',
+        placeholders: ['cliente.nome'],
+        content: '<p>File</p>',
+        fileName: 'template.html',
+        fileContent: Buffer.from('<html></html>', 'utf8').toString('base64'),
+        fileType: 'text/html',
+        fileSize: Buffer.byteLength('<html></html>'),
+      })
+    }),
+    validate: (res) => {
+      const parsed = parseResponse(res);
+      if (parsed.statusCode !== 200) return fail(`status ${parsed.statusCode}`);
+      if (!parsed.body?.ok) return fail('flag ok mancante');
+      const created = (parsed.body.data || []).find((tpl) => tpl.code === 'TMP-FILE');
+      if (!created) return fail('template non trovato in risposta');
+      if (!created.file_meta) return fail('metadati file mancanti');
+      if (!created.file_meta.path) return fail('path file mancante');
+      if (!created.file_meta.size) return fail('size file mancante');
+      const dataFile = path.join(functionsDir, '..', 'data', 'templates.json');
+      const uploadsDir = path.join(functionsDir, '..', 'data', 'templates_uploads');
+      const tmpUploadsDir = path.join(os.tmpdir(), 'certouser_templates_uploads');
+      cleanups.push(() => {
+        try {
+          fs.rmSync(dataFile, { force: true });
+        } catch (err) {
+          // ignore
+        }
+        try {
+          fs.rmSync(uploadsDir, { recursive: true, force: true });
+        } catch (err) {
+          // ignore
+        }
+        try {
+          fs.rmSync(tmpUploadsDir, { recursive: true, force: true });
+        } catch (err) {
+          // ignore
+        }
+      });
+      return ok('template con file caricato');
     }
   }
 ];
