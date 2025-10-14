@@ -8,6 +8,8 @@ const {
 } = require('./_data');
 const { guard } = require('./_safe');
 
+const SAFE_MODE = String(process.env.SAFE_MODE || '').toLowerCase() === 'true';
+
 const headers = () => ({
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
@@ -91,6 +93,30 @@ function aggregateProduction(readings, range = {}) {
 exports.handler = guard(async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: headers(), body: '' };
+  }
+
+  if (SAFE_MODE && event.httpMethod === 'GET') {
+    const productionPlantId = parseProductionRequest(event);
+    if (productionPlantId) {
+      return {
+        statusCode: 200,
+        headers: headers(),
+        body: JSON.stringify({
+          ok: true,
+          data: {
+            plant_id: productionPlantId,
+            readings: [],
+            totals: { daily: 0, monthly: 0, yearly: 0 },
+            last_reading: null
+          }
+        })
+      };
+    }
+    return {
+      statusCode: 200,
+      headers: headers(),
+      body: JSON.stringify({ ok: true, data: [] })
+    };
   }
 
   try {

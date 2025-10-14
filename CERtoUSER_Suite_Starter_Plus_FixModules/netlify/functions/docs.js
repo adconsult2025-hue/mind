@@ -53,6 +53,10 @@ exports.handler = guard(async function handler(event) {
     return { statusCode: 204, headers: headers(), body: '' };
   }
 
+  if (SAFE_MODE && event.httpMethod === 'GET') {
+    return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data: [] }) };
+  }
+
   try {
     if (event.httpMethod === 'GET') {
       const params = event.queryStringParameters || {};

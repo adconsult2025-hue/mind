@@ -3,6 +3,8 @@ const plantWorkflows = require('./plant_workflows');
 const plantDocs = require('./plant_docs');
 const { guard } = require('./_safe');
 
+const SAFE_MODE = String(process.env.SAFE_MODE || '').toLowerCase() === 'true';
+
 const headers = () => ({
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
@@ -13,6 +15,14 @@ const headers = () => ({
 exports.handler = guard(async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: headers(), body: '' };
+  }
+
+  if (SAFE_MODE && event.httpMethod === 'GET') {
+    return {
+      statusCode: 200,
+      headers: headers(),
+      body: JSON.stringify({ ok: true, data: [] })
+    };
   }
 
   try {
