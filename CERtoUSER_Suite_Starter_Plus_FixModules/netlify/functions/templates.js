@@ -114,11 +114,11 @@ exports.handler = async function handler(event) {
 
     try {
       if (pathSuffix === '/upload') {
-        return uploadTemplate(event);
+        return await uploadTemplate(event);
       }
 
       if (pathSuffix === '/activate') {
-        return activateTemplate(event);
+        return await activateTemplate(event);
       }
 
       if (pathSuffix.startsWith('/')) {
