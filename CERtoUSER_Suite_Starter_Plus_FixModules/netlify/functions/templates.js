@@ -15,10 +15,15 @@ const templateSorter = (a, b) => {
   return String(a.code || '').localeCompare(String(b.code || ''));
 };
 
+const DATA_FILE = path.join(__dirname, '../data/templates.json');
+const DATA_DIR = path.dirname(DATA_FILE);
+
 const loadSeedTemplates = () => {
+  if (!fs.existsSync(DATA_FILE)) {
+    return [];
+  }
   try {
-    const filePath = path.join(__dirname, '../data/templates.json');
-    const raw = fs.readFileSync(filePath, 'utf8');
+    const raw = fs.readFileSync(DATA_FILE, 'utf8');
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed
@@ -31,7 +36,29 @@ const loadSeedTemplates = () => {
   }
 };
 
-const TEMPLATES = loadSeedTemplates();
+let templatesCache = loadSeedTemplates();
+
+const ensureDataDir = () => {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+};
+
+const persistTemplates = () => {
+  try {
+    ensureDataDir();
+    const payload = JSON.stringify(sortTemplates(templatesCache).map(cloneTemplate), null, 2);
+    fs.writeFileSync(DATA_FILE, payload, 'utf8');
+  } catch (error) {
+    console.error('[templates] impossibile salvare i dati:', error?.message || error);
+    throw new Error('Salvataggio non riuscito');
+  }
+};
+
+const refreshTemplates = () => {
+  templatesCache = loadSeedTemplates();
+  return templatesCache;
+};
 
 exports.handler = guard(async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
@@ -74,7 +101,8 @@ exports.handler = guard(async function handler(event) {
 
 function listTemplates(event) {
   const { module, status } = event.queryStringParameters || {};
-  const filtered = TEMPLATES.filter((tpl) => {
+  const templates = refreshTemplates();
+  const filtered = templates.filter((tpl) => {
     const moduleOk = module ? tpl.module === module : true;
     const statusOk = status ? tpl.status === status : true;
     return moduleOk && statusOk;
@@ -99,7 +127,7 @@ async function uploadTemplate(event) {
   }
 
   const sanitizedCode = String(code).trim().toUpperCase();
-  const existing = TEMPLATES.filter((tpl) => tpl.code === sanitizedCode);
+  const existing = templatesCache.filter((tpl) => tpl.code === sanitizedCode);
   const version = existing.length ? Math.max(...existing.map((tpl) => tpl.version)) + 1 : 1;
   const ext = extractExtension(fileName) || 'html';
   const id = `${sanitizedCode}-v${version}-${Date.now()}`;
@@ -124,11 +152,18 @@ async function uploadTemplate(event) {
       body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: 'Template non valido' } })
     };
   }
-  TEMPLATES.push(normalized);
+  const nextTemplates = [...templatesCache, normalized];
+  try {
+    templatesCache = nextTemplates;
+    persistTemplates();
+  } catch (error) {
+    refreshTemplates();
+    throw error;
+  }
   return {
     statusCode: 200,
     headers: headers(),
-    body: JSON.stringify({ ok: true, data: sortTemplates(TEMPLATES).map(cloneTemplate) })
+    body: JSON.stringify({ ok: true, data: sortTemplates(templatesCache).map(cloneTemplate) })
   };
 }
 
@@ -142,7 +177,7 @@ async function activateTemplate(event) {
       body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'id mancante' } })
     };
   }
-  const target = TEMPLATES.find((tpl) => tpl.id === id);
+  const target = templatesCache.find((tpl) => tpl.id === id);
   if (!target) {
     return {
       statusCode: 404,
@@ -150,20 +185,26 @@ async function activateTemplate(event) {
       body: JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'Template non trovato' } })
     };
   }
-  TEMPLATES.forEach((tpl) => {
-    if (tpl.code === target.code) {
-      tpl.status = tpl.id === id ? 'active' : 'inactive';
-    }
+  const nextTemplates = templatesCache.map((tpl) => {
+    if (tpl.code !== target.code) return tpl;
+    return { ...tpl, status: tpl.id === id ? 'active' : 'inactive' };
   });
+  try {
+    templatesCache = nextTemplates;
+    persistTemplates();
+  } catch (error) {
+    refreshTemplates();
+    throw error;
+  }
   return {
     statusCode: 200,
     headers: headers(),
-    body: JSON.stringify({ ok: true, data: sortTemplates(TEMPLATES).map(cloneTemplate) })
+    body: JSON.stringify({ ok: true, data: sortTemplates(templatesCache).map(cloneTemplate) })
   };
 }
 
 function deleteTemplate(id) {
-  const index = TEMPLATES.findIndex((tpl) => tpl.id === id);
+  const index = templatesCache.findIndex((tpl) => tpl.id === id);
   if (index === -1) {
     return {
       statusCode: 404,
@@ -171,11 +212,18 @@ function deleteTemplate(id) {
       body: JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'Template non trovato' } })
     };
   }
-  TEMPLATES.splice(index, 1);
+  const nextTemplates = templatesCache.filter((tpl) => tpl.id !== id);
+  try {
+    templatesCache = nextTemplates;
+    persistTemplates();
+  } catch (error) {
+    refreshTemplates();
+    throw error;
+  }
   return {
     statusCode: 200,
     headers: headers(),
-    body: JSON.stringify({ ok: true, data: sortTemplates(TEMPLATES).map(cloneTemplate) })
+    body: JSON.stringify({ ok: true, data: sortTemplates(templatesCache).map(cloneTemplate) })
   };
 }
 
