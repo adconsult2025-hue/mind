@@ -184,105 +184,71 @@ const refreshTemplates = () => {
   return templatesCache;
 };
 
-const getPathSuffix = (eventPath = '') => {
-  if (!eventPath) return '';
-  const normalized = eventPath.startsWith('/') ? eventPath : `/${eventPath}`;
-  return normalized
+const getPathSuffix = (eventOrPath = '') => {
+  const rawPath = typeof eventOrPath === 'string' ? eventOrPath : eventOrPath?.path || '';
+  if (!rawPath) return '';
+  const normalized = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+  const cleaned = normalized
     .replace(/^\/\.netlify\/functions\/templates(?=\/|$)/, '')
     .replace(/^\/api\/templates(?=\/|$)/, '')
     .replace(/^\/+/, '/');
+  return cleaned === '/' ? '/' : cleaned || '';
 };
 
+const safeModeDryRunResponse = (message = 'SAFE_MODE: operazione simulata (nessun salvataggio eseguito).') => ({
+  statusCode: 200,
+  headers: headers(),
+  body: JSON.stringify({ ok: true, dryRun: true, message })
+});
+
 exports.handler = async function handler(event) {
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers: headers(), body: '' };
+  const h = headers();
+  const method = event.httpMethod;
+
+  if (method === 'OPTIONS') {
+    return { statusCode: 200, headers: h, body: '' };
   }
 
-  const pathSuffix = getPathSuffix(event.path || '');
+  const pathSuffix = getPathSuffix(event);
 
-  if (event.httpMethod === 'GET') {
-    if (!pathSuffix || pathSuffix === '' || pathSuffix === '/') {
-      try {
-        const params = event.queryStringParameters || {};
-        const moduleParam = typeof params.module === 'string' ? params.module.trim().toLowerCase() : null;
-        const invalidModule = moduleParam && !ALLOWED_FILTER_MODULES.has(moduleParam);
-        const moduleFilter = moduleParam && !invalidModule ? moduleParam : null;
-        const data = invalidModule ? [] : await readTemplates({ module: moduleFilter });
-        return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data }) };
-      } catch (err) {
-        return {
-          statusCode: 500,
-          headers: headers(),
-          body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: err.message } })
-        };
-      }
-    }
-
-    if (pathSuffix === '/upload') {
-      return {
-        statusCode: 200,
-        headers: headers(),
-        body: JSON.stringify({
-          ok: true,
-          message: 'Endpoint attivo. Utilizzare il metodo POST su /api/templates/upload per caricare un modello.'
-        })
-      };
-    }
-
-    return methodNotAllowed('Metodo non supportato per questa risorsa', {
-      allowed: ['GET /api/templates', 'POST /api/templates/upload']
-    });
+  if (method === 'GET' && (!pathSuffix || pathSuffix === '/' || pathSuffix === '')) {
+    return listTemplates(event);
   }
 
-  if (event.httpMethod === 'POST') {
-    if (SAFE_MODE) {
-      return {
-        statusCode: 200,
-        headers: headers(),
-        body: JSON.stringify({ ok: true, dryRun: true, message: 'SAFE_MODE: operazione simulata (nessun salvataggio eseguito).' })
-      };
-    }
+  if (method === 'GET' && (pathSuffix === '/upload' || pathSuffix === '/upload/')) {
+    return {
+      statusCode: 200,
+      headers: h,
+      body: JSON.stringify({
+        ok: true,
+        message: 'Endpoint attivo. Utilizzare il metodo POST su /api/templates/upload per caricare un modello.'
+      })
+    };
+  }
+
+  if (method === 'POST' && (pathSuffix === '/update' || pathSuffix === '/update/')) {
+    return updateTemplate(event);
+  }
+
+  if (method === 'POST' && (pathSuffix === '/upload' || pathSuffix === '/upload/')) {
+    if (SAFE_MODE) return safeModeDryRunResponse();
+    return uploadTemplate(event);
+  }
+
+  if (method === 'POST' && (!pathSuffix || pathSuffix === '/' || pathSuffix === '' || pathSuffix === '/activate' || pathSuffix.startsWith('/'))) {
+    return mutateTemplates(event, pathSuffix);
+  }
+
+  if (method === 'DELETE' && pathSuffix.startsWith('/')) {
+    if (SAFE_MODE) return safeModeDryRunResponse();
 
     try {
-      if (pathSuffix === '/upload') {
-        return uploadTemplate(event);
-      }
-
-      if (pathSuffix === '/activate') {
-        return activateTemplate(event);
-      }
-
-      if (pathSuffix.startsWith('/')) {
-        const id = decodeURIComponent(pathSuffix.slice(1));
-        return deleteTemplate(id);
-      }
-
-      return methodNotAllowed('Endpoint non supportato');
-    } catch (err) {
-      return {
-        statusCode: 500,
-        headers: headers(),
-        body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: err.message || 'Errore interno' } })
-      };
-    }
-  }
-
-  if (event.httpMethod === 'DELETE' && pathSuffix.startsWith('/')) {
-    if (SAFE_MODE) {
-      return {
-        statusCode: 200,
-        headers: headers(),
-        body: JSON.stringify({ ok: true, dryRun: true, message: 'SAFE_MODE: operazione simulata (nessun salvataggio eseguito).' })
-      };
-    }
-
-    try {
-      const id = decodeURIComponent(pathSuffix.slice(1));
+      const id = decodeURIComponent(pathSuffix.replace(/^\/+/, ''));
       return deleteTemplate(id);
     } catch (err) {
       return {
         statusCode: 500,
-        headers: headers(),
+        headers: h,
         body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: err.message || 'Errore interno' } })
       };
     }
@@ -290,6 +256,141 @@ exports.handler = async function handler(event) {
 
   return methodNotAllowed();
 };
+
+async function listTemplates(event) {
+  try {
+    const params = event.queryStringParameters || {};
+    const moduleParam = typeof params.module === 'string' ? params.module.trim().toLowerCase() : null;
+    const invalidModule = moduleParam && !ALLOWED_FILTER_MODULES.has(moduleParam);
+    const moduleFilter = moduleParam && !invalidModule ? moduleParam : null;
+    const data = invalidModule ? [] : await readTemplates({ module: moduleFilter });
+    return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data }) };
+  } catch (err) {
+    return {
+      statusCode: 500,
+      headers: headers(),
+      body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: err.message || 'Errore interno' } })
+    };
+  }
+}
+
+async function updateTemplate(event) {
+  if (SAFE_MODE) {
+    return safeModeDryRunResponse('SAFE_MODE: aggiornamento simulato (nessun salvataggio eseguito).');
+  }
+
+  const body = safeJson(event.body);
+  const { id } = body || {};
+
+  if (!id) {
+    return {
+      statusCode: 400,
+      headers: headers(),
+      body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'id mancante' } })
+    };
+  }
+
+  const templates = refreshTemplates();
+  const index = templates.findIndex((tpl) => tpl.id === id);
+
+  if (index === -1) {
+    return {
+      statusCode: 404,
+      headers: headers(),
+      body: JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'Template non trovato' } })
+    };
+  }
+
+  const target = templates[index];
+  const nextPayload = {
+    ...target,
+    ...(Object.prototype.hasOwnProperty.call(body, 'name')
+      ? { name: typeof body.name === 'string' ? body.name : target.name }
+      : {}),
+    ...(Object.prototype.hasOwnProperty.call(body, 'module')
+      ? { module: typeof body.module === 'string' ? body.module : target.module }
+      : {}),
+    ...(Object.prototype.hasOwnProperty.call(body, 'content')
+      ? { content: typeof body.content === 'string' ? body.content : String(body.content ?? '') }
+      : {}),
+    placeholders: coercePlaceholders(body.placeholders, target.placeholders),
+  };
+
+  const normalized = normalizeTemplate({
+    ...nextPayload,
+    id: target.id,
+    version: target.version,
+    status: target.status,
+    url: target.url,
+    file_meta: target.file_meta,
+    fileName: target.fileName,
+    uploaded_at: target.uploaded_at,
+  });
+
+  if (!normalized) {
+    return {
+      statusCode: 500,
+      headers: headers(),
+      body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: 'Aggiornamento non valido' } })
+    };
+  }
+
+  const nextTemplates = templates.map((tpl) => (tpl.id === target.id ? normalized : tpl));
+
+  try {
+    templatesCache = nextTemplates;
+    persistTemplates();
+  } catch (error) {
+    refreshTemplates();
+    return {
+      statusCode: 500,
+      headers: headers(),
+      body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: error.message || 'Errore interno' } })
+    };
+  }
+
+  return {
+    statusCode: 200,
+    headers: headers(),
+    body: JSON.stringify({ ok: true, data: sortTemplates(templatesCache).map(cloneTemplate) })
+  };
+}
+
+async function mutateTemplates(event, pathSuffix = '') {
+  if (SAFE_MODE) {
+    return safeModeDryRunResponse();
+  }
+
+  try {
+    if (pathSuffix === '/activate' || pathSuffix === '/activate/') {
+      return activateTemplate(event);
+    }
+
+    if (pathSuffix && pathSuffix !== '/' && pathSuffix.startsWith('/')) {
+      const id = decodeURIComponent(pathSuffix.replace(/^\/+/, ''));
+      return deleteTemplate(id);
+    }
+
+    const body = safeJson(event.body);
+    const action = typeof body.action === 'string' ? body.action.trim().toLowerCase() : null;
+
+    if (action === 'activate' && body.id) {
+      return activateTemplate({ ...event, body: JSON.stringify({ id: body.id }) });
+    }
+
+    if (action === 'delete' && body.id) {
+      return deleteTemplate(String(body.id));
+    }
+
+    return methodNotAllowed('Endpoint non supportato');
+  } catch (err) {
+    return {
+      statusCode: 500,
+      headers: headers(),
+      body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: err.message || 'Errore interno' } })
+    };
+  }
+}
 
 async function uploadTemplate(event) {
   const templates = refreshTemplates();
@@ -500,6 +601,33 @@ function deleteTemplate(id) {
     headers: headers(),
     body: JSON.stringify({ ok: true, data: sortTemplates(templatesCache).map(cloneTemplate) })
   };
+}
+
+function coercePlaceholders(value, fallback = []) {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => (typeof entry === 'string' ? entry : String(entry ?? '')))
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(/[,\n]/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+
+  if (value === null) {
+    return [];
+  }
+
+  if (!Array.isArray(fallback)) return [];
+
+  return fallback
+    .map((entry) => (typeof entry === 'string' ? entry : String(entry ?? '')))
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }
 
 function safeJson(raw) {
