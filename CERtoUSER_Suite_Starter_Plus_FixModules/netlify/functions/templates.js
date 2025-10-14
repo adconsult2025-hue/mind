@@ -143,10 +143,10 @@ const loadTemplates = () => sortTemplates(readSourceTemplates()).map(cloneTempla
 
 let templatesCache = loadTemplates();
 
-let cachedUploadsLocation = null;
+let uploadsLocationCache = null;
 
 const ensureUploadsDir = () => {
-  if (cachedUploadsLocation) return cachedUploadsLocation;
+  if (uploadsLocationCache) return uploadsLocationCache;
 
   const candidates = [
     ENV_UPLOADS_DIR ? { dir: ENV_UPLOADS_DIR, scope: 'custom' } : null,
@@ -158,33 +158,8 @@ const ensureUploadsDir = () => {
     try {
       if (candidate.scope === 'data') ensureDataDir();
       fs.mkdirSync(candidate.dir, { recursive: true });
-      cachedUploadsLocation = candidate;
-      return cachedUploadsLocation;
-    } catch (error) {
-      console.warn('[templates] directory upload non disponibile:', candidate.dir, error?.message || error);
-    }
-  }
-
-  throw new Error('Area storage upload non disponibile');
-};
-
-let cachedUploadsLocation = null;
-
-const ensureUploadsDir = () => {
-  if (cachedUploadsLocation) return cachedUploadsLocation;
-
-  const candidates = [
-    ENV_UPLOADS_DIR ? { dir: ENV_UPLOADS_DIR, scope: 'custom' } : null,
-    { dir: DATA_UPLOADS_DIR, scope: 'data' },
-    { dir: TMP_UPLOADS_DIR, scope: 'tmp' },
-  ].filter(Boolean);
-
-  for (const candidate of candidates) {
-    try {
-      if (candidate.scope === 'data') ensureDataDir();
-      fs.mkdirSync(candidate.dir, { recursive: true });
-      cachedUploadsLocation = candidate;
-      return cachedUploadsLocation;
+      uploadsLocationCache = candidate;
+      return uploadsLocationCache;
     } catch (error) {
       console.warn('[templates] directory upload non disponibile:', candidate.dir, error?.message || error);
     }
