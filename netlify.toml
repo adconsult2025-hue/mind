@@ -1,7 +1,7 @@
 [build]
-  base = "CERtoUSER_Suite_Starter_Plus_FixModules"
-  publish = "."
-  functions = "netlify/functions"
+  base = "."
+  publish = "CERtoUSER_Suite_Starter_Plus_FixModules"
+  functions = "CERtoUSER_Suite_Starter_Plus_FixModules/netlify/functions"
 
 [[redirects]]
   from = "/api/*"
