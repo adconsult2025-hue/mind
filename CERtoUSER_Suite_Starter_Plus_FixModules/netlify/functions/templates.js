@@ -75,10 +75,17 @@ exports.handler = guard(async function handler(event) {
 
   const pathSuffix = event.path.replace(/^\/\.netlify\/functions\/templates/, '');
 
-  try {
-    if (event.httpMethod === 'GET' && (!pathSuffix || pathSuffix === '' || pathSuffix === '/')) {
-      return listTemplates(event);
+  if (event.httpMethod === 'GET' && (!pathSuffix || pathSuffix === '' || pathSuffix === '/')) {
+    try {
+      const qs = event.queryStringParameters || {};
+      const data = await listTemplates(qs);
+      return { statusCode: 200, headers, body: JSON.stringify(data) };
+    } catch (err) {
+      return { statusCode: 500, headers, body: JSON.stringify({ error: 'TEMPLATES_READ_ERROR', message: String(err?.message || err) }) };
     }
+  }
+
+  try {
 
     if (event.httpMethod === 'POST' && pathSuffix === '/upload') {
       return uploadTemplate(event);
@@ -107,8 +114,8 @@ exports.handler = guard(async function handler(event) {
   }
 });
 
-function listTemplates(event) {
-  const { module, status } = event.queryStringParameters || {};
+function listTemplates(query = {}) {
+  const { module, status } = query;
   const templates = refreshTemplates();
   const filtered = templates.filter((tpl) => {
     const moduleOk = module ? tpl.module === module : true;
