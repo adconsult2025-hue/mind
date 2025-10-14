@@ -16,28 +16,39 @@ const templateSorter = (a, b) => {
 };
 
 const DATA_FILE = path.join(__dirname, '../data/templates.json');
+const SEED_FILE = path.join(__dirname, 'templates.seed.json');
 const DATA_DIR = path.dirname(DATA_FILE);
 
-const loadSeedTemplates = () => {
-  if (!fs.existsSync(DATA_FILE)) {
-    return [];
+const loadTemplatesFromFile = (filePath, { label } = {}) => {
+  if (!fs.existsSync(filePath)) {
+    return null;
   }
   try {
-    const filePath = path.join(__dirname, 'templates.seed.json');
     const raw = fs.readFileSync(filePath, 'utf8');
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
+    if (!Array.isArray(parsed)) {
+      throw new Error('Formato non valido: atteso array');
+    }
     return parsed
       .map(normalizeTemplate)
       .filter(Boolean)
       .sort(templateSorter);
   } catch (error) {
-    console.warn('[templates] seed non disponibile o non valido:', error?.message || error);
-    return [];
+    const origin = label ? `${label} ` : '';
+    console.warn(`[templates] ${origin}non disponibile o non valido:`, error?.message || error);
+    return null;
   }
 };
 
-let templatesCache = loadSeedTemplates();
+const loadTemplates = () => {
+  const persisted = loadTemplatesFromFile(DATA_FILE, { label: 'persistenza' });
+  if (persisted) return persisted;
+  const seeded = loadTemplatesFromFile(SEED_FILE, { label: 'seed' });
+  if (seeded) return seeded;
+  return [];
+};
+
+let templatesCache = loadTemplates();
 
 const ensureDataDir = () => {
   if (!fs.existsSync(DATA_DIR)) {
@@ -57,7 +68,7 @@ const persistTemplates = () => {
 };
 
 const refreshTemplates = () => {
-  templatesCache = loadSeedTemplates();
+  templatesCache = loadTemplates();
   return templatesCache;
 };
 
