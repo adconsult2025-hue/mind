@@ -198,6 +198,32 @@ exports.handler = async function handler(event) {
     return { statusCode: 200, headers: headers(), body: '' };
   }
 
+  let rawSuffix = '';
+  try {
+    const baseUrl = event.rawUrl || (`https://x${event.path || ''}`);
+    const url = new URL(baseUrl);
+    rawSuffix = getPathSuffix(url.pathname) || '';
+  } catch (error) {
+    rawSuffix = '';
+  }
+  if (!rawSuffix) {
+    rawSuffix = getPathSuffix(event.path || '') || '';
+  }
+  const normalizedSuffix = rawSuffix && rawSuffix !== '/' ? rawSuffix.replace(/\/+$/, '') : rawSuffix;
+
+  if (event.httpMethod === 'POST' && normalizedSuffix === '/update') {
+    try {
+      return await updateTemplate(event);
+    } catch (err) {
+      console.error('[templates] update error:', err?.message || err);
+      return {
+        statusCode: 500,
+        headers: headers(),
+        body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: err?.message || 'Errore interno' } })
+      };
+    }
+  }
+
   const pathSuffix = getPathSuffix(event.path || '');
 
   if (event.httpMethod === 'GET') {
@@ -290,6 +316,145 @@ exports.handler = async function handler(event) {
 
   return methodNotAllowed();
 };
+
+async function updateTemplate(event) {
+  let payload;
+  try {
+    payload = JSON.parse(event.body || '{}');
+  } catch (error) {
+    return {
+      statusCode: 400,
+      headers: headers(),
+      body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'Payload JSON non valido' } })
+    };
+  }
+
+  const { code, module: moduleValue, version, contentHtml, placeholders } = payload || {};
+  const normalizedCode = typeof code === 'string' ? code.trim().toUpperCase() : '';
+  const normalizedModule = typeof moduleValue === 'string' ? moduleValue.trim().toLowerCase() : '';
+
+  if (!normalizedCode || !normalizedModule) {
+    return {
+      statusCode: 400,
+      headers: headers(),
+      body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'code e module sono obbligatori' } })
+    };
+  }
+
+  let resolvedContent = '';
+  if (typeof contentHtml === 'undefined' || contentHtml === null) {
+    resolvedContent = '';
+  } else if (typeof contentHtml === 'string') {
+    resolvedContent = contentHtml;
+  } else {
+    return {
+      statusCode: 400,
+      headers: headers(),
+      body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'contentHtml deve essere una stringa' } })
+    };
+  }
+
+  let normalizedPlaceholders = [];
+  if (Array.isArray(placeholders)) {
+    normalizedPlaceholders = placeholders
+      .map((item) => String(item).trim())
+      .filter(Boolean);
+  } else if (typeof placeholders === 'string') {
+    normalizedPlaceholders = placeholders
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+  } else if (typeof placeholders === 'undefined' || placeholders === null) {
+    normalizedPlaceholders = [];
+  } else {
+    return {
+      statusCode: 400,
+      headers: headers(),
+      body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'placeholders deve essere un array o una stringa' } })
+    };
+  }
+
+  let resolvedVersion = null;
+  if (version !== undefined && version !== null && String(version).trim() !== '') {
+    const parsedVersion = Number.parseInt(String(version).trim(), 10);
+    if (Number.isNaN(parsedVersion)) {
+      return {
+        statusCode: 400,
+        headers: headers(),
+        body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'version deve essere un numero intero' } })
+      };
+    }
+    resolvedVersion = parsedVersion;
+  }
+
+  const templates = refreshTemplates();
+  const candidates = templates.filter((tpl) => (
+    String(tpl.code).trim().toUpperCase() === normalizedCode
+    && String(tpl.module).trim().toLowerCase() === normalizedModule
+  ));
+
+  if (!candidates.length) {
+    return {
+      statusCode: 404,
+      headers: headers(),
+      body: JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'Template non trovato' } })
+    };
+  }
+
+  let targetTemplate = null;
+  if (resolvedVersion != null) {
+    targetTemplate = candidates.find((tpl) => Number.parseInt(tpl.version, 10) === resolvedVersion);
+  } else {
+    targetTemplate = candidates.reduce((latest, tpl) => (
+      !latest || Number(tpl.version) > Number(latest.version) ? tpl : latest
+    ), null);
+  }
+
+  if (!targetTemplate) {
+    return {
+      statusCode: 404,
+      headers: headers(),
+      body: JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'Template non trovato' } })
+    };
+  }
+
+  const updatedTemplate = {
+    ...targetTemplate,
+    content: String(resolvedContent || ''),
+    placeholders: normalizedPlaceholders,
+    updated_at: new Date().toISOString(),
+  };
+
+  const nextTemplates = templates.map((tpl) => (tpl.id === updatedTemplate.id ? updatedTemplate : tpl));
+
+  if (SAFE_MODE) {
+    return {
+      statusCode: 200,
+      headers: headers(),
+      body: JSON.stringify({ ok: true, dryRun: true, data: cloneTemplate(updatedTemplate) })
+    };
+  }
+
+  try {
+    templatesCache = nextTemplates;
+    persistTemplates();
+    const refreshed = refreshTemplates();
+    const persisted = refreshed.find((tpl) => tpl.id === updatedTemplate.id) || updatedTemplate;
+    return {
+      statusCode: 200,
+      headers: headers(),
+      body: JSON.stringify({ ok: true, data: cloneTemplate(persisted) })
+    };
+  } catch (error) {
+    console.error('[templates] update persist error:', error?.message || error);
+    refreshTemplates();
+    return {
+      statusCode: 500,
+      headers: headers(),
+      body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: error?.message || 'Errore interno' } })
+    };
+  }
+}
 
 async function uploadTemplate(event) {
   const templates = refreshTemplates();

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>MIND — Suite</title>
   <link rel="icon" href="/assets/img/mind.png">
-  <link rel="stylesheet" href="/assets/css/style.css?v=36"/>
+  <link rel="stylesheet" href="/assets/css/style.css?v=40"/>
   <script>
     (function(){
       const host = location.hostname.toLowerCase();
@@ -23,8 +23,8 @@
       window.__SAFE_MODE__ = (resolvedEnv ?? heuristics);
     })();
   </script>
-  <script type="module" src="/assets/js/app.js?v=36"></script>
-  <script type="module" src="/assets/js/models.js?v=36"></script>
+  <script type="module" src="/assets/js/app.js?v=40"></script>
+  <script type="module" src="/assets/js/models.js?v=40"></script>
 </head>
 <body class="dark">
   <header class="app-header">
@@ -132,6 +132,40 @@
       <div class="modal-actions">
         <button class="btn" id="btn-submit-upload" type="button">Salva versione</button>
         <button class="btn ghost" data-dismiss="modal" type="button">Annulla</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="edit-modal" aria-hidden="true">
+    <div class="modal-backdrop" data-dismiss="modal"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2>Modifica template</h2>
+        <button class="btn ghost" data-dismiss="modal" type="button">Chiudi</button>
+      </div>
+      <form id="template-edit-form" class="modal-body">
+        <div class="grid two-cols">
+          <label>Code
+            <input type="text" id="tpl-edit-code" readonly />
+          </label>
+          <label>Module
+            <input type="text" id="tpl-edit-module" readonly />
+          </label>
+        </div>
+        <label>Version
+          <input type="text" id="tpl-edit-version" readonly />
+        </label>
+        <label>Contenuto (HTML)
+          <textarea id="tpl-edit-content" rows="10" placeholder="&lt;article&gt;&lt;h1&gt;...&lt;/h1&gt;&lt;/article&gt;"></textarea>
+        </label>
+        <label>Placeholder supportati
+          <textarea id="tpl-edit-placeholders" rows="6" placeholder="{{cer.nome}}
+{{oggi}}"></textarea>
+        </label>
+      </form>
+      <div class="modal-actions">
+        <button class="btn ghost" data-dismiss="modal" type="button">Annulla</button>
+        <button class="btn" id="tpl-edit-save" type="button">Salva</button>
       </div>
     </div>
   </div>
