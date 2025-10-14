@@ -6,9 +6,14 @@ const SAFE_MODE = String(process.env.SAFE_MODE || '').toLowerCase() === 'true';
 const headers = () => ({
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+  'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Cache-Control': 'no-store, no-cache, must-revalidate',
+  'Pragma': 'no-cache',
+  'Expires': '0'
 });
+
+const ALLOWED_FILTER_MODULES = new Set(['cer', 'crm', 'ct3', 'contratti']);
 
 const templateSorter = (a, b) => {
   if (a.code === b.code) return Number(b.version || 0) - Number(a.version || 0);
@@ -92,7 +97,9 @@ exports.handler = async function handler(event) {
   if (event.httpMethod === 'GET' && (!pathSuffix || pathSuffix === '' || pathSuffix === '/')) {
     try {
       const params = event.queryStringParameters || {};
-      const data = await readTemplates({ module: params.module });
+      const moduleParam = typeof params.module === 'string' ? params.module.trim().toLowerCase() : null;
+      const moduleFilter = moduleParam && ALLOWED_FILTER_MODULES.has(moduleParam) ? moduleParam : null;
+      const data = await readTemplates({ module: moduleFilter });
       return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data }) };
     } catch (err) {
       return {
