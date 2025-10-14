@@ -6,9 +6,9 @@ const SAFE_MODE = String(process.env.SAFE_MODE || '').toLowerCase() === 'true';
 const headers = () => ({
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
+  'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Cache-Control': 'no-store, no-cache, must-revalidate',
+  'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
   'Pragma': 'no-cache',
   'Expires': '0'
 });
@@ -87,19 +87,29 @@ const refreshTemplates = () => {
   return templatesCache;
 };
 
+const getPathSuffix = (eventPath = '') => {
+  if (!eventPath) return '';
+  const normalized = eventPath.startsWith('/') ? eventPath : `/${eventPath}`;
+  return normalized
+    .replace(/^\/\.netlify\/functions\/templates(?=\/|$)/, '')
+    .replace(/^\/api\/templates(?=\/|$)/, '')
+    .replace(/^\/+/, '/');
+};
+
 exports.handler = async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers: headers(), body: '' };
   }
 
-  const pathSuffix = event.path.replace(/^\/\.netlify\/functions\/templates/, '');
+  const pathSuffix = getPathSuffix(event.path || '');
 
   if (event.httpMethod === 'GET' && (!pathSuffix || pathSuffix === '' || pathSuffix === '/')) {
     try {
       const params = event.queryStringParameters || {};
       const moduleParam = typeof params.module === 'string' ? params.module.trim().toLowerCase() : null;
-      const moduleFilter = moduleParam && ALLOWED_FILTER_MODULES.has(moduleParam) ? moduleParam : null;
-      const data = await readTemplates({ module: moduleFilter });
+      const invalidModule = moduleParam && !ALLOWED_FILTER_MODULES.has(moduleParam);
+      const moduleFilter = moduleParam && !invalidModule ? moduleParam : null;
+      const data = invalidModule ? [] : await readTemplates({ module: moduleFilter });
       return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data }) };
     } catch (err) {
       return {
