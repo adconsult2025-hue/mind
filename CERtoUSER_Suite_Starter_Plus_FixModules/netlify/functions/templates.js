@@ -23,7 +23,8 @@ const loadSeedTemplates = () => {
     return [];
   }
   try {
-    const raw = fs.readFileSync(DATA_FILE, 'utf8');
+    const filePath = path.join(__dirname, 'templates.seed.json');
+    const raw = fs.readFileSync(filePath, 'utf8');
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed
