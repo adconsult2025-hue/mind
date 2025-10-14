@@ -1,5 +1,7 @@
 [build]
+  # Publish from the repo root so Netlify doesn't duplicate the base path
   publish = "."
+  # Functions folder relative to the repo root
   functions = "netlify/functions"
 
 [[redirects]]
