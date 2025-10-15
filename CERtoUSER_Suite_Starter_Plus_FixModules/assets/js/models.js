@@ -73,7 +73,7 @@ async function fetchTemplates() {
   const query = filter && filter !== 'all' ? `?module=${encodeURIComponent(filter)}` : '';
   try {
     const payload = await fetchJSON(`${API_BASE}${query}`);
-    templates = payload.data || [];
+    templates = Array.isArray(payload.data) ? payload.data : Array.isArray(payload) ? payload : [];
   } catch (err) {
     console.error(err);
     templates = [];
