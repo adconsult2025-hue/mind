@@ -377,42 +377,19 @@ function defaultAccordoProduttoreProsumerTemplate(ctx) {
   `;
 }
 
-export async function statutoTemplate(cer, membri) {
-  const context = buildDocContext(cer, membri);
-  return renderWithFallback('statuto', context, defaultStatutoTemplate);
-}
-
-export async function regolamentoTemplate(cer, membri) {
-  const context = buildDocContext(cer, membri);
-  return renderWithFallback('regolamento', context, defaultRegolamentoTemplate);
-}
-
-export async function attoCostitutivoTemplate(cer) {
-  const context = buildDocContext(cer, cer?.membri || []);
-  return renderWithFallback('atto_costitutivo', context, defaultAttoCostitutivoTemplate);
-}
-
-export async function adesioneTemplate(cer, membro) {
-  const context = extendContext(buildDocContext(cer, cer?.membri || []), buildMemberContext(membro));
-  return renderWithFallback('adesione', context, defaultAdesioneTemplate);
-}
-
-export async function delegaGSETemplate(cer, membri) {
-  const context = buildDocContext(cer, membri);
-  return renderWithFallback('delega_gse', context, defaultDelegaTemplate);
-}
-
-export async function contrattoTraderTemplate(cer) {
-  const context = buildDocContext(cer, cer?.membri || []);
-  return renderWithFallback('contratto_trader', context, defaultContrattoTemplate);
-}
-
-export async function informativaGDPRTemplate(soggetto) {
-  const context = extendContext(buildDocContext(soggetto, soggetto?.membri || []), buildSubjectContext(soggetto));
-  return renderWithFallback('informativa_gdpr', context, defaultPrivacyTemplate);
-}
-
-export async function accordoProduttoreProsumerTemplate(cer, membro) {
-  const context = extendContext(buildDocContext(cer, cer?.membri || []), buildMemberContext(membro));
-  return renderWithFallback('accordo_produttore_prosumer', context, defaultAccordoProduttoreProsumerTemplate);
+export function accordoProduttoreProsumerTemplate(cer, membro) {
+  const today = new Date().toLocaleDateString('it-IT');
+  const ruolo = membro?.ruolo || 'Produttore/Prosumer';
+  const ruoloLabel = ruolo.toLowerCase();
+  return `
+  <style>body{font-family:'Times New Roman',serif;color:#000}</style>
+  <h1>ACCORDO PRODUTTORE/PROSUMER</h1>
+  <p>Tra la Comunità Energetica Rinnovabile "<strong>${cer.nome}</strong>", con sede nel Comune di ${cer.comune} e cabina primaria ${cer.cabina},</p>
+  <p>e il/la ${ruoloLabel} <strong>${membro?.nome || '________________'}</strong>, titolare del POD <strong>${membro?.pod || '________________'}</strong>.</p>
+  <p>Le parti concordano di condividere l'energia prodotta e/o autoconsumata nel rispetto del DM 7 dicembre 2023, delle regole ARERA/GSE e del Regolamento interno della CER.</p>
+  <p>Il membro si impegna a comunicare tempestivamente eventuali variazioni dei propri dati anagrafici e del POD, a collaborare per il monitoraggio energetico e ad attenersi alle delibere della CER.</p>
+  <p>La CER si impegna a ripartire i benefici economici secondo i criteri approvati dall'Assemblea (quota condivisa ${cer.quota || 0}%, riparto ${cer.riparto || 'standard'} o personalizzato).</p>
+  <p>Decorrenza: ${today}. Il presente accordo è valido finché il membro mantiene il ruolo di Produttore/Prosumer all'interno della CER.</p>
+  <p>Firme:<br/>CER "${cer.nome}" ____________________<br/>${membro?.nome || '________________'} ____________________</p>
+  `;
 }
