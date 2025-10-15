@@ -24,4 +24,6 @@ Se un segnaposto non è valorizzato, viene sostituito con una stringa vuota. Puo
 2. Apporta le modifiche desiderate mantenendo i segnaposto necessari.
 3. Salva il file e ricarica la pagina web: la Suite userà automaticamente la nuova versione.
 
+In alternativa, nella sezione **Documenti** puoi caricare un file HTML personalizzato solo per lo Statuto attraverso l'apposito selettore. Questa sostituzione è temporanea e resta attiva finché la pagina rimane aperta.
+
 > Suggerimento: se vuoi ripristinare i modelli originali puoi copiare il contenuto dalla versione Git precedente oppure cancellare il file. In assenza di un file personalizzato la Suite tornerà al modello standard incorporato nel codice.

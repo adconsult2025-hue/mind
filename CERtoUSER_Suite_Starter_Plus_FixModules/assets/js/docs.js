@@ -1,5 +1,6 @@
 const CER_TEMPLATE_PATH = '/config/templates/cer';
 const templateCache = new Map();
+const runtimeTemplateOverrides = new Map();
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -161,19 +162,45 @@ function buildSubjectContext(soggetto = {}) {
   };
 }
 
+function getTemplateCacheKey(name) {
+  if (!name && name !== 0) return '';
+  return String(name).trim();
+}
+
 async function loadCustomTemplate(name) {
-  if (templateCache.has(name)) {
-    return templateCache.get(name);
+  const key = getTemplateCacheKey(name);
+  if (!key) return null;
+
+  if (runtimeTemplateOverrides.has(key)) {
+    return runtimeTemplateOverrides.get(key);
+  }
+
+  if (templateCache.has(key)) {
+    return templateCache.get(key);
   }
   try {
-    const res = await fetch(`${CER_TEMPLATE_PATH}/${name}.html`, { cache: 'no-store' });
+    const res = await fetch(`${CER_TEMPLATE_PATH}/${key}.html`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`Template ${name} not found`);
     const text = await res.text();
-    templateCache.set(name, text);
+    templateCache.set(key, text);
     return text;
   } catch (err) {
-    templateCache.set(name, null);
+    templateCache.set(key, null);
     return null;
+  }
+}
+
+export function setRuntimeTemplate(name, html) {
+  const key = getTemplateCacheKey(name);
+  if (!key) return;
+
+  if (typeof html === 'string' && html.trim()) {
+    const normalized = html;
+    runtimeTemplateOverrides.set(key, normalized);
+    templateCache.set(key, normalized);
+  } else {
+    runtimeTemplateOverrides.delete(key);
+    templateCache.delete(key);
   }
 }
 
