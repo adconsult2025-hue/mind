@@ -140,7 +140,7 @@ function init() {
 async function loadCerTemplates() {
   if (!templateSelect) return;
   try {
-    const res = await fetch(`${API_BASE}/templates`, { headers: { Accept: 'application/json' } });
+    const res = await fetch('/api2/templates', { headers: { Accept: 'application/json' } });
     const payload = await res.json();
     if (!res.ok || payload.ok === false) throw new Error(payload.error?.message || 'Impossibile caricare i modelli CER');
     cerTemplates = filterCerTemplates(extractTemplatesList(payload));
@@ -157,11 +157,12 @@ function populateCerTemplateSelect() {
   templateSelect.innerHTML = '<option value="">Nessun modello attivo</option>';
   cerTemplates.forEach((tpl) => {
     const opt = document.createElement('option');
-    opt.value = tpl.code;
+    const optionValue = tpl.slug || tpl.code || tpl.id;
+    opt.value = optionValue;
     const moduleLabel = tpl.module ? ` · ${String(tpl.module).toUpperCase()}` : '';
     const versionLabel = tpl.version != null ? ` · v${tpl.version}` : '';
     opt.textContent = `${tpl.code}${versionLabel}${moduleLabel}`;
-    if (current && current === tpl.code) opt.selected = true;
+    if (current && (current === optionValue || matchesTemplateValue(tpl, current))) opt.selected = true;
     templateSelect.appendChild(opt);
   });
 }
@@ -177,10 +178,13 @@ function bindCerForm() {
     cer.id = uid('cer');
 
     if (cer.template_code) {
-      const activeTemplate = cerTemplates.find(tpl => tpl.code === cer.template_code);
+      const activeTemplate = cerTemplates.find((tpl) => matchesTemplateValue(tpl, cer.template_code));
       if (activeTemplate) {
+        cer.template_slug = activeTemplate.slug || '';
+        cer.template_code = activeTemplate.code;
         cer.template_version = activeTemplate.version;
         cer.template_url = activeTemplate.url;
+        cer.template_id = activeTemplate.id;
       }
     }
 
@@ -529,6 +533,11 @@ function loadCerDetail(cerId) {
   fields.forEach((name) => {
     const el = form.elements.namedItem(name);
     if (!el) return;
+    if (name === 'template_code') {
+      const templateValue = target.template_slug || target.template_code || '';
+      el.value = templateValue;
+      return;
+    }
     const value = target[name] ?? '';
     if (name === 'quota' && !value) {
       el.value = 60;
@@ -818,7 +827,7 @@ function handleCerDocEvent(detail) {
 // ===== Templates CER: fetch & render =====
 async function fetchCerTemplates() {
   try {
-    const r = await fetch('/api/templates', { headers: { Accept: 'application/json' } });
+    const r = await fetch('/api2/templates', { headers: { Accept: 'application/json' } });
     const list = await r.json();
     return filterCerTemplates(extractTemplatesList(list));
   } catch (e) {
@@ -862,7 +871,7 @@ function renderCerTemplatesDropdown(templates, hostEl) {
       return;
     }
 
-    const tpl = safeTemplates.find((t) => (t.slug === sel) || (t.code === sel) || (String(t.id) === sel));
+    const tpl = safeTemplates.find((t) => matchesTemplateValue(t, sel));
     const templateSlug = tpl?.slug || tpl?.code || sel;
 
     const cerId = host.getAttribute('data-cer-id')
@@ -882,7 +891,7 @@ function renderCerTemplatesDropdown(templates, hostEl) {
     button.textContent = 'Generazione…';
 
     try {
-      const res = await fetch('/api/documents/generate', {
+      const res = await fetch('/api2/documents/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -902,14 +911,13 @@ function renderCerTemplatesDropdown(templates, hostEl) {
         return;
       }
 
-      const downloadUrl = [
-        payload?.public_url,
-        payload?.data?.public_url,
-        payload?.url,
-        payload?.download_url,
-        payload?.downloadUrl,
-        payload?.data?.url
-      ].find(url => typeof url === 'string' && url.length > 0);
+      const downloadUrl =
+        payload?.public_url
+        || payload?.url
+        || payload?.download_url
+        || payload?.downloadUrl
+        || payload?.data?.public_url
+        || payload?.data?.url;
       if (downloadUrl) {
         window.open(downloadUrl, '_blank', 'noopener');
         return;
@@ -999,7 +1007,24 @@ function normalizeCerTemplate(tpl) {
     code: normalizedCode,
     slug: normalizedSlug,
     module: normalizedModule,
+    version: tpl.version ?? tpl.latest_version ?? tpl.latestVersion ?? null,
   };
+}
+
+function matchesTemplateValue(template, value) {
+  if (!template || value == null) return false;
+  const target = String(value).trim();
+  if (!target) return false;
+  const candidates = [
+    template.slug,
+    template.code,
+    template.id,
+    template.codice,
+  ];
+  return candidates
+    .filter((candidate) => candidate != null)
+    .map((candidate) => String(candidate).trim())
+    .some((candidate) => candidate === target);
 }
 
 function pickFirstNonEmpty(candidates) {
