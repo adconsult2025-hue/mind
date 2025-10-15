@@ -419,7 +419,8 @@ function bindCerForm() {
     e.preventDefault();
     const fd = new FormData(form);
     const cer = Object.fromEntries(fd.entries());
-    cer.id = uid('cer');
+    const editingId = form.dataset.editing || '';
+    cer.id = editingId || uid('cer');
 
     if (cer.template_code) {
       const activeTemplate = cerTemplates.find((tpl) => matchesTemplateValue(tpl, cer.template_code));
@@ -478,7 +479,7 @@ function bindCerForm() {
     cer.membri = picks;
     cer.impianti = plants;
 
-    if (form.dataset.editing) {
+    if (editingId) {
       cers = cers.map(existing => (existing.id === cer.id ? { ...existing, ...cer } : existing));
     } else {
       cers.push(cer);
@@ -486,7 +487,7 @@ function bindCerForm() {
     saveCER(cers);
     renderCERList();
     refreshCerOptions();
-    if (form.dataset.editing) {
+    if (editingId) {
       loadCerDetail(cer.id);
     } else {
       form.reset();
