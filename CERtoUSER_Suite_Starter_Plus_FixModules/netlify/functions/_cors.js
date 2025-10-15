@@ -1,20 +1,15 @@
 const corsHeaders = {
-  "Content-Type": "application/json",
   "Access-Control-Allow-Origin": process.env.ALLOWED_ORIGIN || "*",
-  "Access-Control-Allow-Headers": "authorization, content-type",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS"
 };
 
-function preflight() {
-  return { statusCode: 204, headers: corsHeaders, body: "" };
-}
+const preflight = () => ({ statusCode: 204, headers: corsHeaders, body: "" });
 
-function json(statusCode, body) {
-  return {
-    statusCode,
-    headers: corsHeaders,
-    body: JSON.stringify(body ?? {})
-  };
-}
+const json = (status, body) => ({
+  statusCode: status,
+  headers: { ...corsHeaders, "Content-Type": "application/json" },
+  body: JSON.stringify(body)
+});
 
 module.exports = { corsHeaders, preflight, json };
