@@ -282,10 +282,11 @@ const scenarios = [
       body: JSON.stringify({
         id: 'cer_test_001',
         nome: 'CER Test',
+        cabina: 'CP-001',
         membri: [
-          { id: 'm1', nome: 'Alice', ruolo: 'Consumer', pod: 'IT001E0000000001' },
-          { id: 'm2', nome: 'Bob', ruolo: 'Producer', pod: 'IT001E0000000002' },
-          { id: 'm3', nome: 'Carol', ruolo: 'Consumer', pod: 'IT001E0000000003' }
+          { id: 'm1', nome: 'Alice', ruolo: 'Consumer', pod: 'IT001E0000000001', cabina: 'CP-001' },
+          { id: 'm2', nome: 'Bob', ruolo: 'Producer', pod: 'IT001E0000000002', cabina: 'CP-001' },
+          { id: 'm3', nome: 'Carol', ruolo: 'Consumer', pod: 'IT001E0000000003', cabina: 'CP-001' }
         ],
         impianti: [{ id: 'plant_001' }]
       })

@@ -457,7 +457,7 @@ function bindCerForm() {
       if (!cb.checked) return null;
       const id = cb.dataset.id;
       const c = customers.find(x => x.id === id);
-      return { id: c.id, nome: c.nome, pod: c.pod, comune: c.comune, ruolo: role };
+      return { id: c.id, nome: c.nome, pod: c.pod, comune: c.comune, ruolo: role, cabina: c.cabina || '' };
     }).filter(Boolean);
     if (picks.length < 3) {
       toast('Per creare la CER servono almeno 3 clienti selezionati.');
@@ -467,6 +467,29 @@ function bindCerForm() {
     if (!producers.length) {
       toast('Aggiungi almeno un membro Prosumer o Produttore alla CER.');
       return;
+    }
+    const missingCabina = picks.filter(m => !String(m.cabina || '').trim()).map(m => m.nome).filter(Boolean);
+    if (missingCabina.length) {
+      toast('Tutti i membri selezionati devono avere una cabina primaria impostata nel CRM.');
+      return;
+    }
+    const memberCabinas = Array.from(new Set(picks.map(m => String(m.cabina || '').trim())));
+    if (memberCabinas.length > 1) {
+      toast('I membri selezionati appartengono a cabine primarie diverse. Limita la selezione alla stessa cabina.');
+      return;
+    }
+    const membersCabina = memberCabinas[0] || '';
+    const cerCabina = String(cer.cabina || '').trim();
+    if (cerCabina && membersCabina && cerCabina !== membersCabina) {
+      toast(`La cabina primaria indicata per la CER (${cerCabina}) non coincide con quella dei membri (${membersCabina}).`);
+      return;
+    }
+    if (!cerCabina && membersCabina) {
+      cer.cabina = membersCabina;
+      const cabinaInput = form.querySelector('input[name="cabina"]');
+      if (cabinaInput && !cabinaInput.value) {
+        cabinaInput.value = membersCabina;
+      }
     }
     const plants = collectFormPlants({ validate: true });
     if (!plants) {
@@ -511,7 +534,8 @@ function selectedMembers() {
         nome: customer.nome || 'Membro',
         pod: customer.pod || '',
         comune: customer.comune || '',
-        ruolo: role
+        ruolo: role,
+        cabina: customer.cabina || ''
       };
     })
     .filter(Boolean);

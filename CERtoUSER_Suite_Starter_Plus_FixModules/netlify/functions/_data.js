@@ -215,9 +215,9 @@ const cers = [
     quota: 60,
     riparto: 'Produttore85_CER15',
     membri: [
-      { id: 'mem_001', nome: 'Mario Rossi', ruolo: 'Consumer', pod: 'IT001E1234567890', comune: 'Frosinone' },
-      { id: 'mem_p001', nome: 'Solar Srl', ruolo: 'Produttore', pod: 'IT001E9876543210', comune: 'Frosinone' },
-      { id: 'mem_ps001', nome: 'Lucia Bianchi', ruolo: 'Prosumer', pod: 'IT001E1234598765', comune: 'Frosinone' }
+      { id: 'mem_001', nome: 'Mario Rossi', ruolo: 'Consumer', pod: 'IT001E1234567890', comune: 'Frosinone', cabina: 'CP-001' },
+      { id: 'mem_p001', nome: 'Solar Srl', ruolo: 'Produttore', pod: 'IT001E9876543210', comune: 'Frosinone', cabina: 'CP-001' },
+      { id: 'mem_ps001', nome: 'Lucia Bianchi', ruolo: 'Prosumer', pod: 'IT001E1234598765', comune: 'Frosinone', cabina: 'CP-001' }
     ],
     impianti: [
       { id: 'plant_001' },
@@ -232,9 +232,9 @@ const cers = [
     quota: 55,
     riparto: 'Produttore70_CER30',
     membri: [
-      { id: 'mem_101', nome: 'Condominio Aurora', ruolo: 'Consumer', pod: 'IT003E9988776655', comune: 'Sora' },
-      { id: 'mem_p101', nome: 'Verdi Impianti', ruolo: 'Produttore', pod: 'IT003E1234987650', comune: 'Sora' },
-      { id: 'mem_102', nome: 'Cooperativa Sole', ruolo: 'Consumer', pod: 'IT003E4567981230', comune: 'Sora' }
+      { id: 'mem_101', nome: 'Condominio Aurora', ruolo: 'Consumer', pod: 'IT003E9988776655', comune: 'Sora', cabina: 'CP-045' },
+      { id: 'mem_p101', nome: 'Verdi Impianti', ruolo: 'Produttore', pod: 'IT003E1234987650', comune: 'Sora', cabina: 'CP-045' },
+      { id: 'mem_102', nome: 'Cooperativa Sole', ruolo: 'Consumer', pod: 'IT003E4567981230', comune: 'Sora', cabina: 'CP-045' }
     ],
     impianti: [
       { id: 'plant_003' }
