@@ -3,6 +3,7 @@ const { nanoid } = require('nanoid');
 const Handlebars = require('handlebars');
 const PizZip = require('pizzip');
 const Docxtemplater = require('docxtemplater');
+const Busboy = require('busboy');
 const { promises: fs } = require('fs');
 const path = require('path');
 
@@ -17,6 +18,13 @@ class HttpError extends Error {
 }
 
 const connStr = process.env.NEON_DATABASE_URL;
+const MAX_UPLOAD_SIZE = (() => {
+  const value = Number(process.env.TEMPLATE_MAX_UPLOAD_SIZE);
+  if (Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  return 10 * 1024 * 1024; // 10 MB di default
+})();
 
 async function db() {
   if (!connStr) {
@@ -36,7 +44,8 @@ const headers = () => ({
 
 const respond = (statusCode, payload) => ({ statusCode, headers: headers(), body: JSON.stringify(payload) });
 const ok = (data) => respond(200, { ok: true, data });
-const bad = (statusCode, message, code = 'ERROR', extra = {}) => respond(statusCode, { ok: false, error: { code, message, ...extra } });
+const bad = (statusCode, message, code = 'ERROR', extra = {}) =>
+  respond(statusCode, { ok: false, error: { code, message, ...extra } });
 
 exports.handler = guard(async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
@@ -67,10 +76,21 @@ exports.handler = guard(async function handler(event) {
 });
 
 async function uploadTemplate(event) {
-  const body = parseBody(event);
-  const { name, slug, type, changelog, content_text: contentText, file } = body;
+  const { fields, files } = await parseBody(event);
+  const name = getField(fields, 'name');
+  const slug = getField(fields, 'slug');
+  const rawType = getField(fields, 'type');
+  const type = rawType ? rawType.toLowerCase() : undefined;
+  const changelog = getField(fields, 'changelog');
+  const contentText = coalesceText(fields, 'content_text', 'contentText', 'content');
+  const uploadedFile = files.file;
+
   if (!name || !slug || !type) {
     return bad(400, 'name, slug e type sono obbligatori', 'VALIDATION_ERROR');
+  }
+
+  if (!['docx', 'html', 'md'].includes(type)) {
+    return bad(400, 'type deve essere docx, html o md', 'VALIDATION_ERROR');
   }
 
   const client = await db();
@@ -83,10 +103,10 @@ async function uploadTemplate(event) {
     const version = 1;
 
     if (type === 'docx') {
-      if (!file) {
+      const buffer = extractFileBuffer(uploadedFile, fields.file);
+      if (!buffer) {
         return bad(400, 'file (base64) obbligatorio per template DOCX', 'VALIDATION_ERROR');
       }
-      const buffer = Buffer.from(file, 'base64');
       await client.query(
         'INSERT INTO template_versions(template_id, version, content, changelog) VALUES ($1, $2, $3, $4)',
         [templateId, version, buffer, changelog || 'v1']
@@ -108,8 +128,12 @@ async function uploadTemplate(event) {
 }
 
 async function updateTemplate(event) {
-  const body = parseBody(event);
-  const { templateId, changelog, content_text: contentText, file } = body;
+  const { fields, files } = await parseBody(event);
+  const templateId = getField(fields, 'templateId', 'template_id', 'id');
+  const changelog = getField(fields, 'changelog');
+  const contentText = coalesceText(fields, 'content_text', 'contentText', 'content');
+  const uploadedFile = files.file;
+
   if (!templateId) {
     return bad(400, 'templateId è obbligatorio', 'VALIDATION_ERROR');
   }
@@ -129,10 +153,10 @@ async function updateTemplate(event) {
     const version = versionResult.rows[0].version;
 
     if (type === 'docx') {
-      if (!file) {
+      const buffer = extractFileBuffer(uploadedFile, fields.file);
+      if (!buffer) {
         return bad(400, 'file (base64) obbligatorio per template DOCX', 'VALIDATION_ERROR');
       }
-      const buffer = Buffer.from(file, 'base64');
       await client.query(
         'INSERT INTO template_versions(template_id, version, content, changelog) VALUES ($1, $2, $3, $4)',
         [templateId, version, buffer, changelog || `v${version}`]
@@ -170,8 +194,12 @@ async function listTemplates() {
 }
 
 async function generateDocument(event) {
-  const body = parseBody(event);
-  const { templateSlug, refType, refId, output } = body;
+  const { fields } = await parseBody(event);
+  const templateSlug = getField(fields, 'templateSlug', 'template_slug', 'slug');
+  const refType = getField(fields, 'refType', 'ref_type');
+  const refId = getField(fields, 'refId', 'ref_id');
+  const output = getField(fields, 'output');
+
   if (!templateSlug || !refType || !refId) {
     return bad(400, 'templateSlug, refType e refId sono obbligatori', 'VALIDATION_ERROR');
   }
@@ -244,15 +272,142 @@ async function generateDocument(event) {
   }
 }
 
-function parseBody(event) {
+async function parseBody(event) {
+  const headers = normalizeHeaders(event.headers || {});
+  const contentType = getContentType(headers);
+
   if (!event.body) {
-    return {};
+    return { fields: {}, files: {} };
   }
-  try {
-    return JSON.parse(event.body);
-  } catch (err) {
-    throw new HttpError(400, 'INVALID_JSON', 'Body deve essere un JSON valido');
+
+  if (!contentType || contentType === 'application/json') {
+    try {
+      const raw = event.isBase64Encoded
+        ? Buffer.from(event.body, 'base64').toString('utf8')
+        : event.body;
+      const payload = JSON.parse(raw || '{}');
+      return { fields: typeof payload === 'object' && payload !== null ? payload : {}, files: {} };
+    } catch (err) {
+      throw new HttpError(400, 'INVALID_JSON', 'Body deve essere un JSON valido');
+    }
   }
+
+  if (contentType === 'application/x-www-form-urlencoded') {
+    const querystring = require('querystring');
+    const decoded = event.isBase64Encoded
+      ? Buffer.from(event.body, 'base64').toString('utf8')
+      : event.body;
+    const parsed = querystring.parse(decoded);
+    return { fields: parsed, files: {} };
+  }
+
+  if (contentType.startsWith('multipart/form-data')) {
+    const buffer = Buffer.from(event.body, event.isBase64Encoded ? 'base64' : 'utf8');
+    return parseMultipart(buffer, headers);
+  }
+
+  throw new HttpError(415, 'UNSUPPORTED_MEDIA_TYPE', `Content-Type ${contentType} non supportato`);
+}
+
+function getContentType(headers = {}) {
+  const value = headers['content-type'];
+  if (!value) return null;
+  return String(value || '').split(';')[0].trim().toLowerCase();
+}
+
+function normalizeHeaders(headers = {}) {
+  return Object.entries(headers).reduce((acc, [key, value]) => {
+    acc[String(key).toLowerCase()] = value;
+    return acc;
+  }, {});
+}
+
+function cleanString(value) {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function getField(source, ...keys) {
+  for (const key of keys) {
+    const value = cleanString(source?.[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function coalesceText(source, ...keys) {
+  for (const key of keys) {
+    const value = source?.[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function extractFileBuffer(uploadedFile, fallbackBase64) {
+  if (uploadedFile?.data?.length) {
+    return uploadedFile.data;
+  }
+  if (typeof fallbackBase64 === 'string' && fallbackBase64.trim()) {
+    try {
+      return Buffer.from(fallbackBase64.trim(), 'base64');
+    } catch (error) {
+      throw new HttpError(400, 'INVALID_BASE64', 'file deve essere una stringa base64 valida');
+    }
+  }
+  return null;
+}
+
+function parseMultipart(buffer, headers) {
+  return new Promise((resolve, reject) => {
+    const busboy = Busboy({ headers, limits: { fileSize: MAX_UPLOAD_SIZE } });
+    const fields = {};
+    const files = {};
+    let rejected = false;
+
+    const safeReject = (error) => {
+      if (!rejected) {
+        rejected = true;
+        reject(error);
+      }
+    };
+
+    busboy.on('field', (name, value) => {
+      fields[name] = value;
+    });
+
+    busboy.on('file', (name, stream, info) => {
+      const chunks = [];
+      stream.on('data', (chunk) => chunks.push(chunk));
+      stream.on('limit', () => {
+        safeReject(new HttpError(413, 'PAYLOAD_TOO_LARGE', 'File troppo grande'));
+        stream.resume();
+      });
+      stream.on('error', (error) => safeReject(error));
+      stream.on('end', () => {
+        if (rejected) return;
+        files[name] = {
+          filename: info?.filename,
+          encoding: info?.encoding,
+          mimeType: info?.mimeType,
+          data: Buffer.concat(chunks)
+        };
+      });
+    });
+
+    busboy.on('error', (error) => safeReject(error));
+    busboy.on('finish', () => {
+      if (!rejected) {
+        resolve({ fields, files });
+      }
+    });
+
+    busboy.end(buffer);
+  });
 }
 
 async function buildContext(refType, refId) {

@@ -38,6 +38,7 @@ La cartella contiene la web app statica (HTML/CSS/JS), gli asset e le Netlify Fu
    NEON_DATABASE_URL=postgresql://<user>:<pwd>@<host>/<db>?sslmode=require
    FILE_STORAGE_DIR=./public/docs
    SAFE_MODE=false
+   TEMPLATE_MAX_UPLOAD_SIZE=10485760  # opzionale (byte) per limitare l'upload dei template
    ```
 
 3. Creare la cartella indicata da `FILE_STORAGE_DIR` se non esiste (es. `public/docs`).
@@ -72,6 +73,8 @@ Lo script crea automaticamente l'estensione `pgcrypto` (se assente) e le tabelle
 
 3. Durante lo sviluppo, i log delle funzioni sono visibili direttamente in console. Ogni modifica ai file sotto `netlify/functions/` provoca il reload automatico.
 
+   Gli endpoint documentali (`/api/templates/*`, `/api/documents/generate`) accettano payload JSON tradizionali oppure richieste `multipart/form-data` con allegati binari (ad es. file DOCX). In assenza di un file allegato è ancora possibile inviare il contenuto base64 tramite il campo `file`.
+
 ## Deploy su Netlify
 
 1. Collegare la repository al progetto Netlify (`netlify link` oppure tramite interfaccia web).
@@ -79,6 +82,7 @@ Lo script crea automaticamente l'estensione `pgcrypto` (se assente) e le tabelle
    - `NEON_DATABASE_URL`
    - `FILE_STORAGE_DIR` (es. `/tmp/docs` per lo storage temporaneo)
    - `SAFE_MODE`
+   - `TEMPLATE_MAX_UPLOAD_SIZE` (opzionale, dimensione massima dei file caricati)
 3. Assicurarsi che la directory di publish sia `CERtoUSER_Suite_Starter_Plus_FixModules` e la cartella funzioni `netlify/functions` (sono già configurate in `netlify.toml`).
 4. Eseguire il deploy:
 
