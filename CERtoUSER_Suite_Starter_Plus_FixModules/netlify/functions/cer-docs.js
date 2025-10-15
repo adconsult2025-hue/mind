@@ -1,33 +1,38 @@
 const { Client } = require('pg');
 const { guard } = require('./_safe');
-const { headers: corsHeaders, preflight } = require('./_cors');
+const { corsHeaders, preflight } = require('./_cors');
 
 const CONNECTION_STRING = process.env.NEON_DATABASE_URL;
 
-function headers() {
-  return { ...corsHeaders };
+function json(statusCode, payload) {
+  return {
+    statusCode,
+    headers: { ...corsHeaders },
+    body: JSON.stringify(payload)
+  };
 }
 
-function ensureConnectionString() {
+function httpError(statusCode, code, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  error.code = code;
+  return error;
+}
+
+async function withClient(run) {
   if (!CONNECTION_STRING) {
-    throw new Error('NEON_DATABASE_URL is not configured');
+    throw httpError(500, 'SERVER_ERROR', 'NEON_DATABASE_URL is not configured');
   }
-}
 
-function createClient() {
-  ensureConnectionString();
-  const config = { connectionString: CONNECTION_STRING };
-  if (process.env.PGSSLMODE === 'require') {
-    config.ssl = { rejectUnauthorized: false };
-  }
-  return new Client(config);
-}
+  const client = new Client({
+    connectionString: CONNECTION_STRING,
+    ssl: { rejectUnauthorized: false }
+  });
 
-async function withClient(callback) {
-  const client = createClient();
   await client.connect();
+
   try {
-    return await callback(client);
+    return await run(client);
   } finally {
     await client.end();
   }
@@ -38,137 +43,111 @@ function parseBody(body) {
   try {
     return JSON.parse(body);
   } catch (error) {
-    throw new Error('Invalid JSON body');
+    throw httpError(400, 'BAD_REQUEST', 'Invalid JSON body');
+  }
+}
+
+function coerceMetadata(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    return null;
   }
 }
 
 exports.handler = guard(async function handler(event) {
-  if (event.httpMethod === 'OPTIONS') {
+  const method = (event.httpMethod || '').toUpperCase();
+
+  if (method === 'OPTIONS') {
     return preflight();
   }
 
   try {
-    if (event.httpMethod === 'GET') {
-      const params = event.queryStringParameters || {};
-      const cerId = params.cerId || params.cer_id;
+    if (method === 'GET') {
+      const { cerId } = event.queryStringParameters || {};
       if (!cerId) {
-        return {
-          statusCode: 400,
-          headers: headers(),
-          body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'cerId is required' } })
-        };
+        return json(400, { ok: false, error: { code: 'BAD_REQUEST', message: 'cerId is required' } });
       }
 
-      const rows = await withClient(client =>
+      const rows = await withClient((client) =>
         client
           .query(
             'select * from cer_documents where cer_id = $1 order by uploaded_at desc',
             [cerId]
           )
-          .then(result => result.rows)
+          .then((result) => result.rows)
       );
 
-      return {
-        statusCode: 200,
-        headers: headers(),
-        body: JSON.stringify({ ok: true, data: rows })
-      };
+      return json(200, { ok: true, data: rows });
     }
 
-    if (event.httpMethod === 'POST') {
+    if (method === 'POST') {
       const payload = parseBody(event.body);
-      const requiredFields = ['cerId', 'phase', 'docType', 'filename', 'url'];
-      const missing = requiredFields.filter(key => !payload[key]);
+      const required = ['cerId', 'phase', 'docType', 'filename', 'url'];
+      const missing = required.filter((key) => !payload[key]);
       if (missing.length) {
-        return {
-          statusCode: 400,
-          headers: headers(),
-          body: JSON.stringify({
-            ok: false,
-            error: {
-              code: 'VALIDATION_ERROR',
-              message: `Missing required fields: ${missing.join(', ')}`
-            }
-          })
-        };
+        return json(400, {
+          ok: false,
+          error: { code: 'VALIDATION_ERROR', message: `Missing required fields: ${missing.join(', ')}` }
+        });
       }
 
-      const document = await withClient(client =>
+      const [document] = await withClient((client) =>
         client
           .query(
-            `insert into cer_documents
-              (cer_id, phase, doc_type, filename, url, status, signer, metadata)
-            values ($1, $2, $3, $4, $5, $6, $7, $8)
-            returning *`,
+            `insert into cer_documents (cer_id, phase, doc_type, filename, url, status, signer, metadata)
+             values ($1,$2,$3,$4,$5,coalesce($6,'uploaded'),$7,coalesce($8,'{}')) returning *`,
             [
               payload.cerId,
               payload.phase,
               payload.docType,
               payload.filename,
               payload.url,
-              payload.status || 'uploaded',
-              payload.signer || null,
-              payload.metadata ?? {}
+              payload.status,
+              payload.signer,
+              coerceMetadata(payload.metadata)
             ]
           )
-          .then(result => result.rows[0])
+          .then((result) => result.rows)
       );
 
-      return {
-        statusCode: 200,
-        headers: headers(),
-        body: JSON.stringify({ ok: true, data: document })
-      };
+      return json(200, { ok: true, data: document });
     }
 
-    if (event.httpMethod === 'PATCH') {
+    if (method === 'PATCH') {
       const payload = parseBody(event.body);
       if (!payload.id) {
-        return {
-          statusCode: 400,
-          headers: headers(),
-          body: JSON.stringify({ ok: false, error: { code: 'VALIDATION_ERROR', message: 'id is required' } })
-        };
+        return json(400, { ok: false, error: { code: 'BAD_REQUEST', message: 'id is required' } });
       }
 
-      const updated = await withClient(client =>
+      const [updated] = await withClient((client) =>
         client
           .query(
-            `update cer_documents
-             set status = coalesce($2, status),
-                 signer = coalesce($3, signer)
-             where id = $1
-             returning *`,
-            [payload.id, payload.status || null, payload.signer || null]
+            `update cer_documents set status=coalesce($2,status), signer=coalesce($3,signer)
+             where id=$1 returning *`,
+            [payload.id, payload.status, payload.signer]
           )
-          .then(result => result.rows[0])
+          .then((result) => result.rows)
       );
 
       if (!updated) {
-        return {
-          statusCode: 404,
-          headers: headers(),
-          body: JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'Document not found' } })
-        };
+        return json(404, { ok: false, error: { code: 'NOT_FOUND', message: 'Document not found' } });
       }
 
-      return {
-        statusCode: 200,
-        headers: headers(),
-        body: JSON.stringify({ ok: true, data: updated })
-      };
+      return json(200, { ok: true, data: updated });
     }
 
-    return {
-      statusCode: 405,
-      headers: headers(),
-      body: JSON.stringify({ ok: false, error: { code: 'METHOD_NOT_ALLOWED', message: 'Method not supported' } })
-    };
+    return json(405, { ok: false, error: { code: 'METHOD_NOT_ALLOWED', message: 'Metodo non supportato' } });
   } catch (error) {
-    return {
-      statusCode: 500,
-      headers: headers(),
-      body: JSON.stringify({ ok: false, error: { code: 'SERVER_ERROR', message: error.message } })
-    };
+    const statusCode = error.statusCode && Number.isInteger(error.statusCode) ? error.statusCode : 500;
+    const code = error.code || (statusCode === 500 ? 'SERVER_ERROR' : 'ERROR');
+    const message = error.message || 'Unexpected error';
+    return json(statusCode, { ok: false, error: { code, message } });
   }
 });
