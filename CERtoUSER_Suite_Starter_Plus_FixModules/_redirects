@@ -1,7 +1,9 @@
-/api/templates      /.netlify/functions/api/templates          200
-/api/templates/*    /.netlify/functions/api/templates/:splat   200
-/api/documents      /.netlify/functions/api/documents          200
-/api/documents/*    /.netlify/functions/api/documents/:splat   200
+/api/templates      /.netlify/functions/templates              200
+/api/templates/*    /.netlify/functions/templates/:splat       200
+/api/docs           /.netlify/functions/docs                   200
+/api/docs/*         /.netlify/functions/docs/:splat            200
+/api/documents      /.netlify/functions/docs                   200
+/api/documents/*    /.netlify/functions/docs/:splat            200
 /api/plants/docs      /.netlify/functions/plants-docs          200
 /api/plants/docs/*    /.netlify/functions/plants-docs          200
 /api/plants/workflows /.netlify/functions/plants-workflows     200
