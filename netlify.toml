@@ -24,3 +24,6 @@
 
 [context.branch-deploy.environment]
   SAFE_MODE = "false"
+[functions]
+node_bundler = "esbuild"
+external_node_modules = ["pg","handlebars","pizzip","docxtemplater","nanoid","busboy"]
