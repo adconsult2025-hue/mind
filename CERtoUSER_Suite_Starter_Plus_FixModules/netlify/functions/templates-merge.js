@@ -5,42 +5,67 @@ const Docxtemplater = require("docxtemplater");
 
 const { corsHeaders, preflight, json } = require("./_cors");
 
-const MANIFEST_PATH = path.join(process.cwd(), 'config', 'templates', 'models.manifest.json');
+const DATA_FILE = path.join(__dirname, "../data/templates.json");
 
-let manifestMap = null;
-let manifestMtime = 0;
+// mappa codice modello → file .docx in site/assets/models/
+const FALLBACK_MAP = {
+  "CER-STATUTO-BASE": "02_Statuto_CER_template.docx",
+  "CER-REGOLAMENTO-BASE": "03_Regolamento_CER_template.docx",
+  "CER-ATTOCOSTITUTIVO-BASE": "01_AttoCostitutivo_CER_template.docx",
+  "CER-ADESIONE-BASE": "04_Adesione_Membro_template.docx",
+  "CER-DELEGA-GSEDSO-BASE": "05_Delega_GSE_DSO_template.docx",
+  "CER-CONTRATTO-TRADER-BASE": "06_Contratto_Trader_template.docx",
+  "CER-GDPR-INFORMATIVA-BREVE": "07_GDPR_Informativa_template.docx",
+  "CER-CRONOPROGRAMMA-BASE": "08_Cronoprogramma_template.docx",
+  "CER-REGISTRO-POD": "09_Registro_POD_template.docx",
+  "CER-REGISTRO-IMPIANTI": "10_Registro_Impianti_template.docx"
+};
 
-function buildManifestMap() {
-  if (!fs.existsSync(MANIFEST_PATH)) {
-    throw new Error('Manifest file not found');
+function resolveDocxFileName(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const candidates = [
+    entry.fileName,
+    entry.file_name,
+    entry.file,
+    entry?.file_meta?.original_name,
+    entry?.fileMeta?.original_name,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const trimmed = candidate.trim();
+    if (!trimmed) continue;
+    if (trimmed.toLowerCase().endsWith(".docx")) return trimmed;
   }
 
-  const stat = fs.statSync(MANIFEST_PATH);
-  if (manifestMap && manifestMtime === stat.mtimeMs) {
-    return manifestMap;
-  }
-
-  const raw = fs.readFileSync(MANIFEST_PATH, 'utf8');
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (error) {
-    throw new Error(`Invalid manifest JSON: ${error.message}`);
-  }
-
-  const models = Array.isArray(parsed?.models) ? parsed.models : [];
-  manifestMap = models.reduce((acc, entry) => {
-    if (!entry || typeof entry !== 'object') return acc;
-    const code = typeof entry.code === 'string' ? entry.code.trim().toUpperCase() : '';
-    const file = typeof entry.file === 'string' ? entry.file.trim() : '';
-    if (code && file) {
-      acc[code] = file;
-    }
-    return acc;
-  }, {});
-  manifestMtime = stat.mtimeMs;
-  return manifestMap;
+  return null;
 }
+
+function loadCatalogMap() {
+  try {
+    if (!fs.existsSync(DATA_FILE)) return {};
+    const raw = fs.readFileSync(DATA_FILE, "utf8");
+    const payload = JSON.parse(raw);
+    if (!Array.isArray(payload)) return {};
+
+    return payload.reduce((acc, entry) => {
+      const code = typeof entry?.code === "string" ? entry.code.trim().toUpperCase() : "";
+      if (!code) return acc;
+      const fileName = resolveDocxFileName(entry);
+      if (!fileName) return acc;
+      acc[code] = fileName;
+      return acc;
+    }, {});
+  } catch (error) {
+    console.warn("[templates-merge] impossibile leggere data/templates.json:", error?.message || error);
+    return {};
+  }
+}
+
+const MAP = Object.freeze({
+  ...FALLBACK_MAP,
+  ...loadCatalogMap(),
+});
 
 function angularParser(tag) {
   const expr = tag.replace(/^[{]+|[}]+$/g, "").trim();

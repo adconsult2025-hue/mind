@@ -1,0 +1,172 @@
+[
+  {
+    "id": "cer-attocostitutivo-base-v1",
+    "name": "Atto costitutivo CER",
+    "code": "CER-ATTOCOSTITUTIVO-BASE",
+    "module": "cer",
+    "version": 1,
+    "status": "active",
+    "placeholders": [],
+    "fileName": "01_AttoCostitutivo_CER_template.docx",
+    "file_meta": {
+      "original_name": "01_AttoCostitutivo_CER_template.docx",
+      "storage_scope": "local"
+    },
+    "url": "/assets/models/01_AttoCostitutivo_CER_template.docx",
+    "uploaded_at": "2025-01-01T00:00:00.000Z",
+    "catalogVersion": "1.2"
+  },
+  {
+    "id": "cer-statuto-base-v1",
+    "name": "Statuto CER",
+    "code": "CER-STATUTO-BASE",
+    "module": "cer",
+    "version": 1,
+    "status": "active",
+    "placeholders": [],
+    "fileName": "02_Statuto_CER_template.docx",
+    "file_meta": {
+      "original_name": "02_Statuto_CER_template.docx",
+      "storage_scope": "local"
+    },
+    "url": "/assets/models/02_Statuto_CER_template.docx",
+    "uploaded_at": "2025-01-01T00:00:00.000Z",
+    "catalogVersion": "1.2"
+  },
+  {
+    "id": "cer-regolamento-base-v1",
+    "name": "Regolamento interno CER",
+    "code": "CER-REGOLAMENTO-BASE",
+    "module": "cer",
+    "version": 1,
+    "status": "active",
+    "placeholders": [],
+    "fileName": "03_Regolamento_CER_template.docx",
+    "file_meta": {
+      "original_name": "03_Regolamento_CER_template.docx",
+      "storage_scope": "local"
+    },
+    "url": "/assets/models/03_Regolamento_CER_template.docx",
+    "uploaded_at": "2025-01-01T00:00:00.000Z",
+    "catalogVersion": "1.2"
+  },
+  {
+    "id": "cer-adesione-base-v1",
+    "name": "Domanda adesione membro",
+    "code": "CER-ADESIONE-BASE",
+    "module": "cer",
+    "version": 1,
+    "status": "active",
+    "placeholders": [],
+    "fileName": "04_Adesione_Membro_template.docx",
+    "file_meta": {
+      "original_name": "04_Adesione_Membro_template.docx",
+      "storage_scope": "local"
+    },
+    "url": "/assets/models/04_Adesione_Membro_template.docx",
+    "uploaded_at": "2025-01-01T00:00:00.000Z",
+    "catalogVersion": "1.2"
+  },
+  {
+    "id": "cer-delega-gsedso-base-v1",
+    "name": "Delega GSE/DSO",
+    "code": "CER-DELEGA-GSEDSO-BASE",
+    "module": "cer",
+    "version": 1,
+    "status": "active",
+    "placeholders": [],
+    "fileName": "05_Delega_GSE_DSO_template.docx",
+    "file_meta": {
+      "original_name": "05_Delega_GSE_DSO_template.docx",
+      "storage_scope": "local"
+    },
+    "url": "/assets/models/05_Delega_GSE_DSO_template.docx",
+    "uploaded_at": "2025-01-01T00:00:00.000Z",
+    "catalogVersion": "1.2"
+  },
+  {
+    "id": "cer-contratto-trader-base-v1",
+    "name": "Contratto cessione eccedenze",
+    "code": "CER-CONTRATTO-TRADER-BASE",
+    "module": "cer",
+    "version": 1,
+    "status": "active",
+    "placeholders": [],
+    "fileName": "06_Contratto_Trader_template.docx",
+    "file_meta": {
+      "original_name": "06_Contratto_Trader_template.docx",
+      "storage_scope": "local"
+    },
+    "url": "/assets/models/06_Contratto_Trader_template.docx",
+    "uploaded_at": "2025-01-01T00:00:00.000Z",
+    "catalogVersion": "1.2"
+  },
+  {
+    "id": "cer-gdpr-informativa-breve-v1",
+    "name": "Informativa GDPR breve",
+    "code": "CER-GDPR-INFORMATIVA-BREVE",
+    "module": "cer",
+    "version": 1,
+    "status": "active",
+    "placeholders": [],
+    "fileName": "07_GDPR_Informativa_template.docx",
+    "file_meta": {
+      "original_name": "07_GDPR_Informativa_template.docx",
+      "storage_scope": "local"
+    },
+    "url": "/assets/models/07_GDPR_Informativa_template.docx",
+    "uploaded_at": "2025-01-01T00:00:00.000Z",
+    "catalogVersion": "1.2"
+  },
+  {
+    "id": "cer-cronoprogramma-base-v1",
+    "name": "Cronoprogramma documentale",
+    "code": "CER-CRONOPROGRAMMA-BASE",
+    "module": "cer",
+    "version": 1,
+    "status": "active",
+    "placeholders": [],
+    "fileName": "08_Cronoprogramma_template.docx",
+    "file_meta": {
+      "original_name": "08_Cronoprogramma_template.docx",
+      "storage_scope": "local"
+    },
+    "url": "/assets/models/08_Cronoprogramma_template.docx",
+    "uploaded_at": "2025-01-01T00:00:00.000Z",
+    "catalogVersion": "1.2"
+  },
+  {
+    "id": "cer-registro-pod-v1",
+    "name": "Registro POD",
+    "code": "CER-REGISTRO-POD",
+    "module": "cer",
+    "version": 1,
+    "status": "active",
+    "placeholders": [],
+    "fileName": "09_Registro_POD_template.docx",
+    "file_meta": {
+      "original_name": "09_Registro_POD_template.docx",
+      "storage_scope": "local"
+    },
+    "url": "/assets/models/09_Registro_POD_template.docx",
+    "uploaded_at": "2025-01-01T00:00:00.000Z",
+    "catalogVersion": "1.2"
+  },
+  {
+    "id": "cer-registro-impianti-v1",
+    "name": "Registro Impianti",
+    "code": "CER-REGISTRO-IMPIANTI",
+    "module": "cer",
+    "version": 1,
+    "status": "active",
+    "placeholders": [],
+    "fileName": "10_Registro_Impianti_template.docx",
+    "file_meta": {
+      "original_name": "10_Registro_Impianti_template.docx",
+      "storage_scope": "local"
+    },
+    "url": "/assets/models/10_Registro_Impianti_template.docx",
+    "uploaded_at": "2025-01-01T00:00:00.000Z",
+    "catalogVersion": "1.2"
+  }
+]
