@@ -7,6 +7,10 @@ const IDENTITY_EVENT = 'mind:identity';
 let currentSession = null;
 let readyResolver;
 let readySettled = false;
+let loginButton = null;
+let logoutButton = null;
+let whoamiBadge = null;
+let sessionControlsBound = false;
 
 export const identityReady = new Promise((resolve) => {
   readyResolver = resolve;
@@ -15,6 +19,14 @@ export const identityReady = new Promise((resolve) => {
 if (typeof window !== 'undefined') {
   window.MIND_IDENTITY_READY = identityReady;
   window.MIND_IDENTITY_STORAGE_KEY = STORAGE_KEY;
+}
+
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindSessionControls);
+  } else {
+    bindSessionControls();
+  }
 }
 
 function settleReady(value) {
@@ -211,6 +223,68 @@ function applySessionGlobals(session) {
   }
 }
 
+function formatUserDisplay(user) {
+  if (!isObject(user)) return '';
+  const metadata = [user, user.user_metadata, user.app_metadata, user.data].filter(isObject);
+  const nameCandidates = [
+    user.full_name,
+    user.fullName,
+    user.name,
+    user.email,
+    user.username
+  ];
+  for (const meta of metadata) {
+    if (typeof meta.full_name === 'string') nameCandidates.push(meta.full_name);
+    if (typeof meta.fullName === 'string') nameCandidates.push(meta.fullName);
+    if (typeof meta.name === 'string') nameCandidates.push(meta.name);
+  }
+  return nameCandidates.find((value) => typeof value === 'string' && value.trim().length > 0)?.trim() ?? '';
+}
+
+function syncSessionControls(session) {
+  if (!sessionControlsBound) return;
+  const hasValidSession = isSessionValid(session);
+  if (loginButton) {
+    loginButton.hidden = hasValidSession;
+  }
+  if (logoutButton) {
+    logoutButton.hidden = !hasValidSession;
+  }
+  if (whoamiBadge) {
+    if (hasValidSession) {
+      const displayName = formatUserDisplay(session?.user);
+      whoamiBadge.hidden = false;
+      whoamiBadge.textContent = displayName || 'Account attivo';
+      whoamiBadge.title = displayName || 'Account attivo';
+    } else {
+      whoamiBadge.hidden = true;
+      whoamiBadge.textContent = '';
+      whoamiBadge.removeAttribute('title');
+    }
+  }
+}
+
+function handleLoginButtonClick(event) {
+  event?.preventDefault?.();
+  redirectToLogin('ui', { replace: false });
+}
+
+function bindSessionControls() {
+  if (sessionControlsBound) return;
+  const doc = typeof document !== 'undefined' ? document : null;
+  if (!doc) return;
+  loginButton = doc.getElementById('btn-login');
+  logoutButton = doc.getElementById('btn-logout');
+  whoamiBadge = doc.getElementById('whoami');
+  if (!loginButton && !logoutButton && !whoamiBadge) {
+    return;
+  }
+  sessionControlsBound = true;
+  loginButton?.addEventListener('click', handleLoginButtonClick);
+  logoutButton?.addEventListener('click', () => logout('ui'));
+  syncSessionControls(currentSession);
+}
+
 function applySession(session) {
   currentSession = session && isObject(session) ? session : null;
   const w = getWindow();
@@ -218,6 +292,7 @@ function applySession(session) {
     w.MIND_IDENTITY = currentSession;
   }
   applySessionGlobals(currentSession);
+  syncSessionControls(currentSession);
   return currentSession;
 }
 
@@ -357,7 +432,7 @@ async function refreshIdentitySession(session) {
   }
 }
 
-function redirectToLogin(reason) {
+function redirectToLogin(reason, options = {}) {
   const w = getWindow();
   if (!w) return;
   if (isLoginRoute()) return;
@@ -372,7 +447,12 @@ function redirectToLogin(reason) {
   if (reason) {
     loginUrl.searchParams.set('reason', reason);
   }
-  w.location.replace(loginUrl.toString());
+  const shouldReplace = options.replace !== false;
+  if (shouldReplace) {
+    w.location.replace(loginUrl.toString());
+  } else {
+    w.location.assign(loginUrl.toString());
+  }
 }
 
 function handleMissingSession(reason) {
