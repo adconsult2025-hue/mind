@@ -27,3 +27,12 @@ create table if not exists cer_documents (
 create index if not exists cer_documents_cer on cer_documents(cer_id);
 create index if not exists cer_documents_phase on cer_documents(phase);
 create index if not exists cer_documents_doctype on cer_documents(doc_type);
+
+create or replace view cer_phase_status as
+select
+  c.id as cer_id,
+  bool_and(case when d.doc_type in ('ATTO','STATUTO','REGOLAMENTO') then true else null end) filter (where d.status is not null) as fase1_docs_present,
+  bool_and(case when d.doc_type in ('ADESIONE','DELEGA_GSE_DSO','CONTRATTO_TRADER','REGISTRO_POD','REGISTRO_IMPIANTI') then true else null end) filter (where d.status is not null) as fase2_docs_present
+from cer c
+left join cer_documents d on d.cer_id = c.id
+group by c.id;
