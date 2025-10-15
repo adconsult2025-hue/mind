@@ -817,7 +817,7 @@ function handleCerDocEvent(detail) {
 // ===== Templates CER: fetch & render =====
 async function fetchCerTemplates() {
   try {
-    const r = await fetch('/api/templates');
+    const r = await fetch('/api/templates', { headers: { Accept: 'application/json' } });
     const list = await r.json();
     const templates = Array.isArray(list) ? list : (Array.isArray(list?.data) ? list.data : []);
     return templates.filter((t) => (t.module ? String(t.module).toUpperCase() === 'CER' : true)
@@ -903,7 +903,8 @@ function renderCerTemplatesDropdown(templates, hostEl) {
         return;
       }
 
-      const downloadUrl = payload.url || payload.download_url || payload.downloadUrl || payload.data?.url;
+      const downloadUrl =
+        payload.public_url || payload.url || payload.download_url || payload.downloadUrl || payload.data?.url;
       if (downloadUrl) {
         window.open(downloadUrl, '_blank', 'noopener');
         return;
