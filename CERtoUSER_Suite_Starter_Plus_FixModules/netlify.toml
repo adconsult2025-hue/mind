@@ -6,5 +6,40 @@
   node_bundler = "esbuild"
   external_node_modules = ["pg","handlebars","pizzip","docxtemplater","nanoid","busboy"]
 
+# --- Routing API: instrada paths specifici alla function 'api'
+[[redirects]]
+  from = "/api/templates"
+  to   = "/.netlify/functions/api/templates"
+  status = 200
+[[redirects]]
+  from = "/api/templates/*"
+  to   = "/.netlify/functions/api/templates/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/api/documents"
+  to   = "/.netlify/functions/api/documents"
+  status = 200
+[[redirects]]
+  from = "/api/documents/*"
+  to   = "/.netlify/functions/api/documents/:splat"
+  status = 200
+
+# Fallback per TUTTO il resto (mantiene operative le altre funzioni già esistenti)
+[[redirects]]
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200
+
+# CORS base per /api/*
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, POST, PATCH, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type, Authorization"
+    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
+
+# installa deps funzioni se serve
 [[plugins]]
   package = "@netlify/plugin-functions-install-core"
