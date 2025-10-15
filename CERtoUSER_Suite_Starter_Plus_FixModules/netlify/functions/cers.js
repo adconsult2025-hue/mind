@@ -30,7 +30,8 @@ function normalizeMembers(list) {
     nome: member.nome || member.name || '',
     ruolo: member.ruolo || member.role || '',
     pod: member.pod || '',
-    comune: member.comune || member.city || ''
+    comune: member.comune || member.city || '',
+    cabina: member.cabina || member.cabina_primaria || member.cp || ''
   }));
 }
 
@@ -61,10 +62,24 @@ function validateCerPayload(payload) {
   if (plants.length < 1) {
     return { ok: false, message: 'È necessario associare almeno un impianto.' };
   }
+  const cerCabina = String(payload.cabina || payload.cabina_primaria || payload.cp || '').trim();
+  const memberCabinas = members.map(m => String(m.cabina || '').trim());
+  if (memberCabinas.some(cab => !cab)) {
+    return { ok: false, message: 'Tutti i membri della CER devono avere una cabina primaria associata.' };
+  }
+  const uniqueCabinas = Array.from(new Set(memberCabinas));
+  if (uniqueCabinas.length > 1) {
+    return { ok: false, message: 'I membri della CER devono appartenere alla stessa cabina primaria.' };
+  }
+  if (cerCabina && uniqueCabinas.length === 1 && cerCabina !== uniqueCabinas[0]) {
+    return { ok: false, message: 'La cabina primaria della CER deve coincidere con quella dei membri selezionati.' };
+  }
+
   return {
     ok: true,
     members,
-    plants
+    plants,
+    cabina: cerCabina || uniqueCabinas[0] || ''
   };
 }
 
@@ -90,7 +105,7 @@ exports.handler = guard(async function handler(event) {
             ok: false,
             error: {
               code: 'VALIDATION_ERROR',
-              message: 'CER requires ≥3 clients, at least one prosumer/producer, and ≥1 plant'
+              message: validation.message
             }
           })
         };
@@ -100,6 +115,7 @@ exports.handler = guard(async function handler(event) {
       const payload = {
         ...body,
         id,
+        cabina: validation.cabina || body.cabina || '',
         membri: validation.members,
         impianti: validation.plants
       };
@@ -126,13 +142,14 @@ exports.handler = guard(async function handler(event) {
             ok: false,
             error: {
               code: 'VALIDATION_ERROR',
-              message: 'CER requires ≥3 clients, at least one prosumer/producer, and ≥1 plant'
+              message: validation.message
             }
           })
         };
       }
       const updated = updateCER(id, {
         ...body,
+        cabina: validation.cabina || body.cabina || '',
         membri: validation.members,
         impianti: validation.plants
       });
