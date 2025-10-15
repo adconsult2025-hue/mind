@@ -162,6 +162,20 @@ function buildSubjectContext(soggetto = {}) {
   };
 }
 
+function extractSubjectFromCer(cer = {}) {
+  if (!cer || typeof cer !== 'object') return {};
+  const candidates = [cer.soggetto, cer.subject, cer.titolare, cer.owner];
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate === 'object') return candidate;
+  }
+  const fallback = {};
+  if (cer.nome) fallback.denominazione = cer.nome;
+  if (cer.email) fallback.email = cer.email;
+  if (cer.pec) fallback.pec = cer.pec;
+  if (cer.indirizzo || cer.address) fallback.indirizzo = cer.indirizzo || cer.address;
+  return fallback;
+}
+
 function getTemplateCacheKey(name) {
   if (!name && name !== 0) return '';
   return String(name).trim();
@@ -392,4 +406,43 @@ export function accordoProduttoreProsumerTemplate(cer, membro) {
   <p>Decorrenza: ${today}. Il presente accordo è valido finché il membro mantiene il ruolo di Produttore/Prosumer all'interno della CER.</p>
   <p>Firme:<br/>CER "${cer.nome}" ____________________<br/>${membro?.nome || '________________'} ____________________</p>
   `;
+}
+
+export async function statutoTemplate(cer, membri = []) {
+  const context = buildDocContext(cer, membri);
+  return renderWithFallback('statuto', context, defaultStatutoTemplate);
+}
+
+export async function regolamentoTemplate(cer, membri = []) {
+  const context = buildDocContext(cer, membri);
+  return renderWithFallback('regolamento', context, defaultRegolamentoTemplate);
+}
+
+export async function attoCostitutivoTemplate(cer, membri = []) {
+  const context = buildDocContext(cer, membri);
+  return renderWithFallback('atto_costitutivo', context, defaultAttoCostitutivoTemplate);
+}
+
+export async function adesioneTemplate(cer, membro, membri = []) {
+  const fullMembers = Array.isArray(membri) && membri.length ? membri : (membro ? [membro] : []);
+  const base = buildDocContext(cer, fullMembers);
+  const context = extendContext(base, buildMemberContext(membro));
+  return renderWithFallback('adesione', context, defaultAdesioneTemplate);
+}
+
+export async function delegaGSETemplate(cer, membri = []) {
+  const context = buildDocContext(cer, membri);
+  return renderWithFallback('delega_gse', context, defaultDelegaTemplate);
+}
+
+export async function contrattoTraderTemplate(cer, membri = []) {
+  const context = buildDocContext(cer, membri);
+  return renderWithFallback('contratto_trader', context, defaultContrattoTemplate);
+}
+
+export async function informativaGDPRTemplate(cer, membri = []) {
+  const base = buildDocContext(cer, membri);
+  const subject = extractSubjectFromCer(cer);
+  const context = extendContext(base, buildSubjectContext(subject));
+  return renderWithFallback('informativa_gdpr', context, defaultPrivacyTemplate);
 }
