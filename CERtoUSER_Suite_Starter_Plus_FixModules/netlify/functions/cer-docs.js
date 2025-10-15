@@ -27,9 +27,9 @@ async function withClient(run) {
   const client = createClient();
   await client.connect();
   try {
-    return await cb(c);
+    return await run(client);
   } finally {
-    await c.end();
+    await client.end();
   }
 }
 
