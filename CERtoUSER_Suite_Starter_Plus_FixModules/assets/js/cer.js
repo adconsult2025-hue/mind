@@ -1,5 +1,5 @@
 import { allCustomers, allCER, saveCER, uid, progressCERs, saveProgressCERs } from './storage.js';
-import { saveDocFile, statutoTemplate, regolamentoTemplate, attoCostitutivoTemplate, adesioneTemplate, delegaGSETemplate, contrattoTraderTemplate, informativaGDPRTemplate } from './docs.js';
+import { saveDocFile, statutoTemplate, regolamentoTemplate, attoCostitutivoTemplate, adesioneTemplate, delegaGSETemplate, contrattoTraderTemplate, informativaGDPRTemplate, accordoProduttoreProsumerTemplate, setRuntimeTemplate } from './docs.js';
 import { STATE as CRONO_STATE, initCronoprogrammaUI, renderCronoprogramma } from './cronoprogramma.js?v=36';
 
 const API_BASE = '/api';
@@ -100,6 +100,18 @@ let customers = [];
 let cers = [];
 let cerTemplates = [];
 const cerDocsStore = new Map();
+const customTemplateNames = new Map();
+
+const DOC_TEMPLATE_UPLOADS = [
+  { key: 'statuto', label: 'Modello Statuto (HTML)', displayName: 'lo Statuto' },
+  { key: 'regolamento', label: 'Modello Regolamento (HTML)', displayName: 'il Regolamento' },
+  { key: 'atto_costitutivo', label: 'Modello Atto costitutivo (HTML)', displayName: "l'Atto costitutivo" },
+  { key: 'adesione', label: 'Modello Adesione membro (HTML)', displayName: "l'Adesione membro", help: 'Il modello usa i segnaposto {{MEMBER_*}} per compilare automaticamente i dati del membro selezionato.' },
+  { key: 'delega_gse', label: 'Modello Delega GSE (HTML)', displayName: 'la Delega GSE' },
+  { key: 'contratto_trader', label: 'Modello Contratto Trader (HTML)', displayName: 'il Contratto Trader' },
+  { key: 'informativa_gdpr', label: 'Modello Informativa GDPR (HTML)', displayName: "l'Informativa GDPR", help: 'Il modello può utilizzare i segnaposto {{SUBJECT_*}} per i dati del soggetto titolare.' },
+  { key: 'accordo_produttore_prosumer', label: 'Modello Accordo Produttore/Prosumer (HTML)', displayName: "l'Accordo Produttore/Prosumer", help: 'Disponibile solo per membri con ruolo Produttore o Prosumer. Usa i segnaposto {{MEMBER_*}}.' },
+];
 
 const plantState = {
   period: currentPeriod(),
@@ -780,6 +792,7 @@ function renderDocumentsForCer(cerId) {
     <button class="btn" data-doc="atto">Atto costitutivo (.doc)</button>
     <select class="slim" id="docs-member-select"></select>
     <button class="btn" data-doc="adesione">Adesione membro (.doc)</button>
+    <button class="btn" data-doc="accordo">Accordo Produttore/Prosumer (.doc)</button>
     <button class="btn" data-doc="delega">Delega GSE (.doc)</button>
     <button class="btn" data-doc="trader">Contratto Trader (.doc)</button>
     <button class="btn ghost" data-doc="privacy">Informativa GDPR (.doc)</button>
@@ -812,40 +825,158 @@ function renderDocumentsForCer(cerId) {
     }
   }
 
-  docsActions.querySelector('[data-doc="statuto"]').onclick = () => {
-    const doc = statutoTemplate(cer, membri);
+  const eligibleMembers = membri.filter(isProsumerOrProducer);
+  if (memberSelect && eligibleMembers.length) {
+    memberSelect.value = eligibleMembers[0].id;
+  }
+
+  docsActions.querySelector('[data-doc="statuto"]').onclick = async () => {
+    const doc = await statutoTemplate(cer, membri);
     saveDocFile(`Statuto_${cer.nome}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="regolamento"]').onclick = () => {
-    const doc = regolamentoTemplate(cer, membri);
+  docsActions.querySelector('[data-doc="regolamento"]').onclick = async () => {
+    const doc = await regolamentoTemplate(cer, membri);
     saveDocFile(`Regolamento_${cer.nome}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="atto"]').onclick = () => {
-    const doc = attoCostitutivoTemplate(cer, membri);
+  docsActions.querySelector('[data-doc="atto"]').onclick = async () => {
+    const doc = await attoCostitutivoTemplate(cer, membri);
     saveDocFile(`AttoCostitutivo_${cer.nome}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="adesione"]').onclick = () => {
+  docsActions.querySelector('[data-doc="adesione"]').onclick = async () => {
     const id = memberSelect?.value;
     const membro = membri.find(m => m.id === id);
-    const doc = adesioneTemplate(cer, membro);
+    const doc = await adesioneTemplate(cer, membro);
     saveDocFile(`Adesione_${membro?.nome || 'Membro'}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="delega"]').onclick = () => {
-    const doc = delegaGSETemplate(cer, membri);
+  docsActions.querySelector('[data-doc="delega"]').onclick = async () => {
+    const doc = await delegaGSETemplate(cer, membri);
     saveDocFile(`Delega_GSE_${cer.nome}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="trader"]').onclick = () => {
-    const doc = contrattoTraderTemplate(cer, membri);
+  const accordoBtn = docsActions.querySelector('[data-doc="accordo"]');
+  if (accordoBtn) {
+    if (!eligibleMembers.length) {
+      accordoBtn.disabled = true;
+      accordoBtn.title = 'Disponibile solo quando esiste un membro Prosumer o Produttore.';
+    } else {
+      accordoBtn.removeAttribute('title');
+    }
+    accordoBtn.onclick = async () => {
+      if (!memberSelect || !memberSelect.value) {
+        alert('Seleziona un membro Prosumer o Produttore per generare questo accordo.');
+        return;
+      }
+      const membro = membri.find(m => m.id === memberSelect.value);
+      if (!isProsumerOrProducer(membro)) {
+        alert('Seleziona un membro con ruolo Produttore o Prosumer per generare questo accordo.');
+        return;
+      }
+      const doc = await accordoProduttoreProsumerTemplate(cer, membro);
+      saveDocFile(`Accordo_${membro?.nome || 'Membro'}.doc`, doc);
+    };
+  }
+  docsActions.querySelector('[data-doc="trader"]').onclick = async () => {
+    const doc = await contrattoTraderTemplate(cer, membri);
     saveDocFile(`ContrattoTrader_${cer.nome}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="privacy"]').onclick = () => {
-    const doc = informativaGDPRTemplate(cer, membri);
+  docsActions.querySelector('[data-doc="privacy"]').onclick = async () => {
+    const doc = await informativaGDPRTemplate(cer, membri);
     saveDocFile(`Privacy_${cer.nome}.doc`, doc);
   };
+
+  const templateUploaders = buildTemplateUploaders();
+  if (templateUploaders) {
+    docsActions.appendChild(templateUploaders);
+  }
 
   renderCerProgress(docsProgress, cer);
   renderCerDocs(cer.id);
   loadCerDocs(cer.id);
+}
+
+function isProsumerOrProducer(member) {
+  if (!member) return false;
+  const role = String(member.ruolo || '').toLowerCase();
+  return role === 'prosumer' || role === 'produttore' || role === 'producer';
+}
+
+function updateTemplateUploadStatus(templateKey, statusEl) {
+  if (!statusEl) return;
+  const name = customTemplateNames.get(templateKey);
+  statusEl.textContent = name ? `Modello personalizzato attivo: ${name}` : 'Modello standard in uso.';
+}
+
+function buildTemplateUploader(config, withDivider = true) {
+  if (typeof document === 'undefined' || typeof window === 'undefined' || typeof window.FileReader === 'undefined') return null;
+
+  const baseHelp = `Carica un file HTML personalizzato per ${config.displayName}. Verrà usato finché non ricarichi la pagina.`;
+  const helpText = config.help ? `${baseHelp} ${config.help}` : baseHelp;
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'doc-template-upload';
+  wrapper.innerHTML = `
+    ${withDivider ? '<hr class="doc-template-upload__divider"/>' : ''}
+    <div class="doc-template-upload__inner">
+      <p class="info-text small">${helpText}</p>
+      <label class="doc-template-upload__file">
+        <span>${config.label}</span>
+        <input type="file" accept=".html,.htm,.txt" data-template-upload="${config.key}" />
+      </label>
+      <div class="doc-template-upload__actions">
+        <button type="button" class="btn ghost" data-template-reset="${config.key}">Usa modello standard</button>
+      </div>
+      <p class="info-text small" data-template-status="${config.key}"></p>
+    </div>
+  `;
+
+  const input = wrapper.querySelector(`[data-template-upload="${config.key}"]`);
+  const resetBtn = wrapper.querySelector(`[data-template-reset="${config.key}"]`);
+  const status = wrapper.querySelector(`[data-template-status="${config.key}"]`);
+  updateTemplateUploadStatus(config.key, status);
+
+  if (input) {
+    input.addEventListener('change', (event) => {
+      const file = event?.target?.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = typeof reader.result === 'string' ? reader.result : '';
+        if (!text.trim()) {
+          alert('Il file selezionato è vuoto o non contiene testo.');
+          return;
+        }
+        setRuntimeTemplate(config.key, text);
+        customTemplateNames.set(config.key, file.name || `${config.key}.html`);
+        updateTemplateUploadStatus(config.key, status);
+        if (input) input.value = '';
+      };
+      reader.onerror = () => {
+        console.error(`Errore lettura file personalizzato per ${config.displayName}:`, reader.error);
+        alert('Impossibile leggere il file selezionato.');
+      };
+      reader.readAsText(file, 'UTF-8');
+    });
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      setRuntimeTemplate(config.key);
+      customTemplateNames.delete(config.key);
+      updateTemplateUploadStatus(config.key, status);
+      if (input) input.value = '';
+    });
+  }
+
+  return wrapper;
+}
+
+function buildTemplateUploaders() {
+  if (!DOC_TEMPLATE_UPLOADS.length) return null;
+  const fragment = document.createDocumentFragment();
+  DOC_TEMPLATE_UPLOADS.forEach((config, idx) => {
+    const uploader = buildTemplateUploader(config, idx === 0);
+    if (uploader) fragment.appendChild(uploader);
+  });
+  return fragment;
 }
 
 function cerDocStatusBadge(status = 'uploaded') {
