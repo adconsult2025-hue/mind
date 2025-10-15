@@ -30,6 +30,7 @@ const templateSorter = (a, b) => {
 
 const DEFAULT_DATA_FILE = path.join(__dirname, '../data/templates.json');
 const SEED_FILE = path.join(__dirname, 'templates.seed.json');
+const MANIFEST_FILE = path.join(process.cwd(), 'config', 'templates', 'models.manifest.json');
 const DATA_DIR = path.dirname(DEFAULT_DATA_FILE);
 const ENV_DATA_FILE = process.env.TEMPLATES_DATA_FILE
   ? path.resolve(process.env.TEMPLATES_DATA_FILE)
@@ -50,25 +51,84 @@ const TMP_UPLOADS_DIR = path.join(os.tmpdir(), 'certouser_templates_uploads');
 const MAX_UPLOAD_SIZE = 5 * 1024 * 1024; // 5 MB limite prudenziale
 
 const loadTemplatesFromFile = (filePath, { label } = {}) => {
-  if (!fs.existsSync(filePath)) {
+  return loadTemplatesFromFileInternal(filePath, { label }, new Set());
+};
+
+function loadTemplatesFromFileInternal(filePath, { label }, visited) {
+  if (!filePath) return [];
+  const resolved = path.resolve(filePath);
+  if (visited.has(resolved)) {
+    console.warn('[templates] ciclo di riferimenti rilevato per', resolved);
     return [];
   }
+  visited.add(resolved);
+
+  if (!fs.existsSync(resolved)) {
+    return [];
+  }
+
   try {
-    const raw = fs.readFileSync(filePath, 'utf8');
+    const raw = fs.readFileSync(resolved, 'utf8');
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      throw new Error('Formato non valido: atteso array');
+
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map(prepareSeedEntry)
+        .map(normalizeTemplate)
+        .filter(Boolean)
+        .sort(templateSorter);
     }
-    return parsed
-      .map(normalizeTemplate)
-      .filter(Boolean)
-      .sort(templateSorter);
+
+    if (parsed && typeof parsed === 'object') {
+      if (Array.isArray(parsed.models)) {
+        return parsed.models
+          .map(prepareManifestEntry)
+          .map(normalizeTemplate)
+          .filter(Boolean)
+          .sort(templateSorter);
+      }
+
+      if (typeof parsed.$ref === 'string' && parsed.$ref.trim()) {
+        const refPath = path.resolve(path.dirname(resolved), parsed.$ref.trim());
+        return loadTemplatesFromFileInternal(refPath, { label }, visited);
+      }
+    }
+
+    throw new Error('Formato non supportato');
   } catch (error) {
     const origin = label ? `${label} ` : '';
     console.warn(`[templates] ${origin}non disponibile o non valido:`, error?.message || error);
     return [];
   }
-};
+}
+
+function prepareSeedEntry(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const clone = { ...raw };
+  if (typeof clone.file === 'string' && !clone.fileName) {
+    clone.fileName = clone.file;
+  }
+  if (!clone.status && typeof clone.file === 'string') {
+    clone.status = 'manifest';
+  }
+  return clone;
+}
+
+function prepareManifestEntry(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const clone = {
+    ...raw,
+    code: typeof raw.code === 'string' ? raw.code.trim().toUpperCase() : raw.code,
+    module: typeof raw.module === 'string' ? raw.module.trim().toLowerCase() : raw.module,
+    fileName: raw.fileName || raw.file || null,
+    status: raw.status === 'active' ? 'active' : 'manifest',
+    version: Number.isFinite(Number(raw.version)) ? Number(raw.version) : 1,
+  };
+  if (!clone.name && clone.code) {
+    clone.name = clone.code;
+  }
+  return clone;
+}
 
 const ensureDir = (dirPath) => {
   if (!dirPath) return;
@@ -128,6 +188,8 @@ const readSourceTemplates = () => {
   if (persisted.length) return persisted;
   const seeded = loadTemplatesFromFile(SEED_FILE, { label: 'seed' });
   if (seeded.length) return seeded;
+  const manifest = loadTemplatesFromFile(MANIFEST_FILE, { label: 'manifest' });
+  if (manifest.length) return manifest;
   return [];
 };
 
@@ -665,7 +727,7 @@ function normalizeTemplate(raw) {
     code,
     module,
     version,
-    status: raw.status === 'active' ? 'active' : 'inactive',
+    status: raw.status === 'active' ? 'active' : raw.status === 'manifest' ? 'manifest' : 'inactive',
     placeholders,
     content: raw.content ? String(raw.content) : '',
     fileName: raw.fileName ? String(raw.fileName) : null,
