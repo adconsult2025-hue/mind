@@ -1,16 +1,8 @@
 const { Client } = require('pg');
 const { guard } = require('./_safe');
-const { corsHeaders, preflight } = require('./_cors');
+const { preflight, json } = require('./_cors');
 
 const CONNECTION_STRING = process.env.NEON_DATABASE_URL;
-
-function json(statusCode, payload) {
-  return {
-    statusCode,
-    headers: { ...corsHeaders },
-    body: JSON.stringify(payload)
-  };
-}
 
 function httpError(statusCode, code, message) {
   const error = new Error(message);
