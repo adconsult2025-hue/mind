@@ -903,8 +903,14 @@ function renderCerTemplatesDropdown(templates, hostEl) {
         return;
       }
 
-      const downloadUrl =
-        payload.public_url || payload.url || payload.download_url || payload.downloadUrl || payload.data?.url;
+      const downloadUrl = [
+        payload?.public_url,
+        payload?.data?.public_url,
+        payload?.url,
+        payload?.download_url,
+        payload?.downloadUrl,
+        payload?.data?.url
+      ].find(url => typeof url === 'string' && url.length > 0);
       if (downloadUrl) {
         window.open(downloadUrl, '_blank', 'noopener');
         return;
