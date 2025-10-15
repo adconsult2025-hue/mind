@@ -652,6 +652,7 @@ function renderDocumentsForCer(cerId) {
     return;
   }
   CRONO_STATE.currentCerId = cer.id;
+  window.currentCERId = cer.id;
   const membri = cer.membri || [];
   docsActions.innerHTML = `
     <button class="btn" data-doc="statuto">Statuto (.doc)</button>
@@ -663,6 +664,17 @@ function renderDocumentsForCer(cerId) {
     <button class="btn" data-doc="trader">Contratto Trader (.doc)</button>
     <button class="btn ghost" data-doc="privacy">Informativa GDPR (.doc)</button>
   `;
+
+  const templatesHost = document.createElement('div');
+  templatesHost.id = 'cer-docs-actions';
+  templatesHost.dataset.cerId = cer.id;
+  templatesHost.className = 'docgen-remote';
+  templatesHost.innerHTML = '<p class="info-text">Caricamento modelli…</p>';
+  docsActions.prepend(templatesHost);
+
+  fetchCerTemplates().then((templates) => {
+    renderCerTemplatesDropdown(templates, templatesHost);
+  });
   const memberSelect = docsActions.querySelector('#docs-member-select');
   if (memberSelect) {
     membri.forEach(m => {
@@ -800,6 +812,136 @@ function handleCerDocEvent(detail) {
     entity_id: String(detail.entity_id || '')
   };
   upsertCerDoc(normalized);
+}
+
+// ===== Templates CER: fetch & render =====
+async function fetchCerTemplates() {
+  try {
+    const r = await fetch('/api/templates', { headers: { Accept: 'application/json' } });
+    const list = await r.json();
+    const templates = Array.isArray(list) ? list : (Array.isArray(list?.data) ? list.data : []);
+    return templates.filter((t) => (t.module ? String(t.module).toUpperCase() === 'CER' : true)
+      && (t.active !== false));
+  } catch (e) {
+    console.error('fetchCerTemplates:', e);
+    return [];
+  }
+}
+
+function renderCerTemplatesDropdown(templates, hostEl) {
+  const host = hostEl || document.querySelector('#cer-docs-actions');
+  if (!host) return;
+
+  const safeTemplates = Array.isArray(templates) ? templates : [];
+  if (!safeTemplates.length) {
+    host.innerHTML = '<p class="info-text">Nessun modello CER disponibile.</p>';
+    return;
+  }
+
+  host.innerHTML = `
+    <div class="docgen">
+      <label>Genera documento</label>
+      <select id="cer-tpl-select">
+        <option value="">— scegli un modello —</option>
+        ${safeTemplates.map((t) => `
+          <option value="${t.slug || t.code || t.id}">
+            ${t.name || t.codice || t.slug} ${t.latest_version ? '(v' + t.latest_version + ')' : ''}
+          </option>`).join('')}
+      </select>
+      <button id="cer-tpl-generate">Genera</button>
+    </div>
+  `;
+
+  const select = host.querySelector('#cer-tpl-select');
+  const button = host.querySelector('#cer-tpl-generate');
+  if (!select || !button) return;
+
+  button.addEventListener('click', async () => {
+    const sel = select.value;
+    if (!sel) {
+      alert('Seleziona un modello');
+      return;
+    }
+
+    const tpl = safeTemplates.find((t) => (t.slug === sel) || (t.code === sel) || (String(t.id) === sel));
+    const templateSlug = tpl?.slug || tpl?.code || sel;
+
+    const cerId = host.getAttribute('data-cer-id')
+      || document.querySelector('[data-cer-id]')?.getAttribute('data-cer-id')
+      || window.currentCERId
+      || 'cer_test';
+
+    const body = {
+      templateSlug,
+      refType: 'CER',
+      refId: cerId,
+      output: (/(accordo|prod|pros)/i.test(templateSlug) ? 'html' : 'docx')
+    };
+
+    button.disabled = true;
+    const originalLabel = button.textContent;
+    button.textContent = 'Generazione…';
+
+    try {
+      const res = await fetch('/api/documents/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      let payload = {};
+      try {
+        payload = await res.json();
+      } catch (parseErr) {
+        console.error('generate parse error', parseErr);
+      }
+
+      if (!res.ok || payload.ok === false) {
+        const message = payload?.error?.message || payload?.message || 'Errore nella generazione del documento';
+        console.error('generate error', payload);
+        alert(message);
+        return;
+      }
+
+      const downloadUrl =
+        payload.public_url || payload.url || payload.download_url || payload.downloadUrl || payload.data?.url;
+      if (downloadUrl) {
+        window.open(downloadUrl, '_blank', 'noopener');
+        return;
+      }
+
+      const fileInfo = payload.file || payload.data?.file;
+      if (fileInfo?.content) {
+        const mime = fileInfo.mime || fileInfo.type || 'application/octet-stream';
+        const name = fileInfo.name || `${templateSlug}.${body.output === 'html' ? 'html' : 'docx'}`;
+        const link = document.createElement('a');
+        link.href = `data:${mime};base64,${fileInfo.content}`;
+        link.download = name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+      }
+
+      if (typeof payload.html === 'string') {
+        const popup = window.open('', '_blank');
+        if (popup) {
+          popup.document.write(payload.html);
+          popup.document.close();
+        }
+        return;
+      }
+
+      console.warn('generate: risposta inattesa', payload);
+      alert('Documento generato, ma non è stato possibile ottenere il file.');
+    } catch (err) {
+      console.error('generate exception', err);
+      alert(err?.message || 'Errore imprevisto durante la generazione');
+    } finally {
+      button.disabled = false;
+      button.textContent = originalLabel;
+    }
+  });
 }
 
 function focusDocumentsTab(cerId) {
