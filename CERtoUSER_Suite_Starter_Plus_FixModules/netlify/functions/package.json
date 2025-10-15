@@ -1,0 +1,21 @@
+{
+  "name": "functions",
+  "version": "1.0.0",
+  "description": "",
+  "main": "_calc.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "busboy": "^1.6.0",
+    "docxtemplater": "^3.66.7",
+    "handlebars": "^4.7.8",
+    "nanoid": "^5.1.6",
+    "pg": "^8.16.3",
+    "pizzip": "^3.2.0"
+  }
+}
