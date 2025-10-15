@@ -1,5 +1,5 @@
 import { allCustomers, allCER, saveCER, uid, progressCERs, saveProgressCERs } from './storage.js';
-import { saveDocFile, statutoTemplate, regolamentoTemplate, attoCostitutivoTemplate, adesioneTemplate, delegaGSETemplate, contrattoTraderTemplate, informativaGDPRTemplate } from './docs.js';
+import { saveDocFile, statutoTemplate, regolamentoTemplate, attoCostitutivoTemplate, adesioneTemplate, delegaGSETemplate, contrattoTraderTemplate, informativaGDPRTemplate, setRuntimeTemplate } from './docs.js';
 import { STATE as CRONO_STATE, initCronoprogrammaUI, renderCronoprogramma } from './cronoprogramma.js?v=36';
 
 const API_BASE = '/api';
@@ -81,6 +81,7 @@ let formSubmitBtn;
 let docsCerSelect;
 let docsActions;
 let docsProgress;
+let customStatutoTemplateName = null;
 let cerDocsTable;
 let cerDocsEmpty;
 
@@ -812,40 +813,115 @@ function renderDocumentsForCer(cerId) {
     }
   }
 
-  docsActions.querySelector('[data-doc="statuto"]').onclick = () => {
-    const doc = statutoTemplate(cer, membri);
+  docsActions.querySelector('[data-doc="statuto"]').onclick = async () => {
+    const doc = await statutoTemplate(cer, membri);
     saveDocFile(`Statuto_${cer.nome}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="regolamento"]').onclick = () => {
-    const doc = regolamentoTemplate(cer, membri);
+  docsActions.querySelector('[data-doc="regolamento"]').onclick = async () => {
+    const doc = await regolamentoTemplate(cer, membri);
     saveDocFile(`Regolamento_${cer.nome}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="atto"]').onclick = () => {
-    const doc = attoCostitutivoTemplate(cer, membri);
+  docsActions.querySelector('[data-doc="atto"]').onclick = async () => {
+    const doc = await attoCostitutivoTemplate(cer, membri);
     saveDocFile(`AttoCostitutivo_${cer.nome}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="adesione"]').onclick = () => {
+  docsActions.querySelector('[data-doc="adesione"]').onclick = async () => {
     const id = memberSelect?.value;
     const membro = membri.find(m => m.id === id);
-    const doc = adesioneTemplate(cer, membro);
+    const doc = await adesioneTemplate(cer, membro);
     saveDocFile(`Adesione_${membro?.nome || 'Membro'}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="delega"]').onclick = () => {
-    const doc = delegaGSETemplate(cer, membri);
+  docsActions.querySelector('[data-doc="delega"]').onclick = async () => {
+    const doc = await delegaGSETemplate(cer, membri);
     saveDocFile(`Delega_GSE_${cer.nome}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="trader"]').onclick = () => {
-    const doc = contrattoTraderTemplate(cer, membri);
+  docsActions.querySelector('[data-doc="trader"]').onclick = async () => {
+    const doc = await contrattoTraderTemplate(cer, membri);
     saveDocFile(`ContrattoTrader_${cer.nome}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="privacy"]').onclick = () => {
-    const doc = informativaGDPRTemplate(cer, membri);
+  docsActions.querySelector('[data-doc="privacy"]').onclick = async () => {
+    const doc = await informativaGDPRTemplate(cer, membri);
     saveDocFile(`Privacy_${cer.nome}.doc`, doc);
   };
+
+  const statutoUploader = buildStatutoTemplateUploader();
+  if (statutoUploader) {
+    docsActions.appendChild(statutoUploader);
+  }
 
   renderCerProgress(docsProgress, cer);
   renderCerDocs(cer.id);
   loadCerDocs(cer.id);
+}
+
+function updateStatutoTemplateStatus(statusEl) {
+  if (!statusEl) return;
+  if (customStatutoTemplateName) {
+    statusEl.textContent = `Modello personalizzato attivo: ${customStatutoTemplateName}`;
+  } else {
+    statusEl.textContent = 'Modello standard in uso.';
+  }
+}
+
+function buildStatutoTemplateUploader() {
+  if (typeof document === 'undefined' || typeof window === 'undefined' || typeof window.FileReader === 'undefined') return null;
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'doc-template-upload';
+  wrapper.innerHTML = `
+    <hr class="doc-template-upload__divider"/>
+    <div class="doc-template-upload__inner">
+      <p class="info-text small">Carica un file HTML personalizzato per lo Statuto. Verrà usato finché non ricarichi la pagina.</p>
+      <label class="doc-template-upload__file">
+        <span>Modello Statuto (HTML)</span>
+        <input type="file" accept=".html,.htm,.txt" data-template-upload="statuto" />
+      </label>
+      <div class="doc-template-upload__actions">
+        <button type="button" class="btn ghost" data-template-reset="statuto">Usa modello standard</button>
+      </div>
+      <p class="info-text small" data-template-status="statuto"></p>
+    </div>
+  `;
+
+  const input = wrapper.querySelector('[data-template-upload="statuto"]');
+  const resetBtn = wrapper.querySelector('[data-template-reset="statuto"]');
+  const status = wrapper.querySelector('[data-template-status="statuto"]');
+  updateStatutoTemplateStatus(status);
+
+  if (input) {
+    input.addEventListener('change', (event) => {
+      const file = event?.target?.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = typeof reader.result === 'string' ? reader.result : '';
+        if (!text.trim()) {
+          alert('Il file selezionato è vuoto o non contiene testo.');
+          return;
+        }
+        setRuntimeTemplate('statuto', text);
+        customStatutoTemplateName = file.name || 'statuto.html';
+        updateStatutoTemplateStatus(status);
+        if (input) input.value = '';
+      };
+      reader.onerror = () => {
+        console.error('Errore lettura file Statuto personalizzato:', reader.error);
+        alert('Impossibile leggere il file selezionato.');
+      };
+      reader.readAsText(file, 'UTF-8');
+    });
+  }
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      setRuntimeTemplate('statuto');
+      customStatutoTemplateName = null;
+      updateStatutoTemplateStatus(status);
+      if (input) input.value = '';
+    });
+  }
+
+  return wrapper;
 }
 
 function cerDocStatusBadge(status = 'uploaded') {
