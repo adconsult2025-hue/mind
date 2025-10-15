@@ -138,6 +138,36 @@ img {
   gap: var(--space-3);
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.session-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.session-controls .badge {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.75rem;
+}
+
+@media (max-width: 1024px) {
+  .header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--space-3);
+  }
+
+  .session-controls {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 .toolbar .btn.active {
   background: var(--brand-primary);
   border-color: transparent;
