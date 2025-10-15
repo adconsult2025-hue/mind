@@ -24,6 +24,6 @@ create table if not exists cer_documents (
   metadata jsonb default '{}'
 );
 
-create index if not exists cer_documents_cer on cer_documents (cer_id);
-create index if not exists cer_documents_phase on cer_documents (phase);
-create index if not exists cer_documents_doctype on cer_documents (doc_type);
+create index if not exists cer_documents_cer on cer_documents(cer_id);
+create index if not exists cer_documents_phase on cer_documents(phase);
+create index if not exists cer_documents_doctype on cer_documents(doc_type);
