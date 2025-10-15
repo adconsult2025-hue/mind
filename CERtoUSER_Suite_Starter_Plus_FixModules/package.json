@@ -12,10 +12,10 @@
   "type": "commonjs",
   "dependencies": {
     "busboy": "^1.6.0",
-    "docxtemplater": "^3.66.7",
+    "docxtemplater": "^3.43.0",
     "handlebars": "^4.7.8",
     "nanoid": "^5.1.6",
-    "pg": "^8.16.3",
-    "pizzip": "^3.2.0"
+    "pg": "^8.12.0",
+    "pizzip": "^3.1.7"
   }
 }
