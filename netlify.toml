@@ -1,7 +1,12 @@
 [build]
   base = "CERtoUSER_Suite_Starter_Plus_FixModules"
   publish = "CERtoUSER_Suite_Starter_Plus_FixModules"
+  command = "npm ci || npm i"
   functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["pg", "handlebars", "pizzip", "docxtemplater", "nanoid", "busboy"]
 
 [[redirects]]
   from = "/api/*"
