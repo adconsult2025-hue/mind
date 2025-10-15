@@ -957,9 +957,56 @@ function extractTemplatesList(payload) {
 
 function filterCerTemplates(templates) {
   return (Array.isArray(templates) ? templates : [])
-    .filter((tpl) => isCerTemplateModule(tpl?.module))
-    .filter(isTemplateActive)
-    .map((tpl) => ({ ...tpl, module: tpl?.module || 'cer' }));
+    .map((tpl) => normalizeCerTemplate(tpl))
+    .filter(Boolean);
+}
+
+function normalizeCerTemplate(tpl) {
+  if (!tpl || typeof tpl !== 'object') return null;
+
+  const moduleValue = tpl.module ? String(tpl.module).trim().toLowerCase() : '';
+  const normalizedModule = moduleValue || 'cer';
+  if (!isCerTemplateModule(normalizedModule)) {
+    return null;
+  }
+
+  if (!isTemplateActive(tpl)) {
+    return null;
+  }
+
+  const normalizedCode = pickFirstNonEmpty([
+    tpl.code,
+    tpl.slug,
+    tpl.id,
+    tpl.codice,
+    tpl.name,
+  ]);
+
+  if (!normalizedCode) {
+    return null;
+  }
+
+  const normalizedSlug = pickFirstNonEmpty([
+    tpl.slug,
+    tpl.code,
+    tpl.id,
+    tpl.codice,
+    tpl.name,
+  ]);
+
+  return {
+    ...tpl,
+    code: normalizedCode,
+    slug: normalizedSlug,
+    module: normalizedModule,
+  };
+}
+
+function pickFirstNonEmpty(candidates) {
+  return candidates
+    .map((value) => (typeof value === 'string' ? value : (value != null ? String(value) : '')))
+    .map((value) => value.trim())
+    .find((value) => value.length > 0) || '';
 }
 
 function isCerTemplateModule(moduleValue) {
@@ -970,11 +1017,20 @@ function isCerTemplateModule(moduleValue) {
 
 function isTemplateActive(tpl) {
   if (!tpl) return false;
-  if (Object.prototype.hasOwnProperty.call(tpl, 'active') && tpl.active === false) {
-    return false;
+  if (Object.prototype.hasOwnProperty.call(tpl, 'active')) {
+    const rawActive = tpl.active;
+    if (rawActive === false || String(rawActive).toLowerCase() === 'false') {
+      return false;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(tpl, 'enabled')) {
+    const rawEnabled = tpl.enabled;
+    if (rawEnabled === false || String(rawEnabled).toLowerCase() === 'false') {
+      return false;
+    }
   }
   const status = tpl.status ? String(tpl.status).trim().toLowerCase() : null;
-  if (status && status !== 'active') {
+  if (status && status !== 'active' && status !== 'enabled' && status !== 'published') {
     return false;
   }
   return true;
@@ -982,7 +1038,13 @@ function isTemplateActive(tpl) {
 
 function formatTemplateDisplayName(template) {
   if (!template) return 'Template';
-  const name = template.name || template.codice || template.slug || template.code || 'Template';
+  const name = pickFirstNonEmpty([
+    template.name,
+    template.codice,
+    template.code,
+    template.slug,
+    template.id,
+  ]) || 'Template';
   const version = template.latest_version ?? template.version;
   const moduleLabel = template.module ? String(template.module).toUpperCase() : '';
   const parts = [name];
