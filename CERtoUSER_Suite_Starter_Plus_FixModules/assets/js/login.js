@@ -1,42 +1,16 @@
-const STORAGE_KEY = 'mind.identity.session';
+import {
+  loadSession,
+  isSessionValid,
+  saveSession,
+  fetchIdentityUser
+} from './identity.js';
+
 const form = document.getElementById('login-form');
 const statusEl = document.querySelector('[data-status]');
 const submitBtn = document.querySelector('[data-submit]');
 const submitLabel = submitBtn?.querySelector('span');
 const redirectParam = new URLSearchParams(window.location.search).get('redirect');
 const redirectTarget = redirectParam && redirectParam.startsWith('/') ? redirectParam : '/';
-
-function exposeSession(session) {
-  if (typeof window !== 'undefined') {
-    window.MIND_IDENTITY = session;
-  }
-}
-
-function loadSession() {
-  try {
-    const raw = window.localStorage?.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch (error) {
-    console.warn('Impossibile leggere la sessione Identity:', error);
-    return null;
-  }
-}
-
-function isSessionValid(session) {
-  if (!session || typeof session !== 'object') return false;
-  if (!session.accessToken || !session.expiresAt) return false;
-  return Number(session.expiresAt) > Date.now() + 5_000;
-}
-
-function saveSession(session) {
-  try {
-    window.localStorage?.setItem(STORAGE_KEY, JSON.stringify(session));
-  } catch (error) {
-    console.warn('Impossibile salvare la sessione Identity:', error);
-  }
-  exposeSession(session);
-}
 
 function clearStatus() {
   if (!statusEl) return;
@@ -109,23 +83,6 @@ async function fetchIdentityToken(email, password) {
   return data;
 }
 
-async function fetchIdentityUser(accessToken) {
-  if (!accessToken) return null;
-  try {
-    const response = await fetch('/.netlify/identity/user', {
-      headers: {
-        Authorization: `Bearer ${accessToken}`
-      }
-    });
-
-    if (!response.ok) return null;
-    return await response.json();
-  } catch (error) {
-    console.warn('Impossibile recuperare i dettagli utente Identity:', error);
-    return null;
-  }
-}
-
 async function handleSubmit(event) {
   event.preventDefault();
   clearStatus();
@@ -157,7 +114,7 @@ async function handleSubmit(event) {
       user: profile || null
     };
 
-    saveSession(session);
+    saveSession(session, { source: 'login' });
     setStatus('Accesso eseguito, reindirizzamento in corso…', 'success');
 
     setTimeout(redirectToApp, 600);
@@ -175,7 +132,7 @@ if (form) {
 
 const existingSession = loadSession();
 if (isSessionValid(existingSession)) {
-  exposeSession(existingSession);
+  saveSession(existingSession, { persist: false, source: 'login-existing' });
   setStatus('Sessione già attiva, reindirizzamento in corso…', 'success');
   setLoading(true);
   setTimeout(redirectToApp, 400);
