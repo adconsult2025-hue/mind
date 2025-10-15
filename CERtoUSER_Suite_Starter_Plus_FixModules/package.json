@@ -4,6 +4,8 @@
   "description": "Questa repository contiene la versione starter della suite MIND per la gestione integrata di CRM, CER, impianti e documentazione demo.",
   "main": "index.js",
   "scripts": {
+    "build": "node tools/prepare_site.js",
+    "prepare:site": "node tools/prepare_site.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
