@@ -54,6 +54,108 @@ const state = {
 let customers = allCustomers();
 let selectedCustomer = null;
 const clientDocsStore = new Map();
+
+function mergeCustomerData(base, update) {
+  const result = { ...base };
+  Object.entries(update || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return;
+    if (key === 'pod') {
+      const sanitized = sanitizePOD(value);
+      if (sanitized) result.pod = sanitized;
+      return;
+    }
+    result[key] = value;
+  });
+  return result;
+}
+
+function normalizeApiCustomer(data) {
+  if (!data) return null;
+  const id = String(data.id || data.client_id || '').trim();
+  const podCandidates = [];
+  if (Array.isArray(data.pods)) podCandidates.push(...data.pods);
+  if (data.pod) podCandidates.unshift(data.pod);
+  let pod = null;
+  for (const candidate of podCandidates) {
+    const sanitized = sanitizePOD(candidate);
+    if (sanitized) {
+      pod = sanitized;
+      break;
+    }
+  }
+  if (!pod && !id) return null;
+  return {
+    id: id || pod || uid('cust'),
+    nome: data.nome || data.name || 'Cliente',
+    tipo: data.tipo || data.subject_type || 'Privato',
+    pod,
+    comune: data.comune || data.city || '',
+    cabina: data.cabina || data.cabina_primaria || data.cp || '',
+    email: data.email || data.mail || '',
+    tel: data.tel || data.phone || data.telefono || '',
+    ruolo: data.ruolo || data.role || 'Consumer'
+  };
+}
+
+function mergeCustomerLists(existing, incoming) {
+  if (!Array.isArray(incoming) || !incoming.length) return existing;
+  const map = new Map();
+  const podIndex = new Map();
+  existing.forEach((customer) => {
+    const id = String(customer.id || '');
+    if (!id) return;
+    const copy = { ...customer };
+    map.set(id, copy);
+    if (copy.pod) podIndex.set(copy.pod, id);
+  });
+
+  incoming.forEach((customer) => {
+    const targetId = String(customer.id || '');
+    if (targetId && map.has(targetId)) {
+      const merged = mergeCustomerData(map.get(targetId), customer);
+      map.set(targetId, merged);
+      if (merged.pod) podIndex.set(merged.pod, targetId);
+      return;
+    }
+    if (customer.pod && podIndex.has(customer.pod)) {
+      const existingId = podIndex.get(customer.pod);
+      const merged = mergeCustomerData(map.get(existingId), customer);
+      map.set(existingId, merged);
+      return;
+    }
+    const finalId = targetId || customer.pod || uid('cust');
+    if (!map.has(finalId)) {
+      const record = { ...customer, id: finalId };
+      map.set(finalId, record);
+      if (record.pod) podIndex.set(record.pod, finalId);
+    }
+  });
+
+  const result = Array.from(map.values());
+  incoming.forEach((customer) => {
+    if (!customer.id && customer.pod && !podIndex.has(customer.pod)) {
+      result.push({ ...customer, id: customer.pod });
+    }
+  });
+  return result;
+}
+
+async function syncCustomersFromApi() {
+  try {
+    const res = await fetch(`${API_BASE}/clients`);
+    if (!res.ok) return;
+    const payload = await res.json();
+    if (!payload?.ok || !Array.isArray(payload.data)) return;
+    const normalized = payload.data.map(normalizeApiCustomer).filter(Boolean);
+    if (!normalized.length) return;
+    const merged = mergeCustomerLists(allCustomers(), normalized);
+    customers = merged;
+    saveCustomers(customers);
+    render();
+  } catch (err) {
+    console.warn('Impossibile sincronizzare i clienti dal CRM remoto', err);
+  }
+}
 function notify(message) {
   if (!message) return;
   window.dispatchEvent(new CustomEvent('cer:notify', { detail: message }));
@@ -1060,12 +1162,20 @@ if (searchEl) {
 
 function init() {
   render();
+  syncCustomersFromApi();
   const params = new URLSearchParams(window.location.search);
   const cid = params.get('client_id');
   if (cid) {
     loadClientDetail(cid);
   }
 }
+
+window.addEventListener('storage', (event) => {
+  if (event.key === 'customers') {
+    customers = allCustomers();
+    render();
+  }
+});
 
 if (typeof document !== 'undefined') {
   document.addEventListener('DOMContentLoaded', init);
