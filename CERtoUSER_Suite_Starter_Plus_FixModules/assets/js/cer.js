@@ -812,34 +812,34 @@ function renderDocumentsForCer(cerId) {
     }
   }
 
-  docsActions.querySelector('[data-doc="statuto"]').onclick = () => {
-    const doc = statutoTemplate(cer, membri);
+  docsActions.querySelector('[data-doc="statuto"]').onclick = async () => {
+    const doc = await statutoTemplate(cer, membri);
     saveDocFile(`Statuto_${cer.nome}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="regolamento"]').onclick = () => {
-    const doc = regolamentoTemplate(cer, membri);
+  docsActions.querySelector('[data-doc="regolamento"]').onclick = async () => {
+    const doc = await regolamentoTemplate(cer, membri);
     saveDocFile(`Regolamento_${cer.nome}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="atto"]').onclick = () => {
-    const doc = attoCostitutivoTemplate(cer, membri);
+  docsActions.querySelector('[data-doc="atto"]').onclick = async () => {
+    const doc = await attoCostitutivoTemplate(cer, membri);
     saveDocFile(`AttoCostitutivo_${cer.nome}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="adesione"]').onclick = () => {
+  docsActions.querySelector('[data-doc="adesione"]').onclick = async () => {
     const id = memberSelect?.value;
     const membro = membri.find(m => m.id === id);
-    const doc = adesioneTemplate(cer, membro);
+    const doc = await adesioneTemplate(cer, membro);
     saveDocFile(`Adesione_${membro?.nome || 'Membro'}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="delega"]').onclick = () => {
-    const doc = delegaGSETemplate(cer, membri);
+  docsActions.querySelector('[data-doc="delega"]').onclick = async () => {
+    const doc = await delegaGSETemplate(cer, membri);
     saveDocFile(`Delega_GSE_${cer.nome}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="trader"]').onclick = () => {
-    const doc = contrattoTraderTemplate(cer, membri);
+  docsActions.querySelector('[data-doc="trader"]').onclick = async () => {
+    const doc = await contrattoTraderTemplate(cer, membri);
     saveDocFile(`ContrattoTrader_${cer.nome}.doc`, doc);
   };
-  docsActions.querySelector('[data-doc="privacy"]').onclick = () => {
-    const doc = informativaGDPRTemplate(cer, membri);
+  docsActions.querySelector('[data-doc="privacy"]').onclick = async () => {
+    const doc = await informativaGDPRTemplate(cer, membri);
     saveDocFile(`Privacy_${cer.nome}.doc`, doc);
   };
 
