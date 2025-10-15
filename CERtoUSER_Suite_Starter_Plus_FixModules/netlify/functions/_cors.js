@@ -9,4 +9,12 @@ function preflight() {
   return { statusCode: 204, headers: corsHeaders, body: "" };
 }
 
-module.exports = { corsHeaders, preflight };
+function json(statusCode, body) {
+  return {
+    statusCode,
+    headers: corsHeaders,
+    body: JSON.stringify(body ?? {})
+  };
+}
+
+module.exports = { corsHeaders, preflight, json };
