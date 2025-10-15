@@ -1656,3 +1656,201 @@ body:not(.dark) code {
 }
 .env-banner{position:fixed;left:0;right:0;bottom:0;padding:.35rem .8rem;font-size:.85rem;background:#6b7280;color:#fff;z-index:9999;opacity:.92}
 .env-banner.safe{background:#92400e}
+
+/* Login page */
+body.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(2rem, 5vw, 4rem);
+  background: radial-gradient(1200px 900px at 20% -10%, rgba(53, 201, 201, 0.18), transparent 60%),
+              radial-gradient(1100px 800px at 80% 0%, rgba(192, 103, 197, 0.12), transparent 70%),
+              var(--brand-bg);
+}
+
+.login-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+  gap: clamp(2rem, 6vw, 4rem);
+  align-items: center;
+  width: min(1100px, 100%);
+  padding: clamp(2.5rem, 6vw, 4.5rem);
+  background: linear-gradient(135deg, rgba(8, 18, 22, 0.85), rgba(11, 26, 31, 0.75));
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(53, 201, 201, 0.22);
+  box-shadow: var(--shadow-md);
+  position: relative;
+  overflow: hidden;
+}
+
+.login-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(600px 400px at 20% 20%, rgba(53, 201, 201, 0.22), transparent 70%),
+              radial-gradient(700px 500px at 80% 80%, rgba(192, 103, 197, 0.18), transparent 75%);
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.login-content {
+  position: relative;
+  z-index: 1;
+  display: contents;
+}
+
+.login-hero {
+  display: grid;
+  gap: var(--space-4);
+  text-align: left;
+}
+
+.login-hero-logo {
+  width: min(360px, 100%);
+  justify-self: flex-start;
+  filter: drop-shadow(0 25px 40px rgba(10, 21, 24, 0.85));
+}
+
+.login-hero h1 {
+  margin: 0;
+  font-size: clamp(1.9rem, 3vw, 2.4rem);
+  letter-spacing: 0.04em;
+}
+
+.login-hero p {
+  margin: 0;
+  color: var(--brand-muted);
+  font-size: 1rem;
+}
+
+.login-card {
+  background: rgba(6, 15, 19, 0.85);
+  border: 1px solid rgba(53, 201, 201, 0.25);
+  border-radius: var(--radius-lg);
+  padding: clamp(2rem, 4vw, 2.75rem);
+  box-shadow: var(--shadow-soft);
+  display: grid;
+  gap: var(--space-4);
+}
+
+.login-card header {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.login-card header h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.login-card header p {
+  margin: 0;
+  color: var(--brand-muted);
+  font-size: 0.95rem;
+}
+
+.login-card form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.login-card label span {
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--brand-muted);
+}
+
+.login-card input {
+  background: rgba(9, 21, 25, 0.9);
+}
+
+.login-card input:focus {
+  background: rgba(12, 26, 31, 0.95);
+}
+
+.login-actions {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.btn.block {
+  width: 100%;
+  justify-content: center;
+}
+
+.login-status {
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.9rem;
+  font-size: 0.9rem;
+  background: rgba(53, 201, 201, 0.08);
+  border: 1px solid rgba(53, 201, 201, 0.25);
+  color: var(--brand-text);
+}
+
+.login-status.error {
+  background: rgba(192, 79, 79, 0.18);
+  border-color: rgba(255, 115, 115, 0.35);
+  color: #ffbcbc;
+}
+
+.login-status.success {
+  background: rgba(53, 201, 201, 0.22);
+  border-color: rgba(53, 201, 201, 0.45);
+}
+
+.login-meta {
+  font-size: 0.85rem;
+  color: var(--brand-muted);
+  text-align: center;
+}
+
+.login-meta a {
+  color: var(--brand-primary);
+  font-weight: 600;
+}
+
+@media (max-width: 960px) {
+  .login-shell {
+    grid-template-columns: 1fr;
+    text-align: center;
+    padding: clamp(2rem, 8vw, 3rem);
+  }
+
+  .login-content {
+    display: grid;
+    gap: clamp(2rem, 5vw, 3rem);
+  }
+
+  .login-hero {
+    justify-items: center;
+    text-align: center;
+  }
+
+  .login-hero-logo {
+    justify-self: center;
+  }
+
+  .login-card {
+    width: min(100%, 460px);
+    margin: 0 auto;
+    text-align: left;
+  }
+
+  .login-meta {
+    text-align: center;
+  }
+}
+
+@media (max-width: 540px) {
+  body.login-page {
+    padding: 1.5rem;
+  }
+
+  .login-card {
+    padding: clamp(1.5rem, 6vw, 2rem);
+  }
+}
