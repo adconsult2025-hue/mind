@@ -1,5 +1,7 @@
 // assets/js/storage.js
 
+import { cloneDemoCustomers } from './data/demo_customers.js';
+
 // mini wrapper su localStorage
 const DB = {
   get(key, fallback) {
@@ -11,9 +13,26 @@ const DB = {
   }
 };
 
+let demoCustomersSeeded = false;
+
+function ensureDemoCustomers() {
+  if (demoCustomersSeeded) return;
+  const existing = DB.get('customers', []);
+  if (!Array.isArray(existing) || existing.length === 0) {
+    DB.set('customers', cloneDemoCustomers());
+  }
+  demoCustomersSeeded = true;
+}
+
 // --- Customers ---
-export function allCustomers() { return DB.get('customers', []); }
-export function saveCustomers(list) { DB.set('customers', list); }
+export function allCustomers() {
+  ensureDemoCustomers();
+  return DB.get('customers', []);
+}
+export function saveCustomers(list) {
+  demoCustomersSeeded = true;
+  DB.set('customers', list);
+}
 
 // --- CER ---
 export function allCER() { return DB.get('cers', []); }

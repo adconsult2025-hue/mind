@@ -971,34 +971,6 @@ function renderDocumentsForCer(cerId) {
     const doc = await adesioneTemplate(cer, membro);
     saveDocFile(`Adesione_${membro?.nome || 'Membro'}.doc`, doc);
   };
-  const accordoBtn = docsActions.querySelector('[data-doc="accordo"]');
-  if (accordoBtn) {
-    const allowedRoles = new Set(['prosumer', 'produttore', 'producer']);
-    const eligibleMembers = membri.filter((m) => allowedRoles.has(String(m.ruolo || '').toLowerCase()));
-    if (!eligibleMembers.length) {
-      accordoBtn.disabled = true;
-      accordoBtn.title = 'Disponibile solo per membri Produttore o Prosumer';
-    }
-    accordoBtn.onclick = () => {
-      if (!memberSelect) {
-        alert('Seleziona un membro per generare il documento.');
-        return;
-      }
-      const id = memberSelect.value;
-      const membro = membri.find((m) => m.id === id);
-      if (!membro) {
-        alert('Seleziona un membro valido.');
-        return;
-      }
-      const role = String(membro.ruolo || '').toLowerCase();
-      if (!allowedRoles.has(role)) {
-        alert('Il documento è disponibile solo per membri Produttore o Prosumer.');
-        return;
-      }
-      const doc = accordoProduttoreProsumerTemplate(cer, membro);
-      saveDocFile(`Accordo_${membro.nome || 'Membro'}.doc`, doc);
-    };
-  }
   docsActions.querySelector('[data-doc="delega"]').onclick = () => {
     const doc = delegaGSETemplate(cer, membri);
     saveDocFile(`Delega_GSE_${cer.nome}.doc`, doc);
@@ -1011,7 +983,7 @@ function renderDocumentsForCer(cerId) {
     } else {
       accordoBtn.removeAttribute('title');
     }
-    accordoBtn.onclick = async () => {
+    accordoBtn.onclick = () => {
       if (!memberSelect || !memberSelect.value) {
         alert('Seleziona un membro Prosumer o Produttore per generare questo accordo.');
         return;
@@ -1021,7 +993,7 @@ function renderDocumentsForCer(cerId) {
         alert('Seleziona un membro con ruolo Produttore o Prosumer per generare questo accordo.');
         return;
       }
-      const doc = await accordoProduttoreProsumerTemplate(cer, membro);
+      const doc = accordoProduttoreProsumerTemplate(cer, membro);
       saveDocFile(`Accordo_${membro?.nome || 'Membro'}.doc`, doc);
     };
   }
