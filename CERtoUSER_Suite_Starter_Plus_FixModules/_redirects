@@ -6,4 +6,4 @@
 /api/plant_docs/* /.netlify/functions/plant_docs 200
 /api/plant_workflows /.netlify/functions/plant_workflows 200
 /api/plant_workflows/* /.netlify/functions/plant_workflows 200
-/api/* /.netlify/functions/:splat 200
+/api/* /.netlify/functions/api/:splat 200
