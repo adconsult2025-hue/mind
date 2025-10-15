@@ -1,26 +1,22 @@
 [build]
   base = "CERtoUSER_Suite_Starter_Plus_FixModules"
-  publish = "CERtoUSER_Suite_Starter_Plus_FixModules"
+  command = "npm run build"
+  publish = "site"
   functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["pg", "handlebars", "pizzip", "docxtemplater", "nanoid", "busboy"]
+
+[[plugins]]
+  package = "@netlify/plugin-functions-install-core"
 
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
 
-[[headers]]
-  for = "/api/*"
-  [headers.values]
-    Cache-Control = "no-store, no-cache, must-revalidate, max-age=0"
-    Access-Control-Allow-Origin = "*"
-    Access-Control-Allow-Methods = "GET,POST,PATCH,OPTIONS"
-    Access-Control-Allow-Headers = "Content-Type, Authorization"
-
-[context.production.environment]
-  SAFE_MODE = "false"
-
-[context.deploy-preview.environment]
-  SAFE_MODE = "false"
-
-[context.branch-deploy.environment]
-  SAFE_MODE = "false"
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

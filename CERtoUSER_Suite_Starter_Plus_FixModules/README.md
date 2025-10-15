@@ -25,3 +25,13 @@ node tools/make_backup_zip.js
 ```
 
 Il comando crea l'output `dist/backup-YYYYMMDD.zip` pronto da condividere o conservare come snapshot.
+
+## Deploy Netlify / cartella `site`
+
+Il front-end statico viene pubblicato tramite la cartella `site/`. Prima di effettuare un deploy eseguire:
+
+```bash
+npm run build
+```
+
+Il comando sincronizza `index.html`, `assets/`, `modules/` e `config/` dentro `site/` (lasciando intatta la sottocartella `site/assets/models` che ospita i template `.docx` caricati manualmente). Netlify usa quindi `site/` come directory `publish` e `netlify/functions/` per le API serverless.
