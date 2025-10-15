@@ -1,0 +1,58 @@
+{{BASE_STYLE}}
+<h1>MODELLO DI STATUTO DELLA COMUNITÀ DI ENERGIE RINNOVABILI</h1>
+<p>Versione 1.0 — Modello CERtoUSER (placeholders Mustache)</p>
+
+<h2>Art. 1 — Denominazione, forma giuridica, sede</h2>
+<p>È costituita una Comunità di Energie Rinnovabili denominata "{{cer.name}}" (di seguito, la "CER").<br>
+La CER assume forma {{cer.legal_form}} ai sensi di legge.<br>
+La sede legale è in {{cer.registered_office.address}}, {{cer.registered_office.city}}; sedi operative potranno essere istituite con delibera dell’Organo di Gestione.</p>
+
+<h2>Art. 2 — Oggetto, scopo e ambito elettrico</h2>
+<p>La CER persegue scopi prevalentemente ambientali, economici e sociali, non di lucro, promuovendo la produzione, condivisione e autoconsumo di energia da FER.<br>
+L’ambito elettrico coincide con la porzione di rete sottesa alla medesima cabina primaria identificata da {{cer.primary_substation.code}}.</p>
+
+<h2>Art. 3 — Durata</h2>
+<p>La durata è fissata {{cer.term_label}}.</p>
+
+<h2>Art. 4 — Soci, categorie e requisiti</h2>
+<p>Possono essere soci: persone fisiche, PMI, enti territoriali e locali, enti religiosi e del terzo settore, condomìni e soggetti ammessi.<br>
+Categorie: Produttori, Prosumer, Consumer, Sostenitori/Servizi. Ogni socio ha almeno un POD nel Registro POD.</p>
+
+<h2>Art. 5 — Impianti ammissibili e conferimento</h2>
+<p>Sono ammissibili impianti FER conformi al DM 7.12.2023 e Regole Operative GSE.</p>
+
+<h2>Art. 6 — Organi sociali</h2>
+<p>Assemblea; Organo di Gestione ({{organs.board.type}}); Responsabile Tecnico CER ({{organs.rt_cer.name}}); Revisore/Collegio (se previsto); Comitato Riparti &amp; Regole (facoltativo).</p>
+
+<h2>Art. 7 — Assemblea</h2>
+<p>Quorum: ordinaria 1ª conv. {{governance.quorum.ordinary_first}}%, 2ª conv. {{governance.quorum.ordinary_second}}%; straordinaria {{governance.quorum.extraordinary}}%.</p>
+
+<h2>Art. 8 — Organo di Gestione</h2>
+<p>Gestisce operativamente la CER, stipula contratti con GSE, DSO e trader {{trader.name}}, predispone riparti e adempimenti.</p>
+
+<h2>Art. 9 — Rapporti con GSE, DSO, trader e piattaforme</h2>
+<p>Registrazione su portali GSE/DSO; deleghe; cessione eccedenze a {{trader.name}} con condizioni da Regolamento.</p>
+
+<h2>Art. 10 — Ripartizione economica (principi)</h2>
+<p>Proventi GSE su energia condivisa e corrispettivi sono della CER e ripartiti secondo Regolamento.<br>
+Modello base CERtoUSER: Produttori {{shares.producers}}%, Utenti {{shares.users}}%, Gestione CER {{shares.management}}%, Fondo Innovazione {{shares.fund_innovation}}%.</p>
+
+<h2>Art. 11 — Trasparenza, rendicontazione e pagamenti</h2>
+<p>Rendicontazione mensile e pagamento trimestrale; conto dedicato IBAN {{payout.bank_account.iban}}.</p>
+
+<h2>Art. 12 — Ammissione, recesso, esclusione</h2>
+<p>Ammissione previa istruttoria tecnica e documentale; recesso con preavviso; esclusione per inadempimenti gravi.</p>
+
+<h2>Art. 13 — Privacy, sicurezza, audit</h2>
+<p>Trattamenti ex GDPR; policy di sicurezza IT; audit periodici.</p>
+
+<h2>Art. 14 — Clausole speciali</h2>
+<p>Licenza/brand CERtoUSER: {{brand.license.enabled}}; fee annua €{{brand.license.annual_fee_eur}}; royalty {{royalty.brand.rate_percent}}%.<br>
+Cessione eccedenze: tipo contratto {{trader.contract.type}}; eventuali trattenute {{trader.fee_percent_retentions}}%.<br>
+Penali: €{{penalties.late_docs_eur_per_day}}/giorno; interessi {{penalties.interests_ref}}.</p>
+
+<h2>Art. 15 — Controversie</h2>
+<p>Mediazione presso {{legal.adr_body}}; foro competente {{legal.forum_city}}.</p>
+
+<h2>Art. 16 — Rinvii</h2>
+<p>Per quanto non previsto si rinvia a TIAD ARERA, DM 7.12.2023, Regole Operative GSE e Codice Civile.</p>
