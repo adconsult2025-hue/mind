@@ -4,6 +4,68 @@ import { STATE as CRONO_STATE, initCronoprogrammaUI, renderCronoprogramma } from
 
 const API_BASE = '/api';
 const CER_TEMPLATE_MODULES = new Set(['cer', 'contratti']);
+const CER_TEMPLATE_ACTIVE_STATUSES = new Set([
+  'active',
+  'enabled',
+  'published',
+  'attivo',
+  'attiva',
+  'abilitato',
+  'abilitata',
+  'pubblicato',
+  'pubblicata',
+]);
+const CER_TEMPLATE_INACTIVE_STATUSES = new Set([
+  'inactive',
+  'disabled',
+  'draft',
+  'archived',
+  'deleted',
+  'archiviato',
+  'archiviata',
+  'bozza',
+  'inattivo',
+  'inattiva',
+  'non attivo',
+  'non attiva',
+  'disattivo',
+  'disattivato',
+  'disattivata',
+  'disabilitato',
+  'disabilitata',
+  'hidden',
+]);
+const TRUE_LIKE_VALUES = new Set([
+  'true',
+  '1',
+  'yes',
+  'y',
+  'si',
+  'sì',
+  's',
+  'on',
+  'enabled',
+  'attivo',
+  'attiva',
+  'abilitato',
+  'abilitata',
+]);
+const FALSE_LIKE_VALUES = new Set([
+  'false',
+  '0',
+  'no',
+  'n',
+  'off',
+  'disabled',
+  'inactive',
+  'inattivo',
+  'inattiva',
+  'disattivo',
+  'disattivato',
+  'disattivata',
+  'non attivo',
+  'non attiva',
+]);
 
 let form;
 let membersBox;
@@ -139,16 +201,64 @@ function init() {
 
 async function loadCerTemplates() {
   if (!templateSelect) return;
-  try {
-    const res = await fetch('/api2/templates', { headers: { Accept: 'application/json' } });
-    const payload = await res.json();
-    if (!res.ok || payload.ok === false) throw new Error(payload.error?.message || 'Impossibile caricare i modelli CER');
-    cerTemplates = filterCerTemplates(extractTemplatesList(payload));
-  } catch (err) {
+  const endpoints = ['/api2/templates'];
+  if (!endpoints.includes(`${API_BASE}/templates`)) {
+    endpoints.push(`${API_BASE}/templates`);
+  }
+
+  let loaded = [];
+  const errors = [];
+
+  for (const endpoint of endpoints) {
+    try {
+      loaded = await requestCerTemplates(endpoint);
+      cerTemplates = loaded;
+      if (loaded.length > 0 || endpoint === endpoints[endpoints.length - 1]) {
+        break;
+      }
+    } catch (err) {
+      errors.push({ endpoint, error: err });
+      console.error('loadCerTemplates error', endpoint, err);
+    }
+  }
+
+  if (!loaded.length && errors.length === endpoints.length) {
     cerTemplates = [];
-    console.error(err);
   }
   populateCerTemplateSelect();
+}
+
+async function requestCerTemplates(endpoint) {
+  const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
+  const rawText = await response.text();
+
+  let payload = null;
+  if (rawText) {
+    try {
+      payload = JSON.parse(rawText);
+    } catch (parseErr) {
+      const error = new Error(`Risposta non valida dal server (${endpoint})`);
+      error.cause = parseErr;
+      error.endpoint = endpoint;
+      error.rawBody = rawText;
+      throw error;
+    }
+  }
+
+  if (!response.ok || payload?.ok === false) {
+    const message =
+      payload?.error?.message
+      || payload?.message
+      || payload?.error
+      || `HTTP ${response.status}`;
+    const error = new Error(message);
+    error.status = response.status;
+    error.endpoint = endpoint;
+    error.payload = payload;
+    throw error;
+  }
+
+  return filterCerTemplates(extractTemplatesList(payload));
 }
 
 function populateCerTemplateSelect() {
@@ -959,6 +1069,10 @@ function renderCerTemplatesDropdown(templates, hostEl) {
 
 function extractTemplatesList(payload) {
   if (Array.isArray(payload)) return payload;
+  if (payload && Array.isArray(payload.templates)) return payload.templates;
+  if (payload && Array.isArray(payload.items)) return payload.items;
+  if (payload && Array.isArray(payload.list)) return payload.list;
+  if (payload?.data && Array.isArray(payload.data.templates)) return payload.data.templates;
   if (payload && Array.isArray(payload.data)) return payload.data;
   return [];
 }
@@ -1042,23 +1156,50 @@ function isCerTemplateModule(moduleValue) {
 
 function isTemplateActive(tpl) {
   if (!tpl) return false;
-  if (Object.prototype.hasOwnProperty.call(tpl, 'active')) {
-    const rawActive = tpl.active;
-    if (rawActive === false || String(rawActive).toLowerCase() === 'false') {
-      return false;
-    }
-  }
-  if (Object.prototype.hasOwnProperty.call(tpl, 'enabled')) {
-    const rawEnabled = tpl.enabled;
-    if (rawEnabled === false || String(rawEnabled).toLowerCase() === 'false') {
-      return false;
-    }
-  }
-  const status = tpl.status ? String(tpl.status).trim().toLowerCase() : null;
-  if (status && status !== 'active' && status !== 'enabled' && status !== 'published') {
+  const activeFlag = normalizeTemplateFlag(tpl.active);
+  if (activeFlag === false) return false;
+
+  const enabledFlag = normalizeTemplateFlag(tpl.enabled);
+  if (enabledFlag === false) return false;
+
+  const status = normalizeTemplateStatus(tpl.status ?? tpl.stato);
+  if (!status) return activeFlag !== false && enabledFlag !== false;
+
+  if (CER_TEMPLATE_INACTIVE_STATUSES.has(status)) {
     return false;
   }
-  return true;
+
+  if (CER_TEMPLATE_ACTIVE_STATUSES.has(status)) {
+    return true;
+  }
+
+  return activeFlag !== false && enabledFlag !== false;
+}
+
+function normalizeTemplateFlag(value) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) return null;
+    return value !== 0;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return null;
+    if (TRUE_LIKE_VALUES.has(normalized)) return true;
+    if (FALSE_LIKE_VALUES.has(normalized)) return false;
+  }
+  return null;
+}
+
+function normalizeTemplateStatus(value) {
+  if (value == null) return '';
+  if (typeof value === 'string') {
+    return value.trim().toLowerCase();
+  }
+  if (typeof value === 'number') {
+    return String(value);
+  }
+  return String(value ?? '').trim().toLowerCase();
 }
 
 function formatTemplateDisplayName(template) {
