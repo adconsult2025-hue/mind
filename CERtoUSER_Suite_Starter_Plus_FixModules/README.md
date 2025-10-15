@@ -47,10 +47,16 @@ La cartella contiene la web app statica (HTML/CSS/JS), gli asset e le Netlify Fu
 
 Per inizializzare la struttura del database dedicata alla gestione dei template è disponibile lo script SQL `tools/db/templates_schema.sql`.
 
-Eseguire lo script puntando alla propria istanza Postgres, ad esempio:
+Puoi applicarlo in due modi:
 
 ```bash
-psql "$NEON_DATABASE_URL" -f tools/db/templates_schema.sql
+# Script helper: legge PSQL_URL o NEON_DATABASE_URL
+PSQL_URL="postgresql://<user>:<pwd>@<host>/<db>?sslmode=require" \
+  tools/db/bootstrap.sh
+
+# Oppure con psql diretto
+export PSQL_URL="postgresql://<user>:<pwd>@<host>/<db>?sslmode=require"
+psql "$PSQL_URL" -f tools/db/templates_schema.sql
 ```
 
 Lo script crea automaticamente l'estensione `pgcrypto` (se assente) e le tabelle `templates`, `template_versions` e `generated_documents` utilizzate dalle funzioni serverless per la gestione dei documenti.

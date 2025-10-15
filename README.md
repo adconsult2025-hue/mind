@@ -37,10 +37,16 @@ Il comando esegue il front-end statico e tutte le API `/api/*` replicate tramite
 
 ## 4. Configurare il database
 
-Esegui lo script `tools/db/templates_schema.sql` sulla tua istanza Postgres per creare le tabelle necessarie alla gestione documentale.
+Esegui lo script `tools/db/templates_schema.sql` sulla tua istanza Postgres per creare le tabelle necessarie alla gestione documentale. Puoi farlo direttamente con `psql` oppure tramite lo script helper `bootstrap.sh`.
 
 ```bash
-psql "$NEON_DATABASE_URL" -f CERtoUSER_Suite_Starter_Plus_FixModules/tools/db/templates_schema.sql
+# Opzione A: usare lo script helper
+PSQL_URL="postgresql://<user>:<pwd>@<host>/<db>?sslmode=require" \
+  CERtoUSER_Suite_Starter_Plus_FixModules/tools/db/bootstrap.sh
+
+# Opzione B: comando psql diretto (richiede NEON_DATABASE_URL o PSQL_URL)
+export PSQL_URL="postgresql://<user>:<pwd>@<host>/<db>?sslmode=require"
+psql "$PSQL_URL" -f CERtoUSER_Suite_Starter_Plus_FixModules/tools/db/templates_schema.sql
 ```
 
 ## 5. Deploy su Netlify
