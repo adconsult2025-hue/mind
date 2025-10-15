@@ -140,6 +140,65 @@
           <div id="cer-list" class="table"></div>
         </div>
       </section>
+
+      <section class="card" id="cer-detail-card" hidden>
+        <div class="row-between">
+          <div>
+            <h2 id="cer-detail-title">Scheda CER</h2>
+            <p class="info-text" id="cer-detail-meta"></p>
+          </div>
+          <div class="actions">
+            <button class="btn ghost" type="button" id="cer-detail-edit">Modifica anagrafica</button>
+            <button class="btn ghost" type="button" id="cer-detail-close">Chiudi scheda</button>
+          </div>
+        </div>
+
+        <div class="card soft">
+          <div class="row-between">
+            <h3>Partecipanti</h3>
+            <div class="actions">
+              <button class="btn ghost" type="button" id="cer-detail-add-member">Aggiungi partecipante</button>
+            </div>
+          </div>
+          <p class="info-text" id="cer-detail-members-empty">Non ci sono partecipanti associati.</p>
+          <div class="table-wrap">
+            <table class="data-table" id="cer-detail-members">
+              <thead>
+                <tr>
+                  <th>Partecipante</th>
+                  <th>Ruolo</th>
+                  <th>Contratto</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card soft">
+          <div class="row-between">
+            <h3>Impianti associati</h3>
+            <div class="actions">
+              <button class="btn ghost" type="button" id="cer-detail-add-plant">Aggiungi impianto</button>
+            </div>
+          </div>
+          <p class="info-text" id="cer-detail-plants-empty">Aggiungi almeno un impianto per rispettare i requisiti minimi della CER.</p>
+          <div class="table-wrap">
+            <table class="data-table" id="cer-detail-plants">
+              <thead>
+                <tr>
+                  <th>Impianto</th>
+                  <th>Titolare</th>
+                  <th>Potenza</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
     </section>
 
     <section class="tab-panel" data-panel="plants">
@@ -274,6 +333,56 @@
       </section>
     </section>
   </main>
+
+  <div id="cer-member-modal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h3>Aggiungi partecipanti</h3>
+        <button class="close-btn" type="button" aria-label="Chiudi" data-close-modal>×</button>
+      </div>
+      <div class="modal-body">
+        <p class="info-text">Seleziona i clienti dal CRM da aggiungere alla CER e imposta il loro ruolo.</p>
+        <div id="cer-member-modal-list" class="stack"></div>
+        <p class="info-text" id="cer-member-modal-feedback"></p>
+      </div>
+      <div class="modal-actions actions">
+        <button class="btn ghost" type="button" data-close-modal>Annulla</button>
+        <button class="btn" type="button" id="cer-member-modal-save">Aggiungi selezionati</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="cer-plant-modal" class="modal" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h3>Nuovo impianto CER</h3>
+        <button class="close-btn" type="button" aria-label="Chiudi" data-close-modal>×</button>
+      </div>
+      <form id="cer-plant-modal-form">
+        <div class="modal-body stack">
+          <p class="info-text">Collega un impianto alla CER e assegna un titolare Prosumer/Produttore.</p>
+          <label>Nome impianto
+            <input type="text" id="cer-plant-modal-name" required />
+          </label>
+          <label>Titolare (Prosumer/Produttore)
+            <select id="cer-plant-modal-owner" required>
+              <option value="">Seleziona titolare</option>
+            </select>
+          </label>
+          <label>Potenza (kWp)
+            <input type="number" id="cer-plant-modal-kwp" min="0" step="0.1" placeholder="Es. 19.8" />
+          </label>
+          <p class="info-text" id="cer-plant-modal-feedback"></p>
+        </div>
+        <div class="modal-actions actions">
+          <button class="btn ghost" type="button" data-close-modal>Annulla</button>
+          <button class="btn" type="submit">Salva impianto</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <div class="modal" id="cronoprogramma-phase-modal">
     <div class="modal-backdrop" data-close-modal="phase"></div>

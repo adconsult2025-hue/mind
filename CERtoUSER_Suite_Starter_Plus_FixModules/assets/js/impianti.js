@@ -39,6 +39,8 @@ const state = {
   plants: [],
   filterCerId: '',
   selectedPlantId: '',
+  pendingSelectPlantId: '',
+  pendingTab: '',
   production: new Map(),
   workflows: new Map(),
   docs: new Map()
@@ -113,6 +115,15 @@ function init() {
   exportChecklistBtn = document.getElementById('btn-export-plant-checklist');
   presetButtons = document.querySelectorAll('[data-plant-preset]');
 
+  const params = new URLSearchParams(window.location.search);
+  const cerParam = params.get('cer_id');
+  const plantParam = params.get('plant_id');
+  const tabParam = params.get('tab');
+  if (cerParam) state.filterCerId = cerParam;
+  if (plantParam) state.pendingSelectPlantId = plantParam;
+  if (tabParam) state.pendingTab = tabParam;
+  if (cerSelect && state.filterCerId) cerSelect.value = state.filterCerId;
+
   cerSelect?.addEventListener('change', () => {
     state.filterCerId = cerSelect.value || '';
     renderPlantsTable();
@@ -168,13 +179,32 @@ async function loadPlants(force = false) {
     state.plants = Array.isArray(payload.data) ? payload.data : [];
     buildCerOptions();
     renderPlantsTable();
-    if (state.plants.length && !state.selectedPlantId) {
-      selectPlant(state.plants[0].id);
-    } else if (state.selectedPlantId) {
+    if (state.pendingSelectPlantId) {
+      const pending = state.plants.find(p => p.id === state.pendingSelectPlantId);
+      if (pending) {
+        selectPlant(pending.id);
+        if (state.pendingTab) activatePlantTab(state.pendingTab);
+        state.pendingSelectPlantId = '';
+        state.pendingTab = '';
+      }
+    }
+    if (!state.selectedPlantId) {
+      const filtered = state.plants.filter(p => !state.filterCerId || p.cer_id === state.filterCerId);
+      if (filtered.length) {
+        selectPlant(filtered[0].id);
+      }
+    } else {
       const exists = state.plants.some(p => p.id === state.selectedPlantId);
-      if (!exists && state.plants.length) {
-        selectPlant(state.plants[0].id);
-      } else if (exists) {
+      if (!exists) {
+        const filtered = state.plants.filter(p => !state.filterCerId || p.cer_id === state.filterCerId);
+        if (filtered.length) {
+          selectPlant(filtered[0].id);
+        } else {
+          state.selectedPlantId = '';
+          renderPlantDetail();
+          clearPlantCrono();
+        }
+      } else {
         renderPlantsTable();
         renderPlantCrono(state.selectedPlantId);
       }
@@ -197,7 +227,7 @@ function setFeedback(message, error = false) {
 
 function buildCerOptions() {
   if (!cerSelect) return;
-  const previous = cerSelect.value;
+  const previous = state.filterCerId || cerSelect.value;
   const options = new Map();
   options.set('', 'Tutte le CER');
   state.plants.forEach(plant => {
@@ -347,16 +377,25 @@ async function submitProductionForm(event) {
   }
 }
 
+function activatePlantTab(tab) {
+  if (!tabs) return;
+  const targetButton = tabs.querySelector(`.tab-btn[data-tab="${tab}"]`);
+  const fallbackButton = targetButton || tabs.querySelector('.tab-btn');
+  const buttons = tabs.querySelectorAll('.tab-btn');
+  const panels = document.querySelectorAll('#plant-detail .tab-panel');
+  const activeTab = fallbackButton ? fallbackButton.dataset.tab : tab;
+  buttons.forEach(btn => {
+    btn.classList.toggle('active', btn === fallbackButton);
+  });
+  panels.forEach(panel => {
+    panel.classList.toggle('active', panel.dataset.panel === activeTab);
+  });
+}
+
 function onTabClick(event) {
   const button = event.target.closest('.tab-btn');
   if (!button) return;
-  const tab = button.dataset.tab;
-  document.querySelectorAll('#plant-detail .tab-btn').forEach(btn => {
-    btn.classList.toggle('active', btn === button);
-  });
-  document.querySelectorAll('#plant-detail .tab-panel').forEach(panel => {
-    panel.classList.toggle('active', panel.dataset.panel === tab);
-  });
+  activatePlantTab(button.dataset.tab);
 }
 
 function formatKwh(value) {
