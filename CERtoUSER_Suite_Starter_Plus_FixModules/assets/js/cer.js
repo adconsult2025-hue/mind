@@ -536,10 +536,12 @@ function bindCerForm() {
     const picks = [...membersBox.querySelectorAll('.member-pick')].map(el => {
       const cb = el.querySelector('input[type=checkbox]');
       const role = el.querySelector('.role').value;
-      if (!cb.checked) return null;
-      const id = cb.dataset.id;
-      const c = customers.find(x => x.id === id);
-      return { id: c.id, nome: c.nome, pod: c.pod, comune: c.comune, ruolo: role, cabina: c.cabina || '' };
+      if (!cb?.checked) return null;
+      const id = String(cb.dataset.id || '');
+      if (!id) return null;
+      const c = customers.find(x => String(x.id) === id);
+      if (!c) return null;
+      return { id: String(c.id), nome: c.nome, pod: c.pod, comune: c.comune, ruolo: role, cabina: c.cabina || '' };
     }).filter(Boolean);
     if (picks.length < 3) {
       toast('Per creare la CER servono almeno 3 clienti selezionati.');
@@ -630,10 +632,11 @@ function selectedMembers() {
   return [...membersBox.querySelectorAll('.member-pick')]
     .map(row => {
       const cb = row.querySelector('input[type=checkbox]');
-      if (!cb.checked) return null;
-      const id = cb.dataset.id;
-      const role = row.querySelector('.role').value;
-      const customer = customers.find(x => x.id === id) || {};
+      if (!cb?.checked) return null;
+      const id = String(cb.dataset.id || '');
+      if (!id) return null;
+      const role = row.querySelector('.role')?.value || 'Consumer';
+      const customer = customers.find(x => String(x.id) === id) || {};
       return {
         id,
         nome: customer.nome || 'Membro',
@@ -818,33 +821,58 @@ function handleMemberChange() {
 
 function renderMembersPicker() {
   if (!membersBox) return;
+
+  const persisted = new Map();
+  membersBox.querySelectorAll('.member-pick').forEach(row => {
+    const cb = row.querySelector('input[type=checkbox]');
+    const roleSel = row.querySelector('.role');
+    if (!cb) return;
+    const id = String(cb.dataset.id || '');
+    if (!id) return;
+    persisted.set(id, {
+      checked: cb.checked,
+      role: roleSel?.value || ''
+    });
+  });
+
   membersBox.innerHTML = '';
   if (!customers.length) {
     membersBox.innerHTML = '<p class="note">Non ci sono clienti. Vai al CRM per crearli.</p>';
     handleMemberChange();
     return;
   }
+
   customers.forEach(c => {
+    const customerId = String(c.id ?? '');
+    const htmlId = `cb_${customerId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    const previous = persisted.get(customerId);
+    const defaultRole = previous?.role || c.ruolo || 'Consumer';
     const row = document.createElement('div');
     row.className = 'member-pick';
     row.innerHTML = `
-      <input type="checkbox" id="cb_${c.id}" data-id="${c.id}"/>
-      <label for="cb_${c.id}">${c.nome} <small class="badge blue">${c.pod}</small></label>
+      <input type="checkbox" id="${htmlId}" data-id="${customerId}" />
+      <label for="${htmlId}">${escapeHtml(c.nome || 'Cliente')} <small class="badge blue">${escapeHtml(c.pod || '')}</small></label>
       <select class="role">
-        <option value="Consumer" ${c.ruolo === 'Consumer' ? 'selected' : ''}>Consumer</option>
-        <option value="Prosumer" ${c.ruolo === 'Prosumer' ? 'selected' : ''}>Prosumer</option>
-        <option value="Produttore" ${c.ruolo === 'Produttore' ? 'selected' : ''}>Produttore</option>
+        <option value="Consumer" ${defaultRole === 'Consumer' ? 'selected' : ''}>Consumer</option>
+        <option value="Prosumer" ${defaultRole === 'Prosumer' ? 'selected' : ''}>Prosumer</option>
+        <option value="Produttore" ${defaultRole === 'Produttore' ? 'selected' : ''}>Produttore</option>
       </select>
-      <span class="badge">${c.comune || ''} · ${c.cabina || ''}</span>
+      <span class="badge">${escapeHtml(c.comune || '')} · ${escapeHtml(c.cabina || '')}</span>
     `;
     membersBox.appendChild(row);
     const cb = row.querySelector('input[type=checkbox]');
     const roleSel = row.querySelector('.role');
-    cb.onchange = handleMemberChange;
-    roleSel.onchange = () => {
+    if (cb && previous?.checked) {
+      cb.checked = true;
+    }
+    if (roleSel) {
+      roleSel.value = defaultRole;
+    }
+    cb?.addEventListener('change', handleMemberChange);
+    roleSel?.addEventListener('change', () => {
       c.ruolo = roleSel.value;
       handleMemberChange();
-    };
+    });
   });
   handleMemberChange();
 }
@@ -1188,7 +1216,7 @@ function submitMemberModal() {
     const map = new Map(members.map(m => [m.id, m]));
     picks.forEach(pick => {
       if (!map.has(pick.id)) {
-        const source = customers.find(c => c.id === pick.id) || {};
+        const source = customers.find(c => String(c.id) === String(pick.id)) || {};
         map.set(pick.id, {
           id: pick.id,
           nome: source.nome || 'Cliente',
