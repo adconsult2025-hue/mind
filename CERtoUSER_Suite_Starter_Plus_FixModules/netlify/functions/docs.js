@@ -333,10 +333,32 @@ function findTemplateByKey(key) {
   const templates = loadTemplatesCache();
   const normalized = normalizeIdentifier(key);
   const match = templates.find((tpl) => {
-    const candidates = [tpl.slug, tpl.slug_id, tpl.code, tpl.id, tpl.name, tpl.templateSlug];
-    return candidates.some((candidate) => normalizeIdentifier(candidate) === normalized);
+    const candidates = [
+      tpl.slug,
+      tpl.slug_id,
+      tpl.slugId,
+      tpl.templateSlug,
+      tpl.template_slug,
+      tpl.code,
+      tpl.codice,
+      tpl.id,
+      tpl.name
+    ];
+    return candidates.some((candidate) => normalizeIdentifier(candidate) === normalized
+      || normalizeIdentifier(slugifyCandidate(candidate)) === normalized);
   });
   return match ? { ...match } : null;
+}
+
+function slugifyCandidate(value) {
+  if (!value) return '';
+  return String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
 }
 
 let templatesCacheStore = null;
