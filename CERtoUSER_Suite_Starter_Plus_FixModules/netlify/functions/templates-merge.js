@@ -5,8 +5,10 @@ const Docxtemplater = require("docxtemplater");
 
 const { corsHeaders, preflight, json } = require("./_cors");
 
+const DATA_FILE = path.join(__dirname, "../data/templates.json");
+
 // mappa codice modello → file .docx in site/assets/models/
-const MAP = {
+const FALLBACK_MAP = {
   "CER-STATUTO-BASE": "02_Statuto_CER_template.docx",
   "CER-REGOLAMENTO-BASE": "03_Regolamento_CER_template.docx",
   "CER-ATTOCOSTITUTIVO-BASE": "01_AttoCostitutivo_CER_template.docx",
@@ -18,6 +20,52 @@ const MAP = {
   "CER-REGISTRO-POD": "09_Registro_POD_template.docx",
   "CER-REGISTRO-IMPIANTI": "10_Registro_Impianti_template.docx"
 };
+
+function resolveDocxFileName(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const candidates = [
+    entry.fileName,
+    entry.file_name,
+    entry.file,
+    entry?.file_meta?.original_name,
+    entry?.fileMeta?.original_name,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const trimmed = candidate.trim();
+    if (!trimmed) continue;
+    if (trimmed.toLowerCase().endsWith(".docx")) return trimmed;
+  }
+
+  return null;
+}
+
+function loadCatalogMap() {
+  try {
+    if (!fs.existsSync(DATA_FILE)) return {};
+    const raw = fs.readFileSync(DATA_FILE, "utf8");
+    const payload = JSON.parse(raw);
+    if (!Array.isArray(payload)) return {};
+
+    return payload.reduce((acc, entry) => {
+      const code = typeof entry?.code === "string" ? entry.code.trim().toUpperCase() : "";
+      if (!code) return acc;
+      const fileName = resolveDocxFileName(entry);
+      if (!fileName) return acc;
+      acc[code] = fileName;
+      return acc;
+    }, {});
+  } catch (error) {
+    console.warn("[templates-merge] impossibile leggere data/templates.json:", error?.message || error);
+    return {};
+  }
+}
+
+const MAP = Object.freeze({
+  ...FALLBACK_MAP,
+  ...loadCatalogMap(),
+});
 
 function angularParser(tag) {
   const expr = tag.replace(/^[{]+|[}]+$/g, "").trim();
