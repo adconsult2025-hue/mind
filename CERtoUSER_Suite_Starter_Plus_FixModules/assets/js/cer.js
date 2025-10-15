@@ -67,6 +67,20 @@ const FALSE_LIKE_VALUES = new Set([
   'non attiva',
 ]);
 
+function isProducerRole(role) {
+  const value = String(role || '').toLowerCase();
+  return value === 'prosumer' || value === 'produttore' || value === 'producer';
+}
+
+const MEMBER_CONTRACT_STATUSES = [
+  { value: 'da-generare', label: 'Da generare' },
+  { value: 'in-invio', label: 'In invio/firma' },
+  { value: 'firmato', label: 'Firmato' },
+  { value: 'annullato', label: 'Annullato' }
+];
+
+const DEFAULT_MEMBER_CONTRACT_STATUS = MEMBER_CONTRACT_STATUSES[0].value;
+
 let form;
 let membersBox;
 let listEl;
@@ -77,6 +91,30 @@ let plantEmptyState;
 let addPlantBtn;
 let validationAlert;
 let formSubmitBtn;
+
+let detailCard;
+let detailTitle;
+let detailMeta;
+let detailMembersTable;
+let detailMembersEmpty;
+let detailPlantsTable;
+let detailPlantsEmpty;
+let detailAddMemberBtn;
+let detailAddPlantBtn;
+let detailEditBtn;
+let detailCloseBtn;
+
+let memberModal;
+let memberModalList;
+let memberModalFeedback;
+let memberModalSaveBtn;
+
+let plantModal;
+let plantModalForm;
+let plantModalName;
+let plantModalOwner;
+let plantModalKwp;
+let plantModalFeedback;
 
 let docsCerSelect;
 let docsActions;
@@ -262,12 +300,7 @@ document.addEventListener('click', (event) => {
   event.preventDefault();
   const id = btn.getAttribute('data-open-cer');
   if (!id) return;
-  const url = `/modules/cer/index.html?cer_id=${encodeURIComponent(id)}`;
-  if (window.location.href.includes(url)) {
-    loadCerDetail(id);
-    return;
-  }
-  window.location.href = url;
+  showCerCard(id, { scroll: true });
 });
 
 window.addEventListener('cronoprogramma:doc-added', (event) => {
@@ -297,6 +330,27 @@ function init() {
   plantEmptyState = document.getElementById('cer-plants-empty');
   addPlantBtn = document.getElementById('btn-add-cer-plant');
   validationAlert = document.getElementById('cer-validation-alert');
+  detailCard = document.getElementById('cer-detail-card');
+  detailTitle = document.getElementById('cer-detail-title');
+  detailMeta = document.getElementById('cer-detail-meta');
+  detailMembersTable = document.querySelector('#cer-detail-members tbody');
+  detailMembersEmpty = document.getElementById('cer-detail-members-empty');
+  detailPlantsTable = document.querySelector('#cer-detail-plants tbody');
+  detailPlantsEmpty = document.getElementById('cer-detail-plants-empty');
+  detailAddMemberBtn = document.getElementById('cer-detail-add-member');
+  detailAddPlantBtn = document.getElementById('cer-detail-add-plant');
+  detailEditBtn = document.getElementById('cer-detail-edit');
+  detailCloseBtn = document.getElementById('cer-detail-close');
+  memberModal = document.getElementById('cer-member-modal');
+  memberModalList = document.getElementById('cer-member-modal-list');
+  memberModalFeedback = document.getElementById('cer-member-modal-feedback');
+  memberModalSaveBtn = document.getElementById('cer-member-modal-save');
+  plantModal = document.getElementById('cer-plant-modal');
+  plantModalForm = document.getElementById('cer-plant-modal-form');
+  plantModalName = document.getElementById('cer-plant-modal-name');
+  plantModalOwner = document.getElementById('cer-plant-modal-owner');
+  plantModalKwp = document.getElementById('cer-plant-modal-kwp');
+  plantModalFeedback = document.getElementById('cer-plant-modal-feedback');
 
   customers = allCustomers();
   cers = allCER();
@@ -309,6 +363,34 @@ function init() {
     renderCERList();
     if (searchEl) searchEl.oninput = renderCERList;
   }
+
+  detailAddMemberBtn?.addEventListener('click', () => openMemberModal(detailCard?.dataset.cerId || ''));
+  detailAddPlantBtn?.addEventListener('click', () => openPlantModal(detailCard?.dataset.cerId || ''));
+  detailEditBtn?.addEventListener('click', () => {
+    if (!detailCard?.dataset.cerId) return;
+    loadCerDetail(detailCard.dataset.cerId);
+    form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  detailCloseBtn?.addEventListener('click', hideCerCard);
+  detailMembersTable?.addEventListener('change', onDetailMembersChange);
+  detailMembersTable?.addEventListener('click', onDetailMembersClick);
+  detailPlantsTable?.addEventListener('click', onDetailPlantsClick);
+
+  memberModal?.querySelectorAll('[data-close-modal]')?.forEach(btn => {
+    btn.addEventListener('click', closeMemberModal);
+  });
+  memberModalSaveBtn?.addEventListener('click', submitMemberModal);
+
+  plantModal?.querySelectorAll('[data-close-modal]')?.forEach(btn => {
+    btn.addEventListener('click', closePlantModal);
+  });
+  plantModalForm?.addEventListener('submit', submitPlantModal);
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      closeMemberModal();
+      closePlantModal();
+    }
+  });
 
   window.addEventListener('cer:notify', (event) => {
     const message = event?.detail;
@@ -502,16 +584,39 @@ function bindCerForm() {
     cer.membri = picks;
     cer.impianti = plants;
 
-    if (editingId) {
-      cers = cers.map(existing => (existing.id === cer.id ? { ...existing, ...cer } : existing));
+    const existing = editingId ? cers.find(item => item.id === editingId) : null;
+    if (existing) {
+      const existingMemberMap = new Map((existing.membri || []).map(member => [member.id, member]));
+      cer.membri = cer.membri.map(member => {
+        const previous = existingMemberMap.get(member.id);
+        return {
+          ...(previous || {}),
+          ...member,
+          contratto_stato: previous?.contratto_stato || member.contratto_stato || DEFAULT_MEMBER_CONTRACT_STATUS
+        };
+      });
     } else {
-      cers.push(cer);
+      cer.membri = cer.membri.map(member => ({
+        ...member,
+        contratto_stato: member.contratto_stato || DEFAULT_MEMBER_CONTRACT_STATUS
+      }));
     }
+
+    const merged = existing ? { ...existing, ...cer, id: cer.id } : cer;
+    const normalizedCer = normalizeCerData({ ...merged });
+
+    if (existing) {
+      cers = cers.map(item => (item.id === normalizedCer.id ? normalizedCer : item));
+    } else {
+      cers.push(normalizedCer);
+    }
+
     saveCER(cers);
     renderCERList();
+    showCerCard(normalizedCer.id, { scroll: !editingId });
     refreshCerOptions();
     if (editingId) {
-      loadCerDetail(cer.id);
+      populateCerForm(normalizedCer);
     } else {
       form.reset();
       updatePlantEmptyState();
@@ -790,29 +895,482 @@ function renderCERList() {
     });
 }
 
-function loadCerDetail(cerId) {
-  if (!form) return null;
-  const target = cers.find(cer => cer.id === cerId);
-  if (!target) {
+function showCerCard(cerId, { scroll = false, skipHistory = false } = {}) {
+  if (!cerId || !detailCard) return null;
+  const cer = cers.find(item => item.id === cerId);
+  if (!cer) {
     toast('CER non trovata nella memoria locale.');
     return null;
   }
-  form.dataset.editing = target.id;
+  renderCerDetailCard(cer, { scroll, skipHistory });
+  return cer;
+}
+
+function hideCerCard() {
+  if (!detailCard) return;
+  detailCard.setAttribute('hidden', 'hidden');
+  delete detailCard.dataset.cerId;
+  updateCerUrlParam();
+}
+
+function renderCerDetailCard(cer, { scroll = false, skipHistory = false } = {}) {
+  if (!detailCard || !cer) return;
+  const normalized = normalizeCerData({ ...cer });
+  detailCard.dataset.cerId = normalized.id;
+  if (detailTitle) detailTitle.textContent = normalized.nome || 'CER';
+  if (detailMeta) {
+    const parts = [];
+    if (normalized.cabina) parts.push(`Cabina ${normalized.cabina}`);
+    if (normalized.comune) parts.push(`Comune ${normalized.comune}`);
+    if (normalized.quota != null) parts.push(`Quota condivisa ${normalized.quota}%`);
+    if (normalized.template_code) {
+      const tpl = normalized.template_version ? `${normalized.template_code} · v${normalized.template_version}` : normalized.template_code;
+      parts.push(`Modello ${tpl}`);
+    }
+    detailMeta.textContent = parts.length ? parts.join(' · ') : 'Configura la CER per abilitare le funzioni avanzate.';
+  }
+  renderCerMembersDetail(normalized);
+  renderCerPlantsDetail(normalized);
+  detailCard.removeAttribute('hidden');
+  if (!skipHistory) updateCerUrlParam(normalized.id);
+  if (scroll) {
+    detailCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function updateCerUrlParam(cerId = '') {
+  try {
+    const url = new URL(window.location.href);
+    if (cerId) {
+      url.searchParams.set('cer_id', cerId);
+    } else {
+      url.searchParams.delete('cer_id');
+    }
+    history.replaceState(null, '', url);
+  } catch (err) {
+    console.warn('Impossibile aggiornare la URL della scheda CER', err);
+  }
+}
+
+function renderCerMembersDetail(cer) {
+  if (!detailMembersTable) return;
+  const members = Array.isArray(cer.membri) ? cer.membri : [];
+  detailMembersTable.innerHTML = '';
+  if (detailMembersEmpty) detailMembersEmpty.hidden = members.length > 0;
+  if (!members.length) return;
+  members.forEach(member => {
+    const contractOptions = MEMBER_CONTRACT_STATUSES.map(opt => `
+      <option value="${opt.value}" ${opt.value === (member.contratto_stato || DEFAULT_MEMBER_CONTRACT_STATUS) ? 'selected' : ''}>${opt.label}</option>
+    `).join('');
+    const roleOptions = ['Consumer', 'Prosumer', 'Produttore'].map(role => `
+      <option value="${role}" ${role === (member.ruolo || 'Consumer') ? 'selected' : ''}>${role}</option>
+    `).join('');
+    const tr = document.createElement('tr');
+    tr.dataset.memberId = member.id;
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(member.nome || 'Membro')}</strong><br/><small>${escapeHtml(member.pod || '')}</small></td>
+      <td><select class="input" data-member-role="${escapeHtml(member.id)}">${roleOptions}</select></td>
+      <td><select class="input" data-member-contract="${escapeHtml(member.id)}">${contractOptions}</select></td>
+      <td class="actions">
+        <button class="btn ghost" type="button" data-remove-member="${escapeHtml(member.id)}">Rimuovi</button>
+      </td>
+    `;
+    detailMembersTable.appendChild(tr);
+  });
+}
+
+function renderCerPlantsDetail(cer) {
+  if (!detailPlantsTable) return;
+  const plants = Array.isArray(cer.impianti) ? cer.impianti : [];
+  detailPlantsTable.innerHTML = '';
+  if (detailPlantsEmpty) detailPlantsEmpty.hidden = plants.length > 0;
+  if (!plants.length) return;
+  const cerId = cer.id;
+  plants.forEach(plant => {
+    const ownerName = plant.titolareNome || (cer.membri || []).find(m => m.id === plant.titolareId)?.nome || '';
+    const ownerRole = plant.titolareRuolo || (cer.membri || []).find(m => m.id === plant.titolareId)?.ruolo || '';
+    const ownerLabel = ownerName ? `${ownerName}${ownerRole ? ` · ${ownerRole}` : ''}` : '-';
+    const kwp = plant.potenza_kwp != null ? `${Number(plant.potenza_kwp).toFixed(2)} kWp` : '-';
+    const link = `/modules/impianti/index.html?plant_id=${encodeURIComponent(plant.id)}&cer_id=${encodeURIComponent(cerId)}&tab=cronoprogramma`;
+    const tr = document.createElement('tr');
+    tr.dataset.plantId = plant.id;
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(plant.nome || 'Impianto')}</strong></td>
+      <td>${escapeHtml(ownerLabel)}</td>
+      <td>${escapeHtml(kwp)}</td>
+      <td class="actions">
+        <a class="btn ghost" href="${link}" target="_blank" rel="noopener">Apri scheda impianto</a>
+        <button class="btn ghost" type="button" data-remove-plant="${escapeHtml(plant.id)}">Rimuovi</button>
+      </td>
+    `;
+    detailPlantsTable.appendChild(tr);
+  });
+}
+
+function onDetailMembersChange(event) {
+  const target = event.target;
+  if (!detailCard?.dataset.cerId) return;
+  const cerId = detailCard.dataset.cerId;
+  if (target.matches('select[data-member-role]')) {
+    const memberId = target.getAttribute('data-member-role');
+    const newRole = target.value;
+    handleMemberRoleChange(cerId, memberId, newRole, target);
+  }
+  if (target.matches('select[data-member-contract]')) {
+    const memberId = target.getAttribute('data-member-contract');
+    const newStatus = target.value;
+    handleMemberContractChange(cerId, memberId, newStatus, target);
+  }
+}
+
+function onDetailMembersClick(event) {
+  const btn = event.target.closest('[data-remove-member]');
+  if (!btn || !detailCard?.dataset.cerId) return;
+  event.preventDefault();
+  const memberId = btn.getAttribute('data-remove-member');
+  if (!memberId) return;
+  handleRemoveMember(detailCard.dataset.cerId, memberId);
+}
+
+function onDetailPlantsClick(event) {
+  const btn = event.target.closest('[data-remove-plant]');
+  if (!btn || !detailCard?.dataset.cerId) return;
+  event.preventDefault();
+  const plantId = btn.getAttribute('data-remove-plant');
+  if (!plantId) return;
+  if (!confirm('Rimuovere l\'impianto dalla CER?')) return;
+  updateCerRecord(detailCard.dataset.cerId, (draft) => {
+    const remaining = (draft.impianti || []).filter(p => p.id !== plantId);
+    if (!remaining.length) {
+      toast('Una CER deve avere almeno un impianto associato.');
+      return false;
+    }
+    draft.impianti = remaining;
+    return true;
+  });
+}
+
+function handleMemberRoleChange(cerId, memberId, newRole, selectEl) {
+  if (!cerId || !memberId) return;
+  const updated = updateCerRecord(cerId, (draft) => {
+    const member = draft.membri.find(m => m.id === memberId);
+    if (!member) return false;
+    const previousRole = member.ruolo;
+    if (previousRole === newRole) return false;
+    if (!isProducerRole(newRole)) {
+      const ownsPlant = (draft.impianti || []).some(p => p.titolareId === memberId);
+      if (ownsPlant) {
+        toast('Impossibile impostare Consumer: il membro è titolare di un impianto.');
+        return false;
+      }
+    }
+    member.ruolo = newRole;
+    if (!draft.membri.some(m => isProducerRole(m.ruolo))) {
+      member.ruolo = previousRole;
+      toast('La CER deve avere almeno un Prosumer o Produttore.');
+      return false;
+    }
+    (draft.impianti || []).forEach(plant => {
+      if (plant.titolareId === memberId) {
+        plant.titolareRuolo = newRole;
+      }
+    });
+    return true;
+  });
+  if (!updated && selectEl) {
+    // ripristina il valore precedente
+    const cer = cers.find(c => c.id === cerId);
+    const member = cer?.membri?.find(m => m.id === memberId);
+    if (member) selectEl.value = member.ruolo || 'Consumer';
+  }
+}
+
+function handleMemberContractChange(cerId, memberId, newStatus, selectEl) {
+  if (!cerId || !memberId) return;
+  const updated = updateCerRecord(cerId, (draft) => {
+    const member = draft.membri.find(m => m.id === memberId);
+    if (!member) return false;
+    member.contratto_stato = newStatus || DEFAULT_MEMBER_CONTRACT_STATUS;
+    return true;
+  });
+  if (!updated && selectEl) {
+    const cer = cers.find(c => c.id === cerId);
+    const member = cer?.membri?.find(m => m.id === memberId);
+    if (member) selectEl.value = member.contratto_stato || DEFAULT_MEMBER_CONTRACT_STATUS;
+  }
+}
+
+function handleRemoveMember(cerId, memberId) {
+  updateCerRecord(cerId, (draft) => {
+    const members = Array.isArray(draft.membri) ? draft.membri : [];
+    if (members.length <= 3) {
+      toast('La CER deve mantenere almeno 3 partecipanti.');
+      return false;
+    }
+    const member = members.find(m => m.id === memberId);
+    if (!member) return false;
+    if ((draft.impianti || []).some(p => p.titolareId === memberId)) {
+      toast('Riassegna gli impianti prima di rimuovere il partecipante.');
+      return false;
+    }
+    const remaining = members.filter(m => m.id !== memberId);
+    if (!remaining.some(m => isProducerRole(m.ruolo))) {
+      toast('La CER deve avere almeno un Prosumer o Produttore.');
+      return false;
+    }
+    draft.membri = remaining;
+    return true;
+  });
+}
+
+function openMemberModal(cerId) {
+  if (!memberModal || !memberModalList || !memberModalFeedback) return;
+  const cer = cers.find(c => c.id === cerId);
+  if (!cer) {
+    toast('Seleziona prima una CER.');
+    return;
+  }
+  memberModal.dataset.cerId = cerId;
+  const existingIds = new Set((cer.membri || []).map(m => m.id));
+  const available = customers.filter(c => !existingIds.has(c.id));
+  memberModalList.innerHTML = '';
+  memberModalFeedback.textContent = '';
+  if (!available.length) {
+    memberModalFeedback.textContent = 'Tutti i clienti del CRM sono già membri di questa CER.';
+  } else {
+    available.forEach(customer => {
+      const row = document.createElement('div');
+      row.className = 'member-pick';
+      row.innerHTML = `
+        <input type="checkbox" id="modal_member_${customer.id}" data-modal-member="${customer.id}" />
+        <label for="modal_member_${customer.id}">${escapeHtml(customer.nome)} <small class="badge blue">${escapeHtml(customer.pod || '')}</small></label>
+        <select class="role" data-modal-role="${customer.id}">
+          <option value="Consumer" ${customer.ruolo === 'Consumer' ? 'selected' : ''}>Consumer</option>
+          <option value="Prosumer" ${customer.ruolo === 'Prosumer' ? 'selected' : ''}>Prosumer</option>
+          <option value="Produttore" ${customer.ruolo === 'Produttore' ? 'selected' : ''}>Produttore</option>
+        </select>
+        <span class="badge">${escapeHtml(customer.comune || '')} · ${escapeHtml(customer.cabina || '')}</span>
+      `;
+      memberModalList.appendChild(row);
+    });
+  }
+  memberModal.classList.add('open');
+  memberModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeMemberModal() {
+  if (!memberModal) return;
+  memberModal.classList.remove('open');
+  memberModal.setAttribute('aria-hidden', 'true');
+  delete memberModal.dataset.cerId;
+}
+
+function submitMemberModal() {
+  if (!memberModal || !memberModalList || !memberModalFeedback) return;
+  const cerId = memberModal.dataset.cerId;
+  if (!cerId) {
+    closeMemberModal();
+    return;
+  }
+  const picks = [...memberModalList.querySelectorAll('[data-modal-member]')]
+    .filter(input => input.checked)
+    .map(input => {
+      const id = input.getAttribute('data-modal-member');
+      const roleSelect = memberModalList.querySelector(`[data-modal-role="${CSS.escape(id)}"]`);
+      return { id, ruolo: roleSelect?.value || 'Consumer' };
+    });
+  if (!picks.length) {
+    memberModalFeedback.textContent = 'Seleziona almeno un partecipante da aggiungere.';
+    return;
+  }
+  const result = updateCerRecord(cerId, (draft) => {
+    const members = Array.isArray(draft.membri) ? draft.membri : [];
+    const map = new Map(members.map(m => [m.id, m]));
+    picks.forEach(pick => {
+      if (!map.has(pick.id)) {
+        const source = customers.find(c => c.id === pick.id) || {};
+        map.set(pick.id, {
+          id: pick.id,
+          nome: source.nome || 'Cliente',
+          pod: source.pod || '',
+          comune: source.comune || '',
+          ruolo: pick.ruolo,
+          cabina: source.cabina || '',
+          contratto_stato: DEFAULT_MEMBER_CONTRACT_STATUS
+        });
+      }
+    });
+    draft.membri = Array.from(map.values());
+    if (!draft.membri.some(m => isProducerRole(m.ruolo))) {
+      memberModalFeedback.textContent = 'Aggiungi almeno un Prosumer o Produttore tra i selezionati.';
+      return false;
+    }
+    return true;
+  });
+  if (result) {
+    toast('Partecipanti aggiunti alla CER.');
+    closeMemberModal();
+  }
+}
+
+function openPlantModal(cerId) {
+  if (!plantModal || !plantModalName || !plantModalOwner || !plantModalFeedback) return;
+  const cer = cers.find(c => c.id === cerId);
+  if (!cer) {
+    toast('Seleziona prima una CER.');
+    return;
+  }
+  const owners = (cer.membri || []).filter(m => isProducerRole(m.ruolo));
+  plantModal.dataset.cerId = cerId;
+  plantModalName.value = '';
+  plantModalKwp.value = '';
+  plantModalOwner.innerHTML = '<option value="">Seleziona titolare</option>';
+  owners.forEach(owner => {
+    const opt = document.createElement('option');
+    opt.value = owner.id;
+    opt.textContent = `${owner.nome} · ${owner.ruolo}`;
+    plantModalOwner.appendChild(opt);
+  });
+  if (!owners.length) {
+    plantModalFeedback.textContent = 'Aggiungi prima un Prosumer o Produttore per associare un impianto.';
+  } else {
+    plantModalFeedback.textContent = '';
+  }
+  plantModal.classList.add('open');
+  plantModal.setAttribute('aria-hidden', 'false');
+  window.setTimeout(() => plantModalName?.focus(), 0);
+}
+
+function closePlantModal() {
+  if (!plantModal) return;
+  plantModal.classList.remove('open');
+  plantModal.setAttribute('aria-hidden', 'true');
+  delete plantModal.dataset.cerId;
+}
+
+function submitPlantModal(event) {
+  event.preventDefault();
+  if (!plantModal || !plantModalName || !plantModalOwner || !plantModalFeedback) return;
+  const cerId = plantModal.dataset.cerId;
+  if (!cerId) {
+    closePlantModal();
+    return;
+  }
+  const name = plantModalName?.value?.trim() || '';
+  const ownerId = plantModalOwner?.value || '';
+  const kwpRaw = plantModalKwp?.value || '';
+  const kwpValue = kwpRaw ? Number(kwpRaw) : null;
+  if (!name) {
+    plantModalFeedback.textContent = 'Inserisci il nome dell\'impianto.';
+    plantModalName?.focus();
+    return;
+  }
+  if (!ownerId) {
+    plantModalFeedback.textContent = 'Seleziona un titolare Prosumer/Produttore.';
+    plantModalOwner?.focus();
+    return;
+  }
+  const updated = updateCerRecord(cerId, (draft) => {
+    const owner = (draft.membri || []).find(m => m.id === ownerId);
+    if (!owner || !isProducerRole(owner.ruolo)) {
+      plantModalFeedback.textContent = 'Il titolare selezionato non è abilitato come Prosumer/Produttore.';
+      return false;
+    }
+    const plant = {
+      id: uid('plant'),
+      nome: name,
+      titolareId: owner.id,
+      titolareNome: owner.nome,
+      titolareRuolo: owner.ruolo,
+      potenza_kwp: Number.isFinite(kwpValue) ? kwpValue : null
+    };
+    draft.impianti = [...(draft.impianti || []), plant];
+    return true;
+  });
+  if (updated) {
+    toast('Impianto aggiunto alla CER.');
+    closePlantModal();
+  }
+}
+
+function updateCerRecord(cerId, updater) {
+  if (!cerId || typeof updater !== 'function') return null;
+  const index = cers.findIndex(c => c.id === cerId);
+  if (index === -1) {
+    toast('CER non trovata.');
+    return null;
+  }
+  const current = cers[index];
+  const draft = {
+    ...current,
+    membri: (current.membri || []).map(member => ({ ...member })),
+    impianti: (current.impianti || []).map(plant => ({ ...plant }))
+  };
+  const proceed = updater(draft);
+  if (proceed === false) {
+    return null;
+  }
+  const normalized = normalizeCerData(draft);
+  cers[index] = normalized;
+  saveCER(cers);
+  renderCERList();
+  renderCerDetailCard(normalized, { skipHistory: true });
+  if (form?.dataset.editing === normalized.id) {
+    populateCerForm(normalized);
+  }
+  refreshCerOptions();
+  return normalized;
+}
+
+function normalizeCerData(cer) {
+  if (!cer) return cer;
+  const members = Array.isArray(cer.membri)
+    ? cer.membri.map(member => ({
+      ...member,
+      contratto_stato: member.contratto_stato || DEFAULT_MEMBER_CONTRACT_STATUS
+    }))
+    : [];
+  const memberMap = new Map(members.map(m => [m.id, m]));
+  const plants = Array.isArray(cer.impianti)
+    ? cer.impianti.map(plant => {
+      const owner = plant.titolareId ? memberMap.get(plant.titolareId) : null;
+      const kwp = plant.potenza_kwp != null && Number.isFinite(Number(plant.potenza_kwp))
+        ? Number(plant.potenza_kwp)
+        : null;
+      return {
+        id: plant.id || uid('plant'),
+        nome: plant.nome || 'Impianto',
+        titolareId: owner?.id || plant.titolareId || '',
+        titolareNome: owner?.nome || plant.titolareNome || '',
+        titolareRuolo: owner?.ruolo || plant.titolareRuolo || '',
+        potenza_kwp: kwp
+      };
+    })
+    : [];
+  cer.membri = members;
+  cer.impianti = plants;
+  return cer;
+}
+
+function populateCerForm(target) {
+  if (!form || !target) return;
+  const normalized = normalizeCerData({ ...target });
+  form.dataset.editing = normalized.id;
   const fields = ['nome', 'cabina', 'comune', 'cf', 'quota', 'riparto', 'trader', 'note', 'template_code', 'rp_prod', 'rp_pros', 'rp_cer'];
   fields.forEach((name) => {
     const el = form.elements.namedItem(name);
     if (!el) return;
     if (name === 'template_code') {
-      const templateValue = target.template_slug || target.template_code || '';
+      const templateValue = normalized.template_slug || normalized.template_code || '';
       el.value = templateValue;
       return;
     }
-    const value = target[name] ?? '';
+    const value = normalized[name] ?? '';
     if (name === 'quota' && !value) {
       el.value = 60;
       return;
     }
-    if (name.startsWith('rp_') && target.riparto !== 'Personalizzato') {
+    if (name.startsWith('rp_') && normalized.riparto !== 'Personalizzato') {
       el.value = el.defaultValue || '';
       return;
     }
@@ -820,17 +1378,17 @@ function loadCerDetail(cerId) {
   });
   const ripartoSelect = form.elements.namedItem('riparto');
   if (ripartoSelect) {
-    ripartoSelect.value = target.riparto || ripartoSelect.value;
+    ripartoSelect.value = normalized.riparto || ripartoSelect.value;
   }
-  if (target.riparto === 'Personalizzato') {
+  if (normalized.riparto === 'Personalizzato') {
     const rpProd = form.elements.namedItem('rp_prod');
     const rpPros = form.elements.namedItem('rp_pros');
     const rpCer = form.elements.namedItem('rp_cer');
-    if (rpProd) rpProd.value = target.rp_prod ?? rpProd.value;
-    if (rpPros) rpPros.value = target.rp_pros ?? rpPros.value;
-    if (rpCer) rpCer.value = target.rp_cer ?? rpCer.value;
+    if (rpProd) rpProd.value = normalized.rp_prod ?? rpProd.value;
+    if (rpPros) rpPros.value = normalized.rp_pros ?? rpPros.value;
+    if (rpCer) rpCer.value = normalized.rp_cer ?? rpCer.value;
   }
-  const memberMap = new Map((target.membri || []).map((m) => [m.id, m]));
+  const memberMap = new Map((normalized.membri || []).map((m) => [m.id, m]));
   membersBox?.querySelectorAll('.member-pick').forEach((row) => {
     const cb = row.querySelector('input[type=checkbox]');
     const roleSel = row.querySelector('.role');
@@ -845,7 +1403,7 @@ function loadCerDetail(cerId) {
   handleMemberChange();
   if (plantFormList) {
     plantFormList.innerHTML = '';
-    (target.impianti || []).forEach((plant) => {
+    (normalized.impianti || []).forEach((plant) => {
       addPlantRow({
         id: plant.id,
         nome: plant.nome,
@@ -856,26 +1414,36 @@ function loadCerDetail(cerId) {
   }
   updatePlantOwnerOptions();
   updateCerValidationUI();
-  form.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  CRONO_STATE.currentCerId = target.id;
+  CRONO_STATE.currentCerId = normalized.id;
   if (docsCerSelect) {
-    docsCerSelect.value = target.id;
-    renderDocumentsForCer(target.id);
+    docsCerSelect.value = normalized.id;
+    renderDocumentsForCer(normalized.id);
   }
   if (cerDocsTable) {
-    cerDocsTable.dataset.entityId = target.id;
+    cerDocsTable.dataset.entityId = normalized.id;
   }
   if (cronSelect) {
-    cronSelect.value = target.id;
-    renderCronoprogramma(target.id);
+    cronSelect.value = normalized.id;
+    renderCronoprogramma(normalized.id);
   }
   if (plantsCerSelect) {
-    plantsCerSelect.value = target.id;
-    plantState.selectedCerId = target.id;
+    plantsCerSelect.value = normalized.id;
+    plantState.selectedCerId = normalized.id;
     if (typeof loadPlantsForCer === 'function') {
-      loadPlantsForCer(target.id);
+      loadPlantsForCer(normalized.id);
     }
   }
+}
+
+function loadCerDetail(cerId) {
+  if (!form) return null;
+  const target = cers.find(cer => cer.id === cerId);
+  if (!target) {
+    toast('CER non trovata nella memoria locale.');
+    return null;
+  }
+  populateCerForm(target);
+  showCerCard(target.id, { scroll: false });
   return target;
 }
 
