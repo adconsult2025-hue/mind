@@ -471,7 +471,7 @@ function computeResults(flags, inputs, baseData) {
 
   results.irpef = flags.irpef
     ? computeScenario(inputs, baseData, {
-        includeCer: false,
+        includeCer: flags.cer,
         includePnrr: false,
         includeIrpef: true,
         includePiva: false,
@@ -482,7 +482,7 @@ function computeResults(flags, inputs, baseData) {
     ? computeScenario(inputs, baseData, {
         includeCer: true,
         includePnrr: false,
-        includeIrpef: false,
+        includeIrpef: flags.irpef,
         includePiva: false,
       })
     : { enabled: false };
@@ -511,8 +511,16 @@ function computeResults(flags, inputs, baseData) {
 function renderResults(results) {
   renderScenario('base', results.base, 'Lo scenario base considera solo risparmi da autoconsumo e OPEX.');
   renderScenario('pnrr', results.pnrr, 'Attiva il flag PNRR per sbloccare questo scenario.');
-  renderScenario('irpef', results.irpef, 'Attiva il flag IRPEF 50% per calcolare la detrazione.');
-  renderScenario('cer', results.cer, 'Attiva il flag CER per includere ricavi e costi CER.');
+  renderScenario(
+    'irpef',
+    results.irpef,
+    'Attiva il flag IRPEF 50% per calcolare la detrazione (si sommano i ricavi CER se attivi).'
+  );
+  renderScenario(
+    'cer',
+    results.cer,
+    'Attiva il flag CER per includere ricavi e costi CER (si somma la detrazione IRPEF se attiva).'
+  );
   renderScenario('piva', results.piva, 'Attiva il flag Soggetto P.IVA per calcolare ammortamenti e tax shield.');
   renderScenario('pivacer', results.pivacer, 'Attiva il flag P.IVA + CER per sommare tax shield e ricavi CER.');
   updateScenarioTabs(results);
