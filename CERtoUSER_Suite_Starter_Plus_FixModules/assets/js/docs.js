@@ -205,3 +205,20 @@ export function informativaGDPRTemplate(soggetto){
   <p>Data: ${today}</p>
   `;
 }
+
+export function accordoProduttoreProsumerTemplate(cer, membro) {
+  const today = new Date().toLocaleDateString('it-IT');
+  const ruolo = membro?.ruolo || 'Produttore/Prosumer';
+  const ruoloLabel = ruolo.toLowerCase();
+  return `
+  <style>body{font-family:'Times New Roman',serif;color:#000}</style>
+  <h1>ACCORDO PRODUTTORE/PROSUMER</h1>
+  <p>Tra la Comunità Energetica Rinnovabile "<strong>${cer.nome}</strong>", con sede nel Comune di ${cer.comune} e cabina primaria ${cer.cabina},</p>
+  <p>e il/la ${ruoloLabel} <strong>${membro?.nome || '________________'}</strong>, titolare del POD <strong>${membro?.pod || '________________'}</strong>.</p>
+  <p>Le parti concordano di condividere l'energia prodotta e/o autoconsumata nel rispetto del DM 7 dicembre 2023, delle regole ARERA/GSE e del Regolamento interno della CER.</p>
+  <p>Il membro si impegna a comunicare tempestivamente eventuali variazioni dei propri dati anagrafici e del POD, a collaborare per il monitoraggio energetico e ad attenersi alle delibere della CER.</p>
+  <p>La CER si impegna a ripartire i benefici economici secondo i criteri approvati dall'Assemblea (quota condivisa ${cer.quota || 0}%, riparto ${cer.riparto || 'standard'} o personalizzato).</p>
+  <p>Decorrenza: ${today}. Il presente accordo è valido finché il membro mantiene il ruolo di Produttore/Prosumer all'interno della CER.</p>
+  <p>Firme:<br/>CER "${cer.nome}" ____________________<br/>${membro?.nome || '________________'} ____________________</p>
+  `;
+}
