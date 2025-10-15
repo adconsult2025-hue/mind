@@ -27,18 +27,17 @@ async function withClient(run) {
   const client = createClient();
   await client.connect();
   try {
-    return await run(client);
+    return await cb(c);
   } finally {
-    await client.end();
+    await c.end();
   }
 }
 
 function parseBody(body) {
-  if (!body) return {};
   try {
-    return JSON.parse(body);
-  } catch (error) {
-    throw httpError(400, 'BAD_REQUEST', 'Invalid JSON body');
+    return JSON.parse(body || '{}');
+  } catch {
+    return {};
   }
 }
 
@@ -53,7 +52,7 @@ function coerceMetadata(value) {
   }
   try {
     return JSON.stringify(value);
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -165,4 +164,6 @@ exports.handler = guard(async function handler(event) {
     const message = error.message || 'Unexpected error';
     return json(statusCode, { ok: false, error: { code, message } });
   }
-});
+
+  return json(405, { ok: false, error: 'METHOD_NOT_ALLOWED' });
+};
