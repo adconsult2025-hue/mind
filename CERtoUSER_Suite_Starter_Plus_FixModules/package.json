@@ -1,0 +1,21 @@
+{
+  "name": "certouser_suite_starter_plus_fixmodules",
+  "version": "1.0.0",
+  "description": "Questa repository contiene la versione starter della suite MIND per la gestione integrata di CRM, CER, impianti e documentazione demo.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "busboy": "^1.6.0",
+    "docxtemplater": "^3.66.7",
+    "handlebars": "^4.7.8",
+    "nanoid": "^5.1.6",
+    "pg": "^8.16.3",
+    "pizzip": "^3.2.0"
+  }
+}

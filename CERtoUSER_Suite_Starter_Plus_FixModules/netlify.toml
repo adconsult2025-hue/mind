@@ -1,8 +1,10 @@
-[context.production.environment]
-  SAFE_MODE = "false"
+[build]
+  command = "npm ci || npm i"
+  publish = "."
 
-[context.deploy-preview.environment]
-  SAFE_MODE = "true"
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["pg","handlebars","pizzip","docxtemplater","nanoid","busboy"]
 
-[context.branch-deploy.environment]
-  SAFE_MODE = "true"
+[[plugins]]
+  package = "@netlify/plugin-functions-install-core"
