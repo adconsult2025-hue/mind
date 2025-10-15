@@ -173,7 +173,14 @@ function openEditModal(tpl) {
     return;
   }
   const normalizedModule = moduleValue.toLowerCase();
+  const id = tpl?.id ? String(tpl.id).trim() : '';
+  if (!id) {
+    toast('Template non valido per la modifica');
+    return;
+  }
+
   currentEditContext = {
+    id,
     code: code.toUpperCase(),
     module: normalizedModule,
     version: tpl?.version != null ? Number(tpl.version) : null,
@@ -211,8 +218,10 @@ function collectEditPayload() {
   const resolvedCode = (codeInput || currentEditContext?.code || '').toUpperCase();
   const resolvedModule = (moduleInput || currentEditContext?.module || '').toLowerCase();
   const payload = {
+    id: currentEditContext?.id || '',
     code: resolvedCode,
     module: resolvedModule,
+    content: contentValue,
     contentHtml: contentValue,
     placeholders: placeholdersValue
       .split(/\r?\n/)
@@ -234,6 +243,10 @@ async function submitEdit(event) {
   event?.preventDefault();
   if (!editModal) return;
   const payload = collectEditPayload();
+  if (!payload.id) {
+    toast('Template non valido: mancano i riferimenti di versione');
+    return;
+  }
   if (!payload.code || !payload.module) {
     toast('Codice e modulo sono obbligatori');
     return;
