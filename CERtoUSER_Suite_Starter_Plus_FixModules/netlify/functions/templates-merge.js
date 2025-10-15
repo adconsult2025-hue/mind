@@ -5,19 +5,42 @@ const Docxtemplater = require("docxtemplater");
 
 const { corsHeaders, preflight, json } = require("./_cors");
 
-// mappa codice modello → file .docx in site/assets/models/
-const MAP = {
-  "CER-STATUTO-BASE": "02_Statuto_CER_template.docx",
-  "CER-REGOLAMENTO-BASE": "03_Regolamento_CER_template.docx",
-  "CER-ATTOCOSTITUTIVO-BASE": "01_AttoCostitutivo_CER_template.docx",
-  "CER-ADESIONE-BASE": "04_Adesione_Membro_template.docx",
-  "CER-DELEGA-GSEDSO-BASE": "05_Delega_GSE_DSO_template.docx",
-  "CER-CONTRATTO-TRADER-BASE": "06_Contratto_Trader_template.docx",
-  "CER-GDPR-INFORMATIVA-BREVE": "07_GDPR_Informativa_template.docx",
-  "CER-CRONOPROGRAMMA-BASE": "08_Cronoprogramma_template.docx",
-  "CER-REGISTRO-POD": "09_Registro_POD_template.docx",
-  "CER-REGISTRO-IMPIANTI": "10_Registro_Impianti_template.docx"
-};
+const MANIFEST_PATH = path.join(process.cwd(), 'config', 'templates', 'models.manifest.json');
+
+let manifestMap = null;
+let manifestMtime = 0;
+
+function buildManifestMap() {
+  if (!fs.existsSync(MANIFEST_PATH)) {
+    throw new Error('Manifest file not found');
+  }
+
+  const stat = fs.statSync(MANIFEST_PATH);
+  if (manifestMap && manifestMtime === stat.mtimeMs) {
+    return manifestMap;
+  }
+
+  const raw = fs.readFileSync(MANIFEST_PATH, 'utf8');
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`Invalid manifest JSON: ${error.message}`);
+  }
+
+  const models = Array.isArray(parsed?.models) ? parsed.models : [];
+  manifestMap = models.reduce((acc, entry) => {
+    if (!entry || typeof entry !== 'object') return acc;
+    const code = typeof entry.code === 'string' ? entry.code.trim().toUpperCase() : '';
+    const file = typeof entry.file === 'string' ? entry.file.trim() : '';
+    if (code && file) {
+      acc[code] = file;
+    }
+    return acc;
+  }, {});
+  manifestMtime = stat.mtimeMs;
+  return manifestMap;
+}
 
 function angularParser(tag) {
   const expr = tag.replace(/^[{]+|[}]+$/g, "").trim();
@@ -32,9 +55,17 @@ exports.handler = async (event) => {
 
   try {
     const { templateCode, payload, filename } = JSON.parse(event.body || "{}");
-    if (!templateCode) return json(400, { ok: false, error: "MISSING templateCode" });
+    const normalizedCode = typeof templateCode === 'string' ? templateCode.trim().toUpperCase() : '';
+    if (!normalizedCode) return json(400, { ok: false, error: "MISSING templateCode" });
 
-    const file = MAP[templateCode];
+    let file;
+    try {
+      const map = buildManifestMap();
+      file = map[normalizedCode];
+    } catch (manifestError) {
+      console.error('templates-merge manifest error', manifestError);
+      return json(500, { ok: false, error: 'MANIFEST_ERROR' });
+    }
     if (!file) return json(404, { ok: false, error: "UNKNOWN_TEMPLATE" });
 
     const fp = path.join(process.cwd(), "site", "assets", "models", file);
@@ -60,7 +91,7 @@ exports.handler = async (event) => {
       headers: {
         ...corsHeaders,
         "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "Content-Disposition": `attachment; filename="${filename || templateCode}.docx"`
+        "Content-Disposition": `attachment; filename="${filename || normalizedCode}.docx"`
       },
       isBase64Encoded: true,
       body: out.toString("base64")

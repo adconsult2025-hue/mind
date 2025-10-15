@@ -424,21 +424,66 @@ function readTemplatesFromSources() {
   const candidates = getTemplateSources();
   for (const filePath of candidates) {
     if (!filePath) continue;
-    try {
-      if (!fs.existsSync(filePath)) continue;
-      const raw = fs.readFileSync(filePath, 'utf8');
-      if (!raw) continue;
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed
-          .map((tpl) => normalizePersistedTemplate(tpl))
-          .filter(Boolean);
-      }
-    } catch (error) {
-      console.warn('[docs] impossibile leggere modello da', filePath, error?.message || error);
+    const entries = loadTemplatesManifest(filePath);
+    if (entries.length) {
+      return entries.map((tpl) => normalizePersistedTemplate(tpl)).filter(Boolean);
     }
   }
   return [];
+}
+
+function loadTemplatesManifest(filePath, visited = new Set()) {
+  if (!filePath) return [];
+  const resolved = path.resolve(filePath);
+  if (visited.has(resolved)) {
+    console.warn('[docs] ciclo di riferimenti rilevato per', resolved);
+    return [];
+  }
+  visited.add(resolved);
+
+  try {
+    if (!fs.existsSync(resolved)) return [];
+    const raw = fs.readFileSync(resolved, 'utf8');
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+
+    if (parsed && typeof parsed === 'object') {
+      if (Array.isArray(parsed.models)) {
+        return parsed.models
+          .map((entry) => manifestEntryToTemplate(entry))
+          .filter(Boolean);
+      }
+
+      if (typeof parsed.$ref === 'string' && parsed.$ref.trim()) {
+        const refPath = path.resolve(path.dirname(resolved), parsed.$ref.trim());
+        return loadTemplatesManifest(refPath, visited);
+      }
+    }
+  } catch (error) {
+    console.warn('[docs] impossibile leggere modello da', resolved, error?.message || error);
+  }
+
+  return [];
+}
+
+function manifestEntryToTemplate(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  const code = typeof entry.code === 'string' ? entry.code.trim() : '';
+  const name = typeof entry.name === 'string' ? entry.name.trim() : code;
+  if (!code || !name) return null;
+  return {
+    id: entry.id || code,
+    name,
+    code,
+    module: typeof entry.module === 'string' ? entry.module.trim().toLowerCase() : 'cer',
+    status: entry.status === 'active' ? 'active' : 'manifest',
+    version: Number.isFinite(Number(entry.version)) ? Number(entry.version) : 1,
+    fileName: entry.fileName || entry.file || null,
+  };
 }
 
 function computeTemplatesSignature() {
@@ -471,6 +516,7 @@ function getTemplateSources() {
   sources.push(path.join(__dirname, '../data/templates.json'));
   sources.push(path.join(os.tmpdir(), 'certouser_templates_data', 'templates.json'));
   sources.push(path.join(__dirname, 'templates.seed.json'));
+  sources.push(path.join(__dirname, '..', '..', 'config', 'templates', 'models.manifest.json'));
   return sources;
 }
 

@@ -1,0 +1,15 @@
+{
+  "version": "1.2",
+  "models": [
+    { "code": "CER-ATTOCOSTITUTIVO-BASE", "name": "Atto costitutivo CER", "module": "CER", "file": "01_AttoCostitutivo_CER_template.docx" },
+    { "code": "CER-STATUTO-BASE", "name": "Statuto CER", "module": "CER", "file": "02_Statuto_CER_template.docx" },
+    { "code": "CER-REGOLAMENTO-BASE", "name": "Regolamento interno CER", "module": "CER", "file": "03_Regolamento_CER_template.docx" },
+    { "code": "CER-ADESIONE-BASE", "name": "Domanda adesione membro", "module": "CER", "file": "04_Adesione_Membro_template.docx" },
+    { "code": "CER-DELEGA-GSEDSO-BASE", "name": "Delega GSE/DSO", "module": "CER", "file": "05_Delega_GSE_DSO_template.docx" },
+    { "code": "CER-CONTRATTO-TRADER-BASE", "name": "Contratto cessione eccedenze", "module": "CER", "file": "06_Contratto_Trader_template.docx" },
+    { "code": "CER-GDPR-INFORMATIVA-BREVE", "name": "Informativa GDPR breve", "module": "CER", "file": "07_GDPR_Informativa_template.docx" },
+    { "code": "CER-CRONOPROGRAMMA-BASE", "name": "Cronoprogramma documentale", "module": "CER", "file": "08_Cronoprogramma_template.docx" },
+    { "code": "CER-REGISTRO-POD", "name": "Registro POD", "module": "CER", "file": "09_Registro_POD_template.docx" },
+    { "code": "CER-REGISTRO-IMPIANTI", "name": "Registro Impianti", "module": "CER", "file": "10_Registro_Impianti_template.docx" }
+  ]
+}

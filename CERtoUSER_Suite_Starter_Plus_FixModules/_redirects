@@ -5,6 +5,7 @@
 /api/documents/generate  /.netlify/functions/documents2        200
 /api/documents      /.netlify/functions/docs                   200
 /api/documents/*    /.netlify/functions/docs/:splat            200
+/api/templates/manifest /.netlify/functions/templates-manifest 200
 /api/plants/docs      /.netlify/functions/plants-docs          200
 /api/plants/docs/*    /.netlify/functions/plants-docs          200
 /api/plants/workflows /.netlify/functions/plants-workflows     200
@@ -16,5 +17,6 @@
 /api/*              /.netlify/functions/:splat                 200
 /api2/templates            /.netlify/functions/templates2           200
 /api2/templates/*          /.netlify/functions/templates2           200
+/api2/templates/manifest   /.netlify/functions/templates-manifest   200
 /api2/documents/generate   /.netlify/functions/documents2           200
 /api2/*                   /.netlify/functions/:splat               200
