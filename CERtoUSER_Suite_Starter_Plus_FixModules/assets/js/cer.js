@@ -3,6 +3,7 @@ import { saveDocFile, statutoTemplate, regolamentoTemplate, attoCostitutivoTempl
 import { STATE as CRONO_STATE, initCronoprogrammaUI, renderCronoprogramma } from './cronoprogramma.js?v=36';
 
 const API_BASE = '/api';
+const CER_TEMPLATE_MODULES = new Set(['cer', 'contratti']);
 
 let form;
 let membersBox;
@@ -139,10 +140,10 @@ function init() {
 async function loadCerTemplates() {
   if (!templateSelect) return;
   try {
-    const res = await fetch(`${API_BASE}/templates?module=cer&status=active`);
+    const res = await fetch(`${API_BASE}/templates`, { headers: { Accept: 'application/json' } });
     const payload = await res.json();
     if (!res.ok || payload.ok === false) throw new Error(payload.error?.message || 'Impossibile caricare i modelli CER');
-    cerTemplates = payload.data || [];
+    cerTemplates = filterCerTemplates(extractTemplatesList(payload));
   } catch (err) {
     cerTemplates = [];
     console.error(err);
@@ -154,15 +155,15 @@ function populateCerTemplateSelect() {
   if (!templateSelect) return;
   const current = templateSelect.value;
   templateSelect.innerHTML = '<option value="">Nessun modello attivo</option>';
-  cerTemplates
-    .filter(tpl => tpl.status === 'active' || typeof tpl.status === 'undefined')
-    .forEach(tpl => {
-      const opt = document.createElement('option');
-      opt.value = tpl.code;
-      opt.textContent = `${tpl.code} · v${tpl.version}`;
-      if (current && current === tpl.code) opt.selected = true;
-      templateSelect.appendChild(opt);
-    });
+  cerTemplates.forEach((tpl) => {
+    const opt = document.createElement('option');
+    opt.value = tpl.code;
+    const moduleLabel = tpl.module ? ` · ${String(tpl.module).toUpperCase()}` : '';
+    const versionLabel = tpl.version != null ? ` · v${tpl.version}` : '';
+    opt.textContent = `${tpl.code}${versionLabel}${moduleLabel}`;
+    if (current && current === tpl.code) opt.selected = true;
+    templateSelect.appendChild(opt);
+  });
 }
 
 // -----------------------------
@@ -819,9 +820,7 @@ async function fetchCerTemplates() {
   try {
     const r = await fetch('/api/templates', { headers: { Accept: 'application/json' } });
     const list = await r.json();
-    const templates = Array.isArray(list) ? list : (Array.isArray(list?.data) ? list.data : []);
-    return templates.filter((t) => (t.module ? String(t.module).toUpperCase() === 'CER' : true)
-      && (t.active !== false));
+    return filterCerTemplates(extractTemplatesList(list));
   } catch (e) {
     console.error('fetchCerTemplates:', e);
     return [];
@@ -834,7 +833,7 @@ function renderCerTemplatesDropdown(templates, hostEl) {
 
   const safeTemplates = Array.isArray(templates) ? templates : [];
   if (!safeTemplates.length) {
-    host.innerHTML = '<p class="info-text">Nessun modello CER disponibile.</p>';
+    host.innerHTML = '<p class="info-text">Nessun modello CER o Contratti disponibile.</p>';
     return;
   }
 
@@ -845,7 +844,7 @@ function renderCerTemplatesDropdown(templates, hostEl) {
         <option value="">— scegli un modello —</option>
         ${safeTemplates.map((t) => `
           <option value="${t.slug || t.code || t.id}">
-            ${t.name || t.codice || t.slug} ${t.latest_version ? '(v' + t.latest_version + ')' : ''}
+            ${formatTemplateDisplayName(t)}
           </option>`).join('')}
       </select>
       <button id="cer-tpl-generate">Genera</button>
@@ -948,6 +947,110 @@ function renderCerTemplatesDropdown(templates, hostEl) {
       button.textContent = originalLabel;
     }
   });
+}
+
+function extractTemplatesList(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (payload && Array.isArray(payload.data)) return payload.data;
+  return [];
+}
+
+function filterCerTemplates(templates) {
+  return (Array.isArray(templates) ? templates : [])
+    .map((tpl) => normalizeCerTemplate(tpl))
+    .filter(Boolean);
+}
+
+function normalizeCerTemplate(tpl) {
+  if (!tpl || typeof tpl !== 'object') return null;
+
+  const moduleValue = tpl.module ? String(tpl.module).trim().toLowerCase() : '';
+  const normalizedModule = moduleValue || 'cer';
+  if (!isCerTemplateModule(normalizedModule)) {
+    return null;
+  }
+
+  if (!isTemplateActive(tpl)) {
+    return null;
+  }
+
+  const normalizedCode = pickFirstNonEmpty([
+    tpl.code,
+    tpl.slug,
+    tpl.id,
+    tpl.codice,
+    tpl.name,
+  ]);
+
+  if (!normalizedCode) {
+    return null;
+  }
+
+  const normalizedSlug = pickFirstNonEmpty([
+    tpl.slug,
+    tpl.code,
+    tpl.id,
+    tpl.codice,
+    tpl.name,
+  ]);
+
+  return {
+    ...tpl,
+    code: normalizedCode,
+    slug: normalizedSlug,
+    module: normalizedModule,
+  };
+}
+
+function pickFirstNonEmpty(candidates) {
+  return candidates
+    .map((value) => (typeof value === 'string' ? value : (value != null ? String(value) : '')))
+    .map((value) => value.trim())
+    .find((value) => value.length > 0) || '';
+}
+
+function isCerTemplateModule(moduleValue) {
+  if (!moduleValue) return true;
+  const normalized = String(moduleValue).trim().toLowerCase();
+  return CER_TEMPLATE_MODULES.has(normalized);
+}
+
+function isTemplateActive(tpl) {
+  if (!tpl) return false;
+  if (Object.prototype.hasOwnProperty.call(tpl, 'active')) {
+    const rawActive = tpl.active;
+    if (rawActive === false || String(rawActive).toLowerCase() === 'false') {
+      return false;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(tpl, 'enabled')) {
+    const rawEnabled = tpl.enabled;
+    if (rawEnabled === false || String(rawEnabled).toLowerCase() === 'false') {
+      return false;
+    }
+  }
+  const status = tpl.status ? String(tpl.status).trim().toLowerCase() : null;
+  if (status && status !== 'active' && status !== 'enabled' && status !== 'published') {
+    return false;
+  }
+  return true;
+}
+
+function formatTemplateDisplayName(template) {
+  if (!template) return 'Template';
+  const name = pickFirstNonEmpty([
+    template.name,
+    template.codice,
+    template.code,
+    template.slug,
+    template.id,
+  ]) || 'Template';
+  const version = template.latest_version ?? template.version;
+  const moduleLabel = template.module ? String(template.module).toUpperCase() : '';
+  const parts = [name];
+  if (version != null) parts.push(`v${version}`);
+  if (moduleLabel) parts.push(moduleLabel);
+  return parts.join(' · ');
 }
 
 function focusDocumentsTab(cerId) {
