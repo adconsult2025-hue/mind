@@ -80,9 +80,17 @@ exports.handler = async (event) => {
 
   try {
     const { templateCode, payload, filename } = JSON.parse(event.body || "{}");
-    if (!templateCode) return json(400, { ok: false, error: "MISSING templateCode" });
+    const normalizedCode = typeof templateCode === 'string' ? templateCode.trim().toUpperCase() : '';
+    if (!normalizedCode) return json(400, { ok: false, error: "MISSING templateCode" });
 
-    const file = MAP[templateCode];
+    let file;
+    try {
+      const map = buildManifestMap();
+      file = map[normalizedCode];
+    } catch (manifestError) {
+      console.error('templates-merge manifest error', manifestError);
+      return json(500, { ok: false, error: 'MANIFEST_ERROR' });
+    }
     if (!file) return json(404, { ok: false, error: "UNKNOWN_TEMPLATE" });
 
     const fp = path.join(process.cwd(), "site", "assets", "models", file);
@@ -108,7 +116,7 @@ exports.handler = async (event) => {
       headers: {
         ...corsHeaders,
         "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "Content-Disposition": `attachment; filename="${filename || templateCode}.docx"`
+        "Content-Disposition": `attachment; filename="${filename || normalizedCode}.docx"`
       },
       isBase64Encoded: true,
       body: out.toString("base64")

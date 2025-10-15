@@ -1,9 +1,20 @@
 import { safeGuardAction, isDryRunResult } from './safe.js';
 
 const API_BASE = '/api2/templates';
+const MANIFEST_ENDPOINTS = [
+  '/api/templates/manifest',
+  '/api2/templates/manifest',
+  '/config/templates/models.manifest.json'
+];
 
 let templates = [];
 let filter = 'all';
+
+let manifestEntries = [];
+let manifestVersion = null;
+let manifestLoaded = false;
+let manifestLoadError = null;
+let manifestWarned = false;
 
 let tableBody;
 let filterButtons = [];
@@ -71,12 +82,13 @@ function init() {
 
 async function fetchTemplates() {
   const query = filter && filter !== 'all' ? `?module=${encodeURIComponent(filter)}` : '';
+  let apiTemplates = [];
   try {
     const payload = await fetchJSON(`${API_BASE}${query}`);
-    templates = Array.isArray(payload.data) ? payload.data : Array.isArray(payload) ? payload : [];
+    apiTemplates = Array.isArray(payload.data) ? payload.data : Array.isArray(payload) ? payload : [];
   } catch (err) {
     console.error(err);
-    templates = [];
+    apiTemplates = [];
     const isHtml404 =
       err?.status === 404 && typeof err?.body === 'string' && err.body.trim().startsWith('<');
     const message = isHtml404
@@ -84,6 +96,12 @@ async function fetchTemplates() {
       : err?.message || 'Errore durante il caricamento dei modelli';
     toast(message);
   }
+  await ensureManifestLoaded();
+  if (manifestLoadError && !manifestWarned) {
+    toast('Manifest modelli non disponibile: visualizzazione limitata ai dati presenti.');
+    manifestWarned = true;
+  }
+  templates = mergeTemplatesWithManifest(apiTemplates);
   renderTable();
 }
 
@@ -101,7 +119,7 @@ function renderTable() {
     return;
   }
 
-  filtered.sort((a, b) => a.code.localeCompare(b.code) || b.version - a.version);
+  filtered.sort((a, b) => a.code.localeCompare(b.code) || Number(b.version || 0) - Number(a.version || 0));
   filtered.forEach((tpl) => {
     const row = document.createElement('tr');
     row.innerHTML = `
@@ -113,22 +131,38 @@ function renderTable() {
       <td class="nowrap actions"></td>
     `;
     const actionsCell = row.querySelector('.actions');
-    const editBtn = actionButton('Modifica', () => openEditModal(tpl));
+    const isReadonly = tpl.readonly || !tpl.id;
+    const canActivate = !isReadonly && tpl.status !== 'active';
+    const canDownload = Boolean(tpl.url) || Boolean(getBaseFileName(tpl));
+    const canDelete = !isReadonly;
+
+    const editBtn = actionButton('Modifica', () => openEditModal(tpl), { disabled: isReadonly });
     editBtn.dataset.code = tpl.code || '';
     editBtn.dataset.module = tpl.module || '';
     editBtn.dataset.version = tpl.version != null ? String(tpl.version) : '';
     actionsCell.appendChild(editBtn);
-    actionsCell.appendChild(actionButton('Attiva', () => activateTemplate(tpl), { disabled: tpl.status === 'active', tone: 'primary' }));
-    actionsCell.appendChild(actionButton('Scarica', () => downloadTemplate(tpl)));
-    actionsCell.appendChild(actionButton('Elimina', () => deleteTemplate(tpl), { tone: 'danger' }));
+    actionsCell.appendChild(
+      actionButton('Attiva', () => activateTemplate(tpl), { disabled: !canActivate, tone: 'primary' })
+    );
+    actionsCell.appendChild(actionButton('Scarica', () => downloadTemplate(tpl), { disabled: !canDownload }));
+    actionsCell.appendChild(actionButton('Elimina', () => deleteTemplate(tpl), { tone: 'danger', disabled: !canDelete }));
     tableBody.appendChild(row);
   });
 }
 
 function renderStatus(tpl) {
-  const placeholders = tpl.placeholders?.length ? tpl.placeholders.join(', ') : '—';
-  const badge = tpl.status === 'active' ? '<span class="badge accent">Attivo</span>' : '<span class="badge">Inattivo</span>';
-  return `${badge}<br/><small>Segnaposto: ${placeholders}</small>`;
+  const placeholders = Array.isArray(tpl.placeholders) && tpl.placeholders.length
+    ? tpl.placeholders.map((item) => escapeHtml(item)).join(', ')
+    : '—';
+  const baseFile = getBaseFileName(tpl);
+  const baseLine = baseFile ? `<br/><small>File base: ${escapeHtml(baseFile)}</small>` : '';
+  if (tpl.status === 'manifest') {
+    return `<span class="badge warn">Da caricare</span>${baseLine}<br/><small>Segnaposto: ${placeholders}</small>`;
+  }
+  const badge = tpl.status === 'active'
+    ? '<span class="badge badge-accent">Attivo</span>'
+    : '<span class="badge muted">Inattivo</span>';
+  return `${badge}${baseLine}<br/><small>Segnaposto: ${placeholders}</small>`;
 }
 
 function actionButton(label, handler, options = {}) {
@@ -368,11 +402,16 @@ async function activateTemplate(tpl) {
 }
 
 function downloadTemplate(tpl) {
-  if (!tpl.url) {
-    toast('URL modello non disponibile');
+  if (tpl?.url) {
+    window.open(tpl.url, '_blank');
     return;
   }
-  window.open(tpl.url, '_blank');
+  const baseFile = getBaseFileName(tpl);
+  if (baseFile) {
+    toast(`File base definito nel manifest: ${baseFile}. Carica il documento nello storage condiviso per abilitarne il download.`);
+    return;
+  }
+  toast('URL modello non disponibile');
 }
 
 async function deleteTemplate(tpl) {
@@ -401,6 +440,19 @@ function parsePlaceholders(raw) {
     .split(/[,\n]/)
     .map((p) => p.trim())
     .filter(Boolean);
+}
+
+function ensurePlaceholderArray(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => (typeof entry === 'string' ? entry : String(entry ?? '')))
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return parsePlaceholders(value);
+  }
+  return [];
 }
 
 async function buildFilePayload(rawFile) {
@@ -491,4 +543,144 @@ function toast(message) {
   if (!message) return;
   const evt = new CustomEvent('cer:notify', { detail: message });
   window.dispatchEvent(evt);
+}
+
+async function ensureManifestLoaded() {
+  if (manifestLoaded) {
+    return manifestEntries;
+  }
+
+  for (const endpoint of MANIFEST_ENDPOINTS) {
+    try {
+      const payload = await fetchJSON(endpoint, { headers: { Accept: 'application/json' } });
+      const models = Array.isArray(payload?.models)
+        ? payload.models
+        : Array.isArray(payload?.data)
+          ? payload.data
+          : [];
+      const normalized = models.map((entry) => normalizeManifestEntry(entry)).filter(Boolean);
+      manifestEntries = normalized;
+      manifestVersion = typeof payload?.version === 'string' ? payload.version : null;
+      manifestLoaded = true;
+      manifestLoadError = null;
+      return manifestEntries;
+    } catch (error) {
+      console.warn('[models] manifest fetch failed for', endpoint, error);
+      manifestLoadError = error;
+    }
+  }
+
+  manifestEntries = [];
+  manifestLoaded = true;
+  return manifestEntries;
+}
+
+function normalizeManifestEntry(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  const code = typeof entry.code === 'string' ? entry.code.trim().toUpperCase() : '';
+  if (!code) return null;
+  const name = typeof entry.name === 'string' ? entry.name.trim() : code;
+  const moduleValue = typeof entry.module === 'string' ? entry.module.trim().toLowerCase() : 'cer';
+  const file = typeof entry.file === 'string' ? entry.file.trim() : entry.fileName || null;
+  const version = Number.isFinite(Number(entry.version)) ? Number(entry.version) : 1;
+  const status = entry.status === 'active' ? 'active' : 'manifest';
+  return {
+    code,
+    name,
+    module: moduleValue || 'cer',
+    file,
+    version,
+    status,
+  };
+}
+
+function normalizeApiTemplate(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const code = raw.code ? String(raw.code).trim().toUpperCase() : '';
+  if (!code) return null;
+  const name = raw.name ? String(raw.name).trim() : code;
+  const moduleValue = raw.module ? String(raw.module).trim().toLowerCase() : 'cer';
+  const placeholders = ensurePlaceholderArray(raw.placeholders);
+  const baseFile = typeof raw.fileName === 'string' ? raw.fileName : null;
+  return {
+    ...raw,
+    code,
+    name,
+    module: moduleValue,
+    placeholders,
+    readonly: false,
+    baseFile,
+  };
+}
+
+function mergeTemplatesWithManifest(apiTemplates) {
+  const merged = new Map();
+  const apiList = Array.isArray(apiTemplates) ? apiTemplates : [];
+  apiList
+    .map((tpl) => normalizeApiTemplate(tpl))
+    .filter(Boolean)
+    .forEach((tpl) => {
+      const key = tpl.code;
+      const clone = { ...tpl };
+      if (!clone.baseFile && typeof clone.fileName === 'string') {
+        clone.baseFile = clone.fileName;
+      }
+      merged.set(key, clone);
+    });
+
+  manifestEntries.forEach((entry) => {
+    if (!entry || !entry.code) return;
+    const existing = merged.get(entry.code);
+    if (existing) {
+      existing.baseFile = existing.baseFile || entry.file || null;
+      existing.manifest = entry;
+      if (!existing.name && entry.name) existing.name = entry.name;
+      if (!existing.module && entry.module) existing.module = entry.module;
+      if (!existing.version && entry.version) existing.version = entry.version;
+      if ((!existing.status || existing.status === 'inactive') && entry.status === 'active') {
+        existing.status = entry.status;
+      }
+      return;
+    }
+
+    merged.set(entry.code, {
+      id: null,
+      name: entry.name,
+      code: entry.code,
+      module: entry.module,
+      version: entry.version || 1,
+      status: entry.status || 'manifest',
+      placeholders: [],
+      url: null,
+      fileName: entry.file || null,
+      baseFile: entry.file || null,
+      manifest: entry,
+      readonly: true,
+    });
+  });
+
+  return Array.from(merged.values()).sort((a, b) => {
+    const codeCompare = a.code.localeCompare(b.code);
+    if (codeCompare !== 0) return codeCompare;
+    return Number(b.version || 0) - Number(a.version || 0);
+  });
+}
+
+function getBaseFileName(tpl) {
+  if (!tpl || typeof tpl !== 'object') return null;
+  if (typeof tpl.baseFile === 'string' && tpl.baseFile.trim()) return tpl.baseFile.trim();
+  if (typeof tpl.fileName === 'string' && tpl.fileName.trim()) return tpl.fileName.trim();
+  if (tpl.manifest && typeof tpl.manifest.file === 'string' && tpl.manifest.file.trim()) {
+    return tpl.manifest.file.trim();
+  }
+  return null;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
