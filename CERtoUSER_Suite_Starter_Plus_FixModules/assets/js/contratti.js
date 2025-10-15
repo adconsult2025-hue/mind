@@ -71,7 +71,7 @@ async function fetchTemplates() {
     const res = await fetch(`${TEMPLATE_API}?module=contratti&status=active`);
     const payload = await res.json();
     if (!res.ok || payload.ok === false) throw new Error(payload.error?.message || 'Impossibile caricare i modelli contratti');
-    templates = payload.data || [];
+    templates = Array.isArray(payload.data) ? payload.data : Array.isArray(payload) ? payload : [];
     populateTemplateSelect();
   } catch (err) {
     console.error(err);
