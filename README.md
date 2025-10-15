@@ -12,10 +12,11 @@ cd mind
 ## 2. Preparare l'ambiente
 
 1. Copia/crea un file `.env` nella root con le credenziali del database e il percorso di storage dei documenti (vedi esempio nel README della suite).
-2. Installa il Netlify CLI:
+2. Installa il Netlify CLI e autentica il tuo account:
 
    ```bash
    npm install -g netlify-cli
+   netlify login
    ```
 
 3. Installa le dipendenze delle funzioni serverless:
@@ -45,7 +46,15 @@ psql "$NEON_DATABASE_URL" -f CERtoUSER_Suite_Starter_Plus_FixModules/tools/db/te
 ## 5. Deploy su Netlify
 
 1. Collega il repository a un sito Netlify (tramite `netlify init` oppure dalla dashboard).
-2. Configura le variabili d'ambiente (`NEON_DATABASE_URL`, `FILE_STORAGE_DIR`, `SAFE_MODE`).
+2. Configura le variabili d'ambiente (`NEON_DATABASE_URL`, `FILE_STORAGE_DIR`, `SAFE_MODE`, `NODE_VERSION`). Se preferisci usare il Netlify CLI, imposta anche lo `SITE_ID` del progetto e lancia:
+
+   ```bash
+   export SITE_ID="<ID_DEL_TUO_SITO_NETLIFY>"
+   netlify env:set NEON_DATABASE_URL "postgresql://<user>:<pwd>@<host>/<db>?sslmode=require" --site "$SITE_ID"
+   netlify env:set FILE_STORAGE_DIR "./public/docs" --site "$SITE_ID"
+   netlify env:set SAFE_MODE "false" --site "$SITE_ID"
+   netlify env:set NODE_VERSION "20" --site "$SITE_ID"
+   ```
 3. Lancia un deploy:
 
    ```bash

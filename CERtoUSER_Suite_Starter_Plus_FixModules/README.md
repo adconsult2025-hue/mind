@@ -25,7 +25,7 @@ La cartella contiene la web app statica (HTML/CSS/JS), gli asset e le Netlify Fu
 
 ## Requisiti
 
-- **Node.js 18+** per eseguire Netlify CLI e gli script.
+- **Node.js 20** (consigliato, vedi `.nvmrc`) per eseguire Netlify CLI e gli script.
 - **Netlify CLI** (`npm install -g netlify-cli`) per sviluppo e deploy.
 - **PostgreSQL 14+** (o Neon, Supabase, ecc.) per la persistenza dei documenti.
 
@@ -78,11 +78,24 @@ Lo script crea automaticamente l'estensione `pgcrypto` (se assente) e le tabelle
 ## Deploy su Netlify
 
 1. Collegare la repository al progetto Netlify (`netlify link` oppure tramite interfaccia web).
-2. Configurare le environment variables nella dashboard Netlify (`Site settings > Environment variables`):
+2. Configurare le environment variables nella dashboard Netlify (`Site settings > Environment variables`) oppure via CLI:
    - `NEON_DATABASE_URL`
    - `FILE_STORAGE_DIR` (es. `/tmp/docs` per lo storage temporaneo)
    - `SAFE_MODE`
+   - `NODE_VERSION` (imposta `20` per allineare runtime e sviluppo)
    - `TEMPLATE_MAX_UPLOAD_SIZE` (opzionale, dimensione massima dei file caricati)
+
+   Con Netlify CLI puoi impostarle rapidamente:
+
+   ```bash
+   export SITE_ID="<ID_DEL_TUO_SITO_NETLIFY>"
+   netlify env:set NEON_DATABASE_URL "postgresql://<user>:<pwd>@<host>/<db>?sslmode=require" --site "$SITE_ID"
+   netlify env:set FILE_STORAGE_DIR "./public/docs" --site "$SITE_ID"
+   netlify env:set SAFE_MODE "false" --site "$SITE_ID"
+   netlify env:set NODE_VERSION "20" --site "$SITE_ID"
+   # opzionale
+   netlify env:set TEMPLATE_MAX_UPLOAD_SIZE "10485760" --site "$SITE_ID"
+   ```
 3. Assicurarsi che la directory di publish sia `CERtoUSER_Suite_Starter_Plus_FixModules` e la cartella funzioni `netlify/functions` (sono già configurate in `netlify.toml`).
 4. Eseguire il deploy:
 
