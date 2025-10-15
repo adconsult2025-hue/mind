@@ -1,8 +1,12 @@
-exports.headers = {
-  'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+const corsHeaders = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": process.env.ALLOWED_ORIGIN || "*",
+  "Access-Control-Allow-Headers": "authorization, content-type",
+  "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS"
 };
 
-exports.preflight = () => ({ statusCode: 200, headers: exports.headers, body: '' });
+function preflight() {
+  return { statusCode: 204, headers: corsHeaders, body: "" };
+}
+
+module.exports = { corsHeaders, preflight };
