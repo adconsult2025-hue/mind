@@ -13,3 +13,7 @@
 /api/plant_workflows      /.netlify/functions/plant_workflows  200
 /api/plant_workflows/*    /.netlify/functions/plant_workflows  200
 /api/*              /.netlify/functions/:splat                 200
+/api2/templates           /.netlify/functions/templates2           200
+/api2/templates/*         /.netlify/functions/templates2           200
+/api2/documents/generate  /.netlify/functions/documents2           200
+/api2/*                   /.netlify/functions/:splat               200
