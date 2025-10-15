@@ -332,6 +332,7 @@ function findTemplateByKey(key) {
   if (!key) return null;
   const templates = loadTemplatesCache();
   const normalized = normalizeIdentifier(key);
+  const normalizedSlugKey = normalizeIdentifier(slugifyCandidate(key));
   const match = templates.find((tpl) => {
     const candidates = [
       tpl.slug,
@@ -344,10 +345,55 @@ function findTemplateByKey(key) {
       tpl.id,
       tpl.name
     ];
-    return candidates.some((candidate) => normalizeIdentifier(candidate) === normalized
-      || normalizeIdentifier(slugifyCandidate(candidate)) === normalized);
+    return candidates.some((candidate) => {
+      const candidateNormalized = normalizeIdentifier(candidate);
+      const candidateSlug = normalizeIdentifier(slugifyCandidate(candidate));
+      return candidateNormalized === normalized
+        || candidateNormalized === normalizedSlugKey
+        || candidateSlug === normalized
+        || candidateSlug === normalizedSlugKey;
+    });
   });
   return match ? { ...match } : null;
+}
+
+function normalizePersistedTemplate(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const clone = { ...raw };
+  const slugSource = firstNonEmpty(
+    clone.slug,
+    clone.slug_id,
+    clone.slugId,
+    clone.templateSlug,
+    clone.template_slug,
+    clone.code,
+    clone.codice,
+    clone.name,
+    clone.id
+  );
+  const normalizedSlug = slugSource ? slugifyCandidate(slugSource) : '';
+  const slugId = firstNonEmpty(clone.slug_id, clone.slugId, slugSource) || null;
+  const templateSlug = firstNonEmpty(clone.templateSlug, clone.template_slug, slugId, normalizedSlug) || null;
+  return {
+    ...clone,
+    slug: clone.slug || (normalizedSlug ? normalizedSlug : null),
+    slug_id: clone.slug_id || clone.slugId || (slugId || null),
+    slugId: clone.slugId || clone.slug_id || (slugId || null),
+    templateSlug: templateSlug || null
+  };
+}
+
+function firstNonEmpty(...values) {
+  for (const value of values) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed) return trimmed;
+    } else if (value !== undefined && value !== null) {
+      const stringified = String(value).trim();
+      if (stringified) return stringified;
+    }
+  }
+  return '';
 }
 
 function slugifyCandidate(value) {
@@ -362,15 +408,15 @@ function slugifyCandidate(value) {
 }
 
 let templatesCacheStore = null;
-let templatesCacheTs = 0;
+let templatesCacheSignature = '';
 
 function loadTemplatesCache() {
-  const now = Date.now();
-  if (templatesCacheStore && (now - templatesCacheTs < 30000)) {
+  const signature = computeTemplatesSignature();
+  if (templatesCacheStore && templatesCacheSignature === signature && signature) {
     return templatesCacheStore;
   }
   templatesCacheStore = readTemplatesFromSources();
-  templatesCacheTs = now;
+  templatesCacheSignature = signature;
   return templatesCacheStore;
 }
 
@@ -384,13 +430,33 @@ function readTemplatesFromSources() {
       if (!raw) continue;
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed.map((tpl) => (tpl && typeof tpl === 'object' ? { ...tpl } : null)).filter(Boolean);
+        return parsed
+          .map((tpl) => normalizePersistedTemplate(tpl))
+          .filter(Boolean);
       }
     } catch (error) {
       console.warn('[docs] impossibile leggere modello da', filePath, error?.message || error);
     }
   }
   return [];
+}
+
+function computeTemplatesSignature() {
+  const candidates = getTemplateSources();
+  if (!Array.isArray(candidates) || !candidates.length) {
+    return '';
+  }
+  return candidates
+    .map((filePath) => {
+      if (!filePath) return 'missing';
+      try {
+        const stat = fs.statSync(filePath);
+        return `${filePath}:${stat.size}:${stat.mtimeMs}`;
+      } catch {
+        return `${filePath}:missing`;
+      }
+    })
+    .join('|');
 }
 
 function getTemplateSources() {
