@@ -79,6 +79,7 @@ async function main() {
   await syncDir(path.join(ROOT, "assets"), path.join(SITE_DIR, "assets"), { preserve: ["models"] });
   await syncDir(path.join(ROOT, "modules"), path.join(SITE_DIR, "modules"));
   await syncDir(path.join(ROOT, "config"), path.join(SITE_DIR, "config"));
+  await syncDir(path.join(ROOT, "login"), path.join(SITE_DIR, "login"));
 
   console.log("[prepare-site] completato.");
 }

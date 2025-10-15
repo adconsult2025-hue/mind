@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MIND — Accesso</title>
+  <link rel="icon" href="/assets/img/mind.png"/>
+  <link rel="stylesheet" href="/assets/css/style.css?v=38"/>
+  <meta name="description" content="Accedi alla suite MIND per la gestione integrata di CRM, CER, impianti e documentazione."/>
+</head>
+<body class="login-page dark">
+  <main class="login-shell">
+    <div class="login-content">
+      <section class="login-hero">
+        <img src="/assets/img/mind.svg" alt="MIND Suite" class="login-hero-logo"/>
+        <h1>MIND Suite</h1>
+        <p>Ecosistema operativo per comunità energetiche.</p>
+      </section>
+      <section class="login-card" aria-labelledby="login-title">
+        <header>
+          <h2 id="login-title">Accesso riservato</h2>
+          <p>Inserisci le credenziali Identity fornite dal team MIND Suite.</p>
+        </header>
+        <form id="login-form" autocomplete="on" novalidate>
+          <label for="email">
+            <span>Email</span>
+            <input type="email" id="email" name="email" autocomplete="email" required placeholder="nome@azienda.it"/>
+          </label>
+          <label for="password">
+            <span>Password</span>
+            <input type="password" id="password" name="password" autocomplete="current-password" required placeholder="••••••••" minlength="6"/>
+          </label>
+          <div class="login-actions">
+            <div class="login-status" data-status hidden aria-live="polite"></div>
+            <button type="submit" class="btn block" data-submit>
+              <span>Accedi</span>
+            </button>
+          </div>
+        </form>
+        <p class="login-meta">Problemi di accesso? <a href="mailto:supporto@mind-suite.it">Contatta il supporto</a>.</p>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="/assets/js/login.js?v=2"></script>
+</body>
+</html>
