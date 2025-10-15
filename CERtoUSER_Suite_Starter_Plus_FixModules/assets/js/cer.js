@@ -1,4 +1,4 @@
-import { allCustomers, allCER, saveCER, uid, progressCERs, saveProgressCERs } from './storage.js';
+import { allCustomers, allCER, saveCER, uid, progressCERs, saveProgressCERs, saveCustomers } from './storage.js';
 import { saveDocFile, statutoTemplate, regolamentoTemplate, attoCostitutivoTemplate, adesioneTemplate, delegaGSETemplate, contrattoTraderTemplate, informativaGDPRTemplate, accordoProduttoreProsumerTemplate } from './docs.js';
 import { STATE as CRONO_STATE, initCronoprogrammaUI, renderCronoprogramma } from './cronoprogramma.js?v=36';
 
@@ -114,6 +114,117 @@ const DOC_TEMPLATE_UPLOADS = [
   { key: 'accordo_produttore_prosumer', label: 'Modello Accordo Produttore/Prosumer (HTML)', displayName: "l'Accordo Produttore/Prosumer", help: 'Disponibile solo per membri con ruolo Produttore o Prosumer. Usa i segnaposto {{MEMBER_*}}.' },
 ];
 
+function sanitizePod(value) {
+  if (!value) return null;
+  const cleaned = String(value).toUpperCase().replace(/\s+/g, '');
+  if (!/^IT[A-Z0-9]{12,16}$/.test(cleaned)) return null;
+  return cleaned;
+}
+
+function mergeCustomerData(base, update) {
+  const result = { ...base };
+  Object.entries(update || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return;
+    if (key === 'pod') {
+      const sanitized = sanitizePod(value);
+      if (sanitized) result.pod = sanitized;
+      return;
+    }
+    result[key] = value;
+  });
+  return result;
+}
+
+function normalizeApiCustomer(data) {
+  if (!data) return null;
+  const id = String(data.id || data.client_id || '').trim();
+  const podCandidates = [];
+  if (Array.isArray(data.pods)) podCandidates.push(...data.pods);
+  if (data.pod) podCandidates.unshift(data.pod);
+  let pod = null;
+  for (const candidate of podCandidates) {
+    const sanitized = sanitizePod(candidate);
+    if (sanitized) {
+      pod = sanitized;
+      break;
+    }
+  }
+  if (!pod && !id) return null;
+  return {
+    id: id || pod || uid('cust'),
+    nome: data.nome || data.name || 'Cliente',
+    tipo: data.tipo || data.subject_type || 'Privato',
+    pod,
+    comune: data.comune || data.city || '',
+    cabina: data.cabina || data.cabina_primaria || data.cp || '',
+    email: data.email || data.mail || '',
+    tel: data.tel || data.phone || data.telefono || '',
+    ruolo: data.ruolo || data.role || 'Consumer'
+  };
+}
+
+function mergeCustomerLists(existing, incoming) {
+  if (!Array.isArray(incoming) || !incoming.length) return existing;
+  const map = new Map();
+  const podIndex = new Map();
+  existing.forEach((customer) => {
+    const id = String(customer.id || '');
+    if (!id) return;
+    const copy = { ...customer };
+    map.set(id, copy);
+    if (copy.pod) podIndex.set(copy.pod, id);
+  });
+
+  incoming.forEach((customer) => {
+    const targetId = String(customer.id || '');
+    if (targetId && map.has(targetId)) {
+      const merged = mergeCustomerData(map.get(targetId), customer);
+      map.set(targetId, merged);
+      if (merged.pod) podIndex.set(merged.pod, targetId);
+      return;
+    }
+    if (customer.pod && podIndex.has(customer.pod)) {
+      const existingId = podIndex.get(customer.pod);
+      const merged = mergeCustomerData(map.get(existingId), customer);
+      map.set(existingId, merged);
+      return;
+    }
+    const finalId = targetId || customer.pod || uid('cust');
+    if (!map.has(finalId)) {
+      const record = { ...customer, id: finalId };
+      map.set(finalId, record);
+      if (record.pod) podIndex.set(record.pod, finalId);
+    }
+  });
+
+  const result = Array.from(map.values());
+  incoming.forEach((customer) => {
+    if (!customer.id && customer.pod && !podIndex.has(customer.pod)) {
+      result.push({ ...customer, id: customer.pod });
+    }
+  });
+  return result;
+}
+
+async function syncCustomersFromApi() {
+  try {
+    const res = await fetch(`${API_BASE}/clients`);
+    if (!res.ok) return;
+    const payload = await res.json();
+    if (!payload?.ok || !Array.isArray(payload.data)) return;
+    const normalized = payload.data.map(normalizeApiCustomer).filter(Boolean);
+    if (!normalized.length) return;
+    const merged = mergeCustomerLists(allCustomers(), normalized);
+    customers = merged;
+    saveCustomers(customers);
+    renderMembersPicker();
+    updatePlantOwnerOptions();
+    updateCerValidationUI();
+  } catch (err) {
+    console.warn('Impossibile sincronizzare i clienti dal CRM remoto', err);
+  }
+}
+
 const plantState = {
   period: currentPeriod(),
   plants: [],
@@ -167,6 +278,15 @@ window.addEventListener('cronoprogramma:doc-updated', (event) => {
   handleCerDocEvent(event.detail);
 });
 
+window.addEventListener('storage', (event) => {
+  if (event.key === 'customers') {
+    customers = allCustomers();
+    renderMembersPicker();
+    updatePlantOwnerOptions();
+    updateCerValidationUI();
+  }
+});
+
 function init() {
   form = document.getElementById('form-cer');
   membersBox = document.getElementById('members-picker');
@@ -201,6 +321,7 @@ function init() {
   initCronoprogrammaModule();
   initAllocationsShortcuts();
   loadCerTemplates();
+  syncCustomersFromApi();
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) loadCerTemplates();
   });

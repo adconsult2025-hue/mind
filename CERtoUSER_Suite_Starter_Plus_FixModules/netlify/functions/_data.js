@@ -1,3 +1,178 @@
+const { clientPods } = require('./_store');
+
+const clients = [
+  {
+    id: 'client_demo_001',
+    nome: 'Mario Rossi',
+    tipo: 'Privato',
+    cabina: 'CP-001',
+    comune: 'Frosinone',
+    email: 'mario.rossi@example.com',
+    tel: '+39 333 1234567',
+    ruolo: 'Consumer',
+    pods: ['IT001E1234567890']
+  },
+  {
+    id: 'client_demo_002',
+    nome: 'Solaria S.r.l.',
+    tipo: 'P.IVA',
+    cabina: 'CP-001',
+    comune: 'Frosinone',
+    email: 'info@solaria.it',
+    tel: '+39 0775 222333',
+    ruolo: 'Produttore',
+    pods: ['IT001E9876543210']
+  },
+  {
+    id: 'client_demo_003',
+    nome: 'Lucia Bianchi',
+    tipo: 'Privato',
+    cabina: 'CP-045',
+    comune: 'Sora',
+    email: 'lucia.bianchi@example.com',
+    tel: '+39 320 5558899',
+    ruolo: 'Prosumer',
+    pods: ['IT003E4567981230']
+  },
+  {
+    id: 'client_demo_004',
+    nome: 'Condominio Aurora',
+    tipo: 'Condominio',
+    cabina: 'CP-045',
+    comune: 'Sora',
+    email: 'amministratore@aurora.it',
+    tel: '+39 0776 445566',
+    ruolo: 'Consumer',
+    pods: ['IT003E9988776655']
+  },
+  {
+    id: 'client_demo_005',
+    nome: 'Verdi Impianti',
+    tipo: 'P.IVA',
+    cabina: 'CP-088',
+    comune: 'Cassino',
+    email: 'contatti@verdiimpianti.it',
+    tel: '+39 0776 889977',
+    ruolo: 'Produttore',
+    pods: ['IT007E1122334455']
+  }
+];
+
+function normalizePod(value) {
+  if (!value) return null;
+  return String(value).toUpperCase().replace(/\s+/g, '');
+}
+
+function ensureClientRegistry(client) {
+  if (!client || !client.id) return;
+  const podSet = new Set();
+  if (Array.isArray(client.pods)) {
+    client.pods.forEach((pod) => {
+      const normalized = normalizePod(pod);
+      if (normalized) podSet.add(normalized);
+    });
+  }
+  if (!podSet.size) {
+    const fallback = normalizePod(client.pod);
+    if (fallback) podSet.add(fallback);
+  }
+  if (podSet.size) {
+    clientPods.set(client.id, podSet);
+  }
+}
+
+clients.forEach((client) => {
+  const pods = Array.isArray(client.pods) ? client.pods : [];
+  const normalizedPods = pods
+    .map(normalizePod)
+    .filter(Boolean);
+  client.pods = normalizedPods;
+  client.pod = normalizedPods[0] || '';
+  ensureClientRegistry(client);
+});
+
+function cloneClient(client) {
+  return {
+    ...client,
+    pods: Array.isArray(client.pods) ? [...client.pods] : []
+  };
+}
+
+function collectPods(...sources) {
+  const set = new Set();
+  sources.forEach((source) => {
+    if (!source) return;
+    if (Array.isArray(source)) {
+      source.forEach((pod) => {
+        const normalized = normalizePod(pod);
+        if (normalized) set.add(normalized);
+      });
+      return;
+    }
+    if (Array.isArray(source.pods)) {
+      source.pods.forEach((pod) => {
+        const normalized = normalizePod(pod);
+        if (normalized) set.add(normalized);
+      });
+    }
+    const direct = normalizePod(source.pod || source);
+    if (direct) set.add(direct);
+  });
+  return Array.from(set);
+}
+
+function normalizeClientFields(base = {}, overrides = {}) {
+  const pods = collectPods(base, overrides);
+  return {
+    nome: overrides.nome ?? overrides.name ?? base.nome ?? base.name ?? 'Cliente',
+    tipo: overrides.tipo ?? overrides.subject_type ?? base.tipo ?? base.subject_type ?? 'Privato',
+    cabina: overrides.cabina ?? overrides.cabina_primaria ?? overrides.cp ?? base.cabina ?? base.cabina_primaria ?? base.cp ?? '',
+    comune: overrides.comune ?? overrides.city ?? base.comune ?? base.city ?? '',
+    email: overrides.email ?? overrides.mail ?? base.email ?? base.mail ?? '',
+    tel: overrides.tel ?? overrides.telefono ?? overrides.phone ?? base.tel ?? base.telefono ?? base.phone ?? '',
+    ruolo: overrides.ruolo ?? overrides.role ?? base.ruolo ?? base.role ?? 'Consumer',
+    cf: overrides.cf ?? overrides.codice_fiscale ?? overrides.piva ?? base.cf ?? base.codice_fiscale ?? base.piva ?? '',
+    pods,
+    pod: pods[0] || ''
+  };
+}
+
+function listClients() {
+  return clients.map(cloneClient);
+}
+
+function findClient(id) {
+  return clients.find((client) => client.id === id) || null;
+}
+
+function createClient(payload = {}) {
+  const id = String(payload.id || `client_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const fields = normalizeClientFields({}, payload);
+  const client = { id, ...fields };
+  clients.push(client);
+  ensureClientRegistry(client);
+  return cloneClient(client);
+}
+
+function updateClient(id, updates = {}) {
+  const idx = clients.findIndex((client) => client.id === id);
+  if (idx === -1) return null;
+  const existing = clients[idx];
+  const fields = normalizeClientFields(existing, updates);
+  const updated = { id: existing.id, ...fields };
+  clients[idx] = updated;
+  ensureClientRegistry(updated);
+  return cloneClient(updated);
+}
+
+function deleteClient(id) {
+  const idx = clients.findIndex((client) => client.id === id);
+  if (idx === -1) return false;
+  clients.splice(idx, 1);
+  clientPods.delete(id);
+  return true;
+}
+
 const plants = [
   {
     id: 'plant_001',
@@ -336,6 +511,11 @@ function updateDocStatus(docId, status) {
 }
 
 module.exports = {
+  listClients,
+  findClient,
+  createClient,
+  updateClient,
+  deleteClient,
   getPlants,
   getPlantById,
   getInverterKey,
