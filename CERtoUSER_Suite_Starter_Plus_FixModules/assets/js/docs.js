@@ -363,6 +363,20 @@ function defaultPrivacyTemplate(ctx) {
   `;
 }
 
+function defaultAccordoProduttoreProsumerTemplate(ctx) {
+  return `
+    ${ctx.BASE_STYLE}
+    <h1>ACCORDO PRODUTTORE/PROSUMER</h1>
+    <p>Tra la Comunità Energetica Rinnovabile "<strong>${ctx.CER_NOME}</strong>", con sede nel Comune di ${ctx.CER_COMUNE} e cabina primaria ${ctx.CER_CABINA},</p>
+    <p>e il/la ${ctx.MEMBER_RUOLO ? ctx.MEMBER_RUOLO.toLowerCase() : 'membro'} <strong>${ctx.MEMBER_NOME}</strong>, titolare del POD <strong>${ctx.MEMBER_POD}</strong>.</p>
+    <p>Le parti concordano di condividere l'energia prodotta e/o autoconsumata nel rispetto del DM 7 dicembre 2023, delle regole ARERA/GSE e del Regolamento interno della CER.</p>
+    <p>Il membro si impegna a comunicare tempestivamente eventuali variazioni dei propri dati anagrafici e del POD, a collaborare per il monitoraggio energetico e ad attenersi alle delibere della CER.</p>
+    <p>La CER si impegna a ripartire i benefici economici secondo i criteri approvati dall'Assemblea (quota condivisa ${ctx.CER_QUOTA_PERCENT}, riparto ${ctx.CER_RIPARTO} o personalizzato).</p>
+    <p>Decorrenza: ${ctx.TODAY}. Il presente accordo è valido finché il membro mantiene il ruolo di Produttore/Prosumer all'interno della CER.</p>
+    <p>Firme:<br/>CER "${ctx.CER_NOME}" ____________________<br/>${ctx.MEMBER_NOME} ____________________</p>
+  `;
+}
+
 export async function statutoTemplate(cer, membri) {
   const context = buildDocContext(cer, membri);
   return renderWithFallback('statuto', context, defaultStatutoTemplate);
@@ -396,4 +410,9 @@ export async function contrattoTraderTemplate(cer) {
 export async function informativaGDPRTemplate(soggetto) {
   const context = extendContext(buildDocContext(soggetto, soggetto?.membri || []), buildSubjectContext(soggetto));
   return renderWithFallback('informativa_gdpr', context, defaultPrivacyTemplate);
+}
+
+export async function accordoProduttoreProsumerTemplate(cer, membro) {
+  const context = extendContext(buildDocContext(cer, cer?.membri || []), buildMemberContext(membro));
+  return renderWithFallback('accordo_produttore_prosumer', context, defaultAccordoProduttoreProsumerTemplate);
 }
