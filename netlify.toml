@@ -4,8 +4,28 @@
   functions = "netlify/functions"
 
 [[redirects]]
+  from = "/api/templates"
+  to = "/.netlify/functions/api/templates"
+  status = 200
+
+[[redirects]]
+  from = "/api/templates/*"
+  to = "/.netlify/functions/api/templates/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/api/documents"
+  to = "/.netlify/functions/api/documents"
+  status = 200
+
+[[redirects]]
+  from = "/api/documents/*"
+  to = "/.netlify/functions/api/documents/:splat"
+  status = 200
+
+[[redirects]]
   from = "/api/*"
-  to = "/.netlify/functions/api/:splat"
+  to = "/.netlify/functions/:splat"
   status = 200
 
 [[headers]]
