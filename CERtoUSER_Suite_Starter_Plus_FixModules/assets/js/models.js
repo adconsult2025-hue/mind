@@ -1,6 +1,6 @@
 import { safeGuardAction, isDryRunResult } from './safe.js';
 
-const API_BASE = '/api/templates';
+const API_BASE = '/api2/templates';
 
 let templates = [];
 let filter = 'all';
@@ -77,7 +77,12 @@ async function fetchTemplates() {
   } catch (err) {
     console.error(err);
     templates = [];
-    toast(err.message || 'Errore durante il caricamento dei modelli');
+    const isHtml404 =
+      err?.status === 404 && typeof err?.body === 'string' && err.body.trim().startsWith('<');
+    const message = isHtml404
+      ? 'Endpoint /api2/templates non trovato (404): il server ha risposto con HTML. Verifica la configurazione o i redirect.'
+      : err?.message || 'Errore durante il caricamento dei modelli';
+    toast(message);
   }
   renderTable();
 }
