@@ -81,6 +81,7 @@ let formSubmitBtn;
 let docsCerSelect;
 let docsActions;
 let docsProgress;
+let customStatutoTemplateName = null;
 let cerDocsTable;
 let cerDocsEmpty;
 
