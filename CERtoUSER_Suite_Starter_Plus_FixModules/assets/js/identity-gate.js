@@ -2,6 +2,45 @@
   const SELECTOR = '[data-requires-any-role]';
   const MESSAGE_CLASS = 'identity-gate-message';
   const DEFAULT_LOCK_MESSAGE = 'Sezione non abilitata per il tuo profilo.';
+  const UNIVERSAL_ROLE_TOKENS = new Set([
+    '*',
+    'all',
+    'any',
+    'admin',
+    'administrator',
+    'amministratore',
+    'superadmin',
+    'super-admin',
+    'super_admin',
+    'super admin',
+    'owner',
+    'coowner',
+    'co-owner',
+    'co_owner',
+    'proprietario',
+    'titolare',
+    'gestore',
+    'editor',
+    'manager',
+    'staff',
+    'team',
+    'operator',
+    'operatore',
+    'backoffice',
+    'back-office',
+    'back_office',
+    'poweruser',
+    'power-user',
+    'power_user',
+    'coordinator',
+    'coordinatore',
+    'root',
+    'master',
+    'god',
+    'agente',
+    'agent'
+  ]);
+
   let observer = null;
   let pendingApply = false;
 
@@ -38,6 +77,27 @@
       return list;
     }
     return [];
+  }
+
+  function canonicalizeRoleToken(role) {
+    return typeof role === 'string' ? role.replace(/[\s_-]+/g, '') : '';
+  }
+
+  function isUniversalRole(role) {
+    const normalized = normalizeRole(role);
+    if (!normalized) return false;
+    if (UNIVERSAL_ROLE_TOKENS.has(normalized)) return true;
+    const canonical = canonicalizeRoleToken(normalized);
+    if (UNIVERSAL_ROLE_TOKENS.has(canonical)) return true;
+    return (
+      canonical.includes('admin') ||
+      canonical.includes('owner') ||
+      canonical.includes('titolare') ||
+      canonical.includes('proprietario') ||
+      canonical.includes('gestore') ||
+      canonical.includes('editor') ||
+      canonical.includes('manager')
+    );
   }
 
   function collectRolesFromUser(user, target) {
@@ -151,7 +211,9 @@
     document.body.dataset.userRoles = roles.join(',');
     document.body.classList.toggle('is-auth', roles.length > 0);
 
-    const normalizedRoles = new Set(roles.map(normalizeRole));
+    const normalizedRoles = new Set(roles.map(normalizeRole).filter(Boolean));
+    const canonicalRoles = new Set(Array.from(normalizedRoles, (role) => canonicalizeRoleToken(role)));
+    const hasUniversalRole = Array.from(normalizedRoles).some((role) => isUniversalRole(role));
 
     document.querySelectorAll(SELECTOR).forEach((element) => {
       const required = parseRoleList(element.getAttribute('data-requires-any-role'));
@@ -160,7 +222,14 @@
         return;
       }
       const gateMessage = element.getAttribute('data-gate-message') || DEFAULT_LOCK_MESSAGE;
-      const hasRole = required.some((role) => normalizedRoles.has(role));
+      const hasRole = hasUniversalRole || required.some((role) => {
+        const normalized = normalizeRole(role);
+        if (!normalized) return false;
+        if (normalizedRoles.has(normalized)) return true;
+        const canonical = canonicalizeRoleToken(normalized);
+        if (!canonical) return false;
+        return canonicalRoles.has(canonical);
+      });
       if (hasRole) {
         unlockElement(element);
       } else {
