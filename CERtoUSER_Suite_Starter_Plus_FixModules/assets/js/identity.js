@@ -16,6 +16,14 @@ export const identityReady = new Promise((resolve) => {
   readyResolver = resolve;
 });
 
+const globalScope = typeof window !== 'undefined'
+  ? window
+  : (typeof globalThis !== 'undefined' ? globalThis : undefined);
+
+const originalFetch = typeof globalScope?.fetch === 'function'
+  ? globalScope.fetch.bind(globalScope)
+  : null;
+
 if (typeof window !== 'undefined') {
   window.MIND_IDENTITY_READY = identityReady;
   window.MIND_IDENTITY_STORAGE_KEY = STORAGE_KEY;
@@ -300,6 +308,61 @@ export function getSessionSync() {
   return currentSession;
 }
 
+function isSameOriginRequest(url) {
+  if (!url) return false;
+  if (typeof window === 'undefined') return false;
+  try {
+    const target = new URL(url, window.location.origin);
+    return target.origin === window.location.origin;
+  } catch (error) {
+    return false;
+  }
+}
+
+const AUTH_PATH_PREFIXES = ['/api', '/api2', '/.netlify/functions'];
+
+function shouldBypassAuth(url) {
+  if (!isSameOriginRequest(url)) return true;
+  try {
+    const target = new URL(url, window.location.origin);
+    if (target.pathname.startsWith('/.netlify/identity')) {
+      return true;
+    }
+    if (target.pathname.startsWith('/login')) {
+      return true;
+    }
+    return !AUTH_PATH_PREFIXES.some((prefix) => target.pathname.startsWith(prefix));
+  } catch (error) {
+    return true;
+  }
+}
+
+async function resolveAuthSession() {
+  const sync = getSessionSync();
+  if (isSessionValid(sync)) {
+    return sync;
+  }
+  try {
+    const ready = await identityReady;
+    if (isSessionValid(ready)) {
+      return ready;
+    }
+  } catch (error) {
+    // ignore settle errors, handled elsewhere
+  }
+  return null;
+}
+
+function buildRequest(input, init) {
+  if (input instanceof Request) {
+    if (init && Object.keys(init).length > 0) {
+      return new Request(input, init);
+    }
+    return input;
+  }
+  return new Request(input, init);
+}
+
 export function loadSession() {
   const stored = readStoredSession();
   if (!isSessionValid(stored)) {
@@ -355,6 +418,42 @@ export function logout(reason = 'manual') {
   if (w && !isLoginRoute()) {
     redirectToLogin(reason);
   }
+}
+
+export async function authFetch(input, init = {}) {
+  if (!originalFetch) {
+    return fetch(input, init);
+  }
+
+  const request = buildRequest(input, init);
+  if (shouldBypassAuth(request.url)) {
+    return originalFetch(request);
+  }
+
+  const session = await resolveAuthSession();
+  const token = session?.accessToken;
+
+  if (!token) {
+    return originalFetch(request);
+  }
+
+  const headers = new Headers(request.headers || undefined);
+  if (!headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  if (!headers.has('Accept')) {
+    headers.set('Accept', headers.get('Accept') || 'application/json');
+  }
+
+  const finalInit = {
+    ...init,
+    headers,
+    credentials: init?.credentials ?? request.credentials ?? 'include',
+    signal: init?.signal ?? request.signal ?? undefined
+  };
+
+  const finalRequest = new Request(request, finalInit);
+  return originalFetch(finalRequest);
 }
 
 export async function fetchIdentityUser(accessToken) {
@@ -590,6 +689,13 @@ bootstrap(storedSession).catch((error) => {
   settleReady(null);
 });
 
+if (typeof window !== 'undefined' && originalFetch && !window.__MIND_FETCH_PATCHED__) {
+  window.__MIND_FETCH_PATCHED__ = true;
+  window.__ORIGINAL_FETCH__ = originalFetch;
+  window.authFetch = authFetch;
+  window.fetch = (input, init) => authFetch(input, init);
+}
+
 export default {
   loadSession,
   saveSession,
@@ -597,6 +703,7 @@ export default {
   getSessionSync,
   clearSession,
   logout,
+  authFetch,
   identityReady,
   fetchIdentityUser
 };
