@@ -1,5 +1,6 @@
 import { allCustomers, allCER } from './storage.js';
 import { safeGuardAction, isDryRunResult } from './safe.js';
+import { openPreventivoWizard } from './preventivi.js';
 
 const TEMPLATE_API = '/api/templates';
 const DOCS_API = '/api/docs/upload';
@@ -57,7 +58,15 @@ function init() {
 
   preventivoBtn?.addEventListener('click', (event) => {
     event.preventDefault();
+    const customer = customers.find((c) => c.id === customerSelect?.value);
+    if (!customer) {
+      toast('Seleziona un cliente per generare il preventivo');
+      return;
+    }
+    const cer = cers.find((c) => c.id === cerSelect?.value);
+    const prefill = buildPreventivoWizardPrefill(customer, cer);
     generatePreventivo();
+    openPreventivoWizard(prefill);
   });
 
   printBtn?.addEventListener('click', (event) => {
@@ -204,6 +213,75 @@ function generateContract() {
   outputBox.innerHTML = lastGeneratedHtml;
   feedbackBox.textContent = '';
   toast('Contratto generato');
+}
+
+function buildPreventivoWizardPrefill(customer = {}, cer = null) {
+  const plants = Array.isArray(cer?.impianti) ? cer.impianti : [];
+  const mainPlant = plants[0] || null;
+  const powerCandidates = [
+    mainPlant?.potenza_kwp,
+    mainPlant?.potenza_kw,
+    mainPlant?.potenza,
+    cer?.potenza_kwp,
+    cer?.potenza_kw,
+    cer?.potenza,
+  ];
+  let kwp = powerCandidates.reduce((result, candidate) => {
+    if (Number.isFinite(result) && result > 0) return result;
+    const numeric = toNumber(candidate);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : result;
+  }, NaN);
+  if (!Number.isFinite(kwp) || kwp <= 0) {
+    kwp = 80;
+  }
+
+  const validityCandidates = [
+    cer?.preventivo_validita,
+    cer?.quote_valid_days,
+    cer?.validita_preventivo,
+    customer?.preventivo_validita,
+  ];
+  let validDays = 30;
+  for (const candidate of validityCandidates) {
+    const numeric = toNumber(candidate);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      validDays = Math.round(numeric);
+      break;
+    }
+  }
+
+  const shareQuota = resolveShareQuota(cer);
+  const noteParts = [];
+  if (cer?.nome) {
+    noteParts.push(`CER di riferimento: ${cer.nome}`);
+  }
+  if (Number.isFinite(shareQuota) && shareQuota > 0) {
+    noteParts.push(`Quota condivisa stimata ${formatPercent(shareQuota)}.`);
+  }
+  const note = noteParts.join('\n');
+
+  const typeCandidates = [
+    cer?.preventivo_tipo,
+    cer?.quote_type,
+    cer?.tipologia_preventivo,
+    customer?.preventivo_tipo,
+  ].map((value) => (typeof value === 'string' ? value.trim() : ''));
+  const type = typeCandidates.find((value) => value) || 'CER Setup';
+
+  return {
+    client_id: customer?.id || null,
+    client_name: customer?.nome || '',
+    cabina: cer?.cabina || customer?.cabina || '',
+    kwp,
+    valid_days: validDays,
+    type,
+    note,
+    cer_id: cer?.id || null,
+    cer_name: cer?.nome || null,
+    cer_quota: cer?.quota ?? cer?.quota_condivisa ?? null,
+    cer_trader: cer?.trader || null,
+    client_pod: customer?.pod || null,
+  };
 }
 
 function generatePreventivo() {
