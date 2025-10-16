@@ -3,10 +3,12 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>MIND — Accesso</title>
+  <title>MIND — Accesso riservato</title>
   <link rel="icon" href="/assets/img/mind.png"/>
   <link rel="stylesheet" href="/assets/css/style.css?v=42"/>
-  <meta name="description" content="Accedi alla suite MIND per la gestione integrata di CRM, CER, impianti e documentazione."/>
+  <meta name="description" content="Accedi alla suite MIND con le credenziali Firebase fornite dall'amministratore."/>
+  <script src="/config/firebase-config.js"></script>
+  <script type="module" src="/assets/js/login.js?v=2"></script>
 </head>
 <body class="login-page dark">
   <main class="login-shell">
@@ -18,32 +20,30 @@
       </section>
       <section class="login-card" aria-labelledby="login-title">
         <header>
-          <h2 id="login-title">Accesso riservato</h2>
-          <p>Inserisci le credenziali Identity fornite dal team MIND Suite.</p>
+          <h2 id="login-title">Accedi alla piattaforma</h2>
+          <p>Utilizza le credenziali assegnate dal Superadmin per accedere in base al tuo ruolo operativo.</p>
         </header>
-        <form id="login-form" autocomplete="on" novalidate>
-          <label for="email">
-            <span>Email</span>
-            <input type="email" id="email" name="email" autocomplete="email" required placeholder="nome@azienda.it"/>
+        <form id="login-form" class="login-form">
+          <label>Email aziendale
+            <input type="email" name="email" autocomplete="email" required placeholder="nome.cognome@azienda.it"/>
           </label>
-          <label for="password">
-            <span>Password</span>
-            <input type="password" id="password" name="password" autocomplete="current-password" required placeholder="••••••••" minlength="6"/>
+          <label>Password
+            <input type="password" name="password" autocomplete="current-password" required placeholder="••••••••"/>
           </label>
           <div class="login-actions">
-            <div class="login-status" data-status hidden aria-live="polite"></div>
-            <button type="submit" class="btn block" data-submit>
-              <span>Accedi</span>
-            </button>
+            <button class="btn block" type="submit">Accedi</button>
+            <button class="btn ghost block" type="button" data-action="go-back">Torna all'hub</button>
           </div>
         </form>
-        <p class="login-meta">Problemi di accesso? <a href="mailto:supporto@mind-suite.it">Contatta il supporto</a>.</p>
+        <p class="login-status" data-login-status>Verifica in corso della sessione...</p>
+        <p class="login-status error" data-login-error hidden></p>
+        <div class="login-meta">
+          <p>I ruoli supportati: Superadmin, Admin, Agente, Resp. CER, Prosumer, Produttore e Consumer.</p>
+          <p>Se hai già effettuato l'accesso con un altro account puoi disconnetterti qui sotto.</p>
+          <button class="btn ghost" type="button" data-action="logout-current" hidden>Esci dall'account corrente</button>
+        </div>
       </section>
     </div>
   </main>
-  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
-  <script type="module" src="/assets/js/identity.js?v=1"></script>
-  <script type="module" src="/assets/js/identity-gate.js?v=1"></script>
-  <script type="module" src="/assets/js/login.js?v=1"></script>
 </body>
 </html>

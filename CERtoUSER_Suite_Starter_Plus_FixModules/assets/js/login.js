@@ -1,139 +1,147 @@
-import {
-  loadSession,
-  isSessionValid,
-  saveSession,
-  fetchIdentityUser
-} from './identity.js';
+import { identityReady, signInWithEmailPassword, logout, getSessionSync } from './identity.js';
 
-const form = document.getElementById('login-form');
-const statusEl = document.querySelector('[data-status]');
-const submitBtn = document.querySelector('[data-submit]');
-const submitLabel = submitBtn?.querySelector('span');
-const redirectParam = new URLSearchParams(window.location.search).get('redirect');
+const params = new URLSearchParams(window.location.search);
+const redirectParam = params.get('redirect');
 const redirectTarget = redirectParam && redirectParam.startsWith('/') ? redirectParam : '/';
 
-function clearStatus() {
-  if (!statusEl) return;
-  statusEl.hidden = true;
-  statusEl.textContent = '';
-  statusEl.classList.remove('error', 'success');
-  statusEl.removeAttribute('role');
-  statusEl.setAttribute('aria-live', 'polite');
+const form = document.querySelector('#login-form');
+const emailInput = form?.querySelector('input[type="email"]');
+const passwordInput = form?.querySelector('input[type="password"]');
+const submitButton = form?.querySelector('button[type="submit"]');
+const statusBox = document.querySelector('[data-login-status]');
+const errorBox = document.querySelector('[data-login-error]');
+const logoutButton = document.querySelector('[data-action="logout-current"]');
+const goBackButton = document.querySelector('[data-action="go-back"]');
+
+function setStatus(type, message) {
+  if (!statusBox) return;
+  statusBox.classList.remove('error', 'success');
+  if (type === 'error') {
+    statusBox.classList.add('error');
+  } else if (type === 'success') {
+    statusBox.classList.add('success');
+  }
+  statusBox.textContent = message;
 }
 
-function setStatus(message, type = 'info') {
-  if (!statusEl) return;
-  statusEl.textContent = message;
-  statusEl.hidden = false;
-  statusEl.classList.remove('error', 'success');
-  if (type === 'error') {
-    statusEl.classList.add('error');
-    statusEl.setAttribute('role', 'alert');
-    statusEl.setAttribute('aria-live', 'assertive');
-  } else if (type === 'success') {
-    statusEl.classList.add('success');
-    statusEl.setAttribute('role', 'status');
-    statusEl.setAttribute('aria-live', 'polite');
+function setError(message) {
+  if (!errorBox) return;
+  if (!message) {
+    errorBox.textContent = '';
+    errorBox.hidden = true;
   } else {
-    statusEl.setAttribute('role', 'status');
-    statusEl.setAttribute('aria-live', 'polite');
+    errorBox.textContent = message;
+    errorBox.hidden = false;
   }
 }
 
 function setLoading(isLoading) {
-  if (!submitBtn) return;
-  submitBtn.disabled = isLoading;
-  if (submitLabel) {
-    submitLabel.textContent = isLoading ? 'Accesso in corso…' : 'Accedi';
+  if (submitButton) {
+    submitButton.disabled = isLoading;
+    submitButton.textContent = isLoading ? 'Accesso in corso…' : 'Accedi';
   }
+  if (emailInput) emailInput.disabled = isLoading;
+  if (passwordInput) passwordInput.disabled = isLoading;
 }
 
-function redirectToApp() {
+function translateAuthError(error) {
+  if (!error) return 'Accesso non riuscito. Riprova.';
+  if (typeof error === 'string') return error;
+  const code = error.code || error.message || '';
+  if (code.includes('config')) {
+    return 'Configurazione Firebase non disponibile. Contatta l\'amministratore.';
+  }
+  const map = {
+    'auth/invalid-credential': 'Credenziali non valide. Controlla email e password.',
+    'auth/invalid-email': 'Formato email non valido.',
+    'auth/user-disabled': 'Account disabilitato. Contatta l\'amministratore.',
+    'auth/user-not-found': 'Utente non trovato.',
+    'auth/wrong-password': 'Password non corretta.',
+    'auth/too-many-requests': 'Troppi tentativi falliti. Attendi qualche minuto e riprova.'
+  };
+  return map[code] || 'Accesso non riuscito. Riprova.';
+}
+
+function redirectToTarget() {
   window.location.assign(redirectTarget);
 }
 
-async function fetchIdentityToken(email, password) {
-  const params = new URLSearchParams();
-  params.set('grant_type', 'password');
-  params.set('username', email);
-  params.set('password', password);
-
-  const response = await fetch('/.netlify/identity/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: params.toString()
-  });
-
-  let data = {};
-  try {
-    data = await response.json();
-  } catch (error) {
-    // ignore parsing errors, handled below
-  }
-
-  if (!response.ok) {
-    const message = data.error_description || data.error || 'Credenziali non valide o account non abilitato.';
-    const error = new Error(message);
-    error.code = data.error || response.status;
-    throw error;
-  }
-
-  return data;
-}
-
-async function handleSubmit(event) {
-  event.preventDefault();
-  clearStatus();
-
-  const email = form?.email?.value?.trim();
-  const password = form?.password?.value;
-
-  if (!email || !password) {
-    setStatus('Inserisci email e password per continuare.', 'error');
+function handleAuthenticatedSession(session, options = {}) {
+  const { redirect = false } = options;
+  if (!session || !session.user) {
+    setStatus('info', 'Inserisci le credenziali fornite dall\'amministratore.');
+    setError('');
+    if (logoutButton) logoutButton.hidden = true;
+    if (goBackButton) goBackButton.hidden = false;
     return;
   }
 
-  setLoading(true);
-
-  try {
-    const tokenInfo = await fetchIdentityToken(email, password);
-    const accessToken = tokenInfo.access_token;
-    const expiresIn = Number(tokenInfo.expires_in) || 3600;
-    const createdAt = Date.now();
-
-    const profile = await fetchIdentityUser(accessToken);
-
-    const session = {
-      accessToken,
-      tokenType: tokenInfo.token_type,
-      refreshToken: tokenInfo.refresh_token,
-      expiresAt: createdAt + expiresIn * 1000,
-      createdAt,
-      user: profile || null
-    };
-
-    saveSession(session, { source: 'login' });
-    setStatus('Accesso eseguito, reindirizzamento in corso…', 'success');
-
-    setTimeout(redirectToApp, 600);
-  } catch (error) {
-    const message = error?.message || 'Accesso non riuscito. Verifica le credenziali e riprova.';
-    setStatus(message, 'error');
-  } finally {
-    setLoading(false);
+  setStatus('success', `Accesso effettuato come ${session.user.full_name || session.user.email || 'utente'}.`);
+  setError('');
+  if (logoutButton) logoutButton.hidden = false;
+  if (goBackButton) goBackButton.hidden = false;
+  if (redirect) {
+    setTimeout(() => redirectToTarget(), 480);
   }
 }
 
 if (form) {
-  form.addEventListener('submit', handleSubmit);
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!emailInput || !passwordInput) return;
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    if (!email || !password) {
+      setError('Inserisci sia email sia password.');
+      return;
+    }
+    setError('');
+    setStatus('info', 'Verifica delle credenziali in corso…');
+    setLoading(true);
+    try {
+      await signInWithEmailPassword(email, password);
+      const session = getSessionSync();
+      handleAuthenticatedSession(session, { redirect: true });
+    } catch (error) {
+      console.warn('[login] errore autenticazione:', error);
+      setStatus('error', 'Accesso non riuscito.');
+      setError(translateAuthError(error));
+    } finally {
+      setLoading(false);
+    }
+  });
 }
 
-const existingSession = loadSession();
-if (isSessionValid(existingSession)) {
-  saveSession(existingSession, { persist: false, source: 'login-existing' });
-  setStatus('Sessione già attiva, reindirizzamento in corso…', 'success');
-  setLoading(true);
-  setTimeout(redirectToApp, 400);
+if (logoutButton) {
+  logoutButton.addEventListener('click', () => {
+    logout()
+      .then(() => {
+        setStatus('info', 'Sessione terminata. Inserisci le nuove credenziali.');
+        setError('');
+      })
+      .catch((error) => {
+        console.warn('[login] impossibile eseguire il logout:', error);
+        setError('Logout non riuscito. Riprovare.');
+      });
+  });
 }
+
+if (goBackButton) {
+  goBackButton.addEventListener('click', () => {
+    window.location.assign('/');
+  });
+}
+
+identityReady
+  .then((session) => {
+    if (session && session.user) {
+      handleAuthenticatedSession(session);
+    } else {
+      setStatus('info', 'Inserisci le credenziali fornite dall\'amministratore.');
+    }
+  })
+  .catch((error) => {
+    console.warn('[login] impossibile verificare la sessione corrente:', error);
+    setStatus('error', 'Impossibile verificare la sessione.');
+    setError('Verifica la connessione o riprova più tardi.');
+  });

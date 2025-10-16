@@ -29,11 +29,7 @@
         <a class="btn nav-item" data-module="simulatori" href="/modules/simulatori/index.html">SIMULATORI</a>
         <a class="btn ghost" href="/">HUB</a>
       </nav>
-      <div class="session-controls">
-        <button id="btn-login" class="btn" type="button">Accedi</button>
-        <button id="btn-logout" class="btn ghost" type="button" hidden>Esci</button>
-        <span id="whoami" class="badge muted" hidden></span>
-      </div>
+      <div class="session-controls" aria-live="polite" data-session-controls></div>
     </div>
   </header>
 
@@ -54,9 +50,9 @@
   <footer class="footer">
     <small>© 2025 MIND Suite — Demo locale. DM 7/12/2023 e regolazioni ARERA/GSE: verificare aggiornamenti.</small>
   </footer>
-  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
-  <script type="module" src="/assets/js/identity.js?v=1"></script>
-  <script type="module" src="/assets/js/identity-gate.js?v=1"></script>
-  <script type="module" src="/assets/js/app.js?v=41"></script>
+  <script src="/config/firebase-config.js"></script>
+  <script type="module" src="/assets/js/identity.js?v=2"></script>
+  <script type="module" src="/assets/js/identity-gate.js?v=2"></script>
+  <script type="module" src="/assets/js/app.js?v=42"></script>
 </body>
 </html>
