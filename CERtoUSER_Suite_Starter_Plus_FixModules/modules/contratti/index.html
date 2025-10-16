@@ -2,129 +2,22 @@
 <html lang="it">
 <head>
   <meta charset="utf-8"/>
+  <meta http-equiv="refresh" content="0;url=/modules/modelli/index.html"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>MIND — Suite</title>
+  <title>MIND — Modelli &amp; Contratti</title>
   <link rel="icon" href="/assets/img/mind.png">
-  <link rel="stylesheet" href="/assets/css/style.css?v=36"/>
+  <link rel="stylesheet" href="/assets/css/style.css?v=40"/>
   <script>
-    (function(){
-      const host = location.hostname.toLowerCase();
-      const envValue = (typeof window !== 'undefined' && window._env_ && typeof window._env_.SAFE_MODE !== 'undefined')
-        ? window._env_.SAFE_MODE
-        : undefined;
-      const parseFlag = (val) => {
-        if (typeof val === 'string') { return val.toLowerCase() === 'true'; }
-        if (typeof val === 'boolean') { return val; }
-        return null;
-      };
-      const resolvedEnv = parseFlag(envValue);
-      const netlifyPreview = host.endsWith('.netlify.app') && host.includes('--');
-      const heuristics = host.includes('preview') || host.includes('staging') || netlifyPreview;
-      window.__SAFE_MODE__ = (resolvedEnv ?? heuristics);
-    })();
+    window.location.replace('/modules/modelli/index.html');
   </script>
-  <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
-  <script type="module" src="/assets/js/identity.js?v=1"></script>
-  <script type="module" src="/assets/js/app.js?v=36"></script>
-  <script type="module" src="/assets/js/storage.js?v=36"></script>
-  <script type="module" src="/assets/js/contratti.js?v=36"></script>
 </head>
 <body class="dark">
-  <header class="app-header">
-    <div class="brand">
-      <a href="/" class="brand-link">
-        <img class="logo" src="/assets/img/mind.png" alt="MIND">
-      </a>
-      <div class="titles">
-        <h1>Contratti & integrazioni</h1>
-        <p class="subtitle">Generazione documenti e caricamento firmati</p>
-      </div>
-    </div>
-    <div class="header-actions">
-      <nav class="toolbar main-nav">
-        <a class="btn nav-item" data-module="crm" href="/modules/crm/index.html">CRM</a>
-        <a class="btn nav-item" data-module="cer" href="/modules/cer/index.html">CER</a>
-        <a class="btn nav-item" data-module="impianti" href="/modules/impianti/index.html">IMPIANTI</a>
-        <a class="btn nav-item" data-module="modelli" href="/modules/modelli/index.html">MODELLI</a>
-        <a class="btn nav-item" data-module="contratti" href="/modules/contratti/index.html">CONTRATTI</a>
-        <a class="btn nav-item" data-module="ct3" href="/modules/ct3/index.html">CT 3.0</a>
-        <a class="btn nav-item" data-module="simulatori" href="/modules/simulatori/index.html">SIMULATORI</a>
-        <a class="btn ghost" href="/">HUB</a>
-      </nav>
-      <div class="session-controls">
-        <button id="btn-login" class="btn" type="button">Accedi</button>
-        <button id="btn-logout" class="btn ghost" type="button" hidden>Esci</button>
-        <span id="whoami" class="badge muted" hidden></span>
-      </div>
-    </div>
-  </header>
-
-  <main class="container wide grid-2">
+  <main class="container">
     <section class="card">
-      <h2>Genera da modello</h2>
-      <p class="info-text">Seleziona un modello attivo per i contratti, scegli i dati di riferimento e ottieni un'anteprima personalizzata.</p>
-      <form id="contract-generator" class="grid-2">
-        <label>Modello attivo
-          <select id="contract-template-select" required>
-            <option value="">Seleziona modello</option>
-          </select>
-        </label>
-        <label>Cliente (CRM)
-          <select id="contract-customer-select">
-            <option value="">Seleziona cliente</option>
-          </select>
-        </label>
-        <label>CER collegata
-          <select id="contract-cer-select">
-            <option value="">Seleziona CER</option>
-          </select>
-        </label>
-        <label>Periodo di riferimento
-          <input type="month" id="contract-period"/>
-        </label>
-      </form>
-      <div class="actions">
-        <button class="btn" id="contract-generate" type="button">Genera</button>
-        <button class="btn ghost" id="contract-print" type="button">Scarica PDF</button>
-        <button class="btn ghost" id="contract-upload" type="button">Carica firmato</button>
-        <input type="file" id="contract-file" class="hidden" accept="application/pdf,.doc,.docx"/>
-      </div>
-      <div id="contract-output" class="card soft mt-4">
-        <p class="info-text">L'anteprima del contratto apparirà qui dopo la generazione.</p>
-      </div>
-      <div id="contract-upload-feedback" class="note"></div>
+      <h1>Sezione spostata</h1>
+      <p>La gestione di modelli e contratti è stata unificata nella nuova sezione <strong>Modelli &amp; Contratti</strong>.</p>
+      <p><a class="btn" href="/modules/modelli/index.html">Vai alla nuova sezione</a></p>
     </section>
-
-    <aside class="card soft">
-      <h2>Placeholder disponibili</h2>
-      <p class="info-text">I modelli possono utilizzare le seguenti variabili. La generazione sostituisce automaticamente i valori, se disponibili.</p>
-      <ul class="placeholder-list">
-        <li><strong>cliente</strong>: {{cliente.nome}}, {{cliente.piva}}, {{cliente.email}}, {{cliente.telefono}}, {{cliente.indirizzo}}</li>
-        <li><strong>pod</strong>: {{pod}}, {{cabina}}</li>
-        <li><strong>cer</strong>: {{cer.nome}}, {{cer.comune}}, {{cer.trader}}, {{cer.quota_condivisa}}</li>
-        <li><strong>impianto</strong>: {{impianto.nome}}, {{impianto.potenza_kw}}</li>
-        <li><strong>sistema</strong>: {{data}}, {{oggi}}, {{anno}}, {{sistema.periodo}}</li>
-      </ul>
-      <div class="card soft mt-4">
-        <h3>Best practice</h3>
-        <ul>
-          <li>Usa placeholder coerenti con il naming sopra indicato.</li>
-          <li>Aggiungi note operative direttamente nel modello per guidare i consulenti.</li>
-          <li>Collega i modelli alle CER dal modulo configurazione (campo "Pacchetto modelli").</li>
-        </ul>
-      </div>
-    </aside>
   </main>
-
-  <footer class="footer">
-    <small>© 2025 MIND Suite</small>
-  </footer>
-  <div id="envBanner" class="env-banner" hidden></div>
-  <script>
-    (function(){ try{
-      const el=document.getElementById('envBanner');
-      if (window.__SAFE_MODE__) { el.hidden=false; el.classList.add('safe'); el.textContent='SAFE MODE attivo: tutte le operazioni di scrittura sono in DRY-RUN.'; }
-    }catch(e){}})();
-  </script>
 </body>
 </html>

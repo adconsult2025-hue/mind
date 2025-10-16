@@ -26,7 +26,9 @@
   <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
   <script type="module" src="/assets/js/identity.js?v=1"></script>
   <script type="module" src="/assets/js/app.js?v=40"></script>
+  <script type="module" src="/assets/js/storage.js?v=40"></script>
   <script type="module" src="/assets/js/models.js?v=40"></script>
+  <script type="module" src="/assets/js/contratti.js?v=40"></script>
 </head>
 <body class="dark">
   <header class="app-header">
@@ -35,8 +37,8 @@
         <img class="logo" src="/assets/img/mind.png" alt="MIND">
       </a>
       <div class="titles">
-        <h1>Modelli documentali</h1>
-        <p class="subtitle">Versioning centralizzato e attivazione per i moduli MIND</p>
+        <h1>Modelli &amp; Contratti</h1>
+        <p class="subtitle">Versioning centralizzato, attivazione e generazione documentale</p>
       </div>
     </div>
     <div class="header-actions">
@@ -44,8 +46,7 @@
         <a class="btn nav-item" data-module="crm" href="/modules/crm/index.html">CRM</a>
         <a class="btn nav-item" data-module="cer" href="/modules/cer/index.html">CER</a>
         <a class="btn nav-item" data-module="impianti" href="/modules/impianti/index.html">IMPIANTI</a>
-        <a class="btn nav-item" data-module="modelli" href="/modules/modelli/index.html">MODELLI</a>
-        <a class="btn nav-item" data-module="contratti" href="/modules/contratti/index.html">CONTRATTI</a>
+        <a class="btn nav-item" data-module="modelli" href="/modules/modelli/index.html">MODELLI &amp; CONTRATTI</a>
         <a class="btn nav-item" data-module="ct3" href="/modules/ct3/index.html">CT 3.0</a>
         <a class="btn nav-item" data-module="simulatori" href="/modules/simulatori/index.html">SIMULATORI</a>
         <a class="btn ghost" href="/">HUB</a>
@@ -58,51 +59,110 @@
     </div>
   </header>
 
-  <main class="container wide">
-    <section class="card">
-      <div class="row-between">
-        <div>
-          <h2>Repository modelli</h2>
-          <p class="info-text">Gestisci caricamenti, versioni e stato attivo dei modelli utilizzati nei vari flussi.</p>
+  <main class="container wide grid-2">
+    <div class="column-stack">
+      <section class="card">
+        <div class="row-between">
+          <div>
+            <h2>Repository modelli</h2>
+            <p class="info-text">Gestisci caricamenti, versioni e stato attivo dei modelli utilizzati nei vari flussi.</p>
+          </div>
+          <div class="actions">
+            <button class="btn" id="btn-open-upload" type="button">Carica modello</button>
+          </div>
         </div>
+
+        <div class="tabs filters mt-4">
+          <button class="tab-btn active" type="button" data-filter="all">Tutti</button>
+          <button class="tab-btn" type="button" data-filter="cer">CER</button>
+          <button class="tab-btn" type="button" data-filter="crm">CRM</button>
+          <button class="tab-btn" type="button" data-filter="ct3">CT3</button>
+          <button class="tab-btn" type="button" data-filter="contratti">Contratti</button>
+        </div>
+
+        <div class="table-wrap mt-4">
+          <table class="data-table" id="templates-table">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Codice</th>
+                <th>Modulo</th>
+                <th>Versione</th>
+                <th>Stato</th>
+                <th class="nowrap">Azioni</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card soft">
+        <h2>Linee guida caricamento</h2>
+        <ul>
+          <li>I file rimangono esterni: la Suite genera un URL mock come <code>https://storage.mock/templates/&lt;code&gt;-v&lt;version&gt;.docx</code>.</li>
+          <li>Compila i placeholder principali per facilitare l'integrazione con CER e Contratti.</li>
+          <li>Ogni codice mantiene una sola versione attiva alla volta; le altre restano consultabili o eliminabili.</li>
+        </ul>
+      </section>
+    </div>
+
+    <div class="column-stack">
+      <section class="card">
+        <h2>Genera da modello</h2>
+        <p class="info-text">Seleziona un modello attivo per i contratti, scegli i dati di riferimento e ottieni un'anteprima personalizzata.</p>
+        <form id="contract-generator" class="grid-2">
+          <label>Modello attivo
+            <select id="contract-template-select" required>
+              <option value="">Seleziona modello</option>
+            </select>
+          </label>
+          <label>Cliente (CRM)
+            <select id="contract-customer-select">
+              <option value="">Seleziona cliente</option>
+            </select>
+          </label>
+          <label>CER collegata
+            <select id="contract-cer-select">
+              <option value="">Seleziona CER</option>
+            </select>
+          </label>
+          <label>Periodo di riferimento
+            <input type="month" id="contract-period"/>
+          </label>
+        </form>
         <div class="actions">
-          <button class="btn" id="btn-open-upload" type="button">Carica modello</button>
+          <button class="btn" id="contract-generate" type="button">Genera</button>
+          <button class="btn ghost" id="contract-print" type="button">Scarica PDF</button>
+          <button class="btn ghost" id="contract-upload" type="button">Carica firmato</button>
+          <input type="file" id="contract-file" class="hidden" accept="application/pdf,.doc,.docx"/>
         </div>
-      </div>
+        <div id="contract-output" class="card soft mt-4">
+          <p class="info-text">L'anteprima del contratto apparirà qui dopo la generazione.</p>
+        </div>
+        <div id="contract-upload-feedback" class="note"></div>
+      </section>
 
-      <div class="tabs filters mt-4">
-        <button class="tab-btn active" type="button" data-filter="all">Tutti</button>
-        <button class="tab-btn" type="button" data-filter="cer">CER</button>
-        <button class="tab-btn" type="button" data-filter="crm">CRM</button>
-        <button class="tab-btn" type="button" data-filter="ct3">CT3</button>
-        <button class="tab-btn" type="button" data-filter="contratti">Contratti</button>
-      </div>
-
-      <div class="table-wrap mt-4">
-        <table class="data-table" id="templates-table">
-          <thead>
-            <tr>
-              <th>Nome</th>
-              <th>Codice</th>
-              <th>Modulo</th>
-              <th>Versione</th>
-              <th>Stato</th>
-              <th class="nowrap">Azioni</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="card soft mt-4">
-      <h2>Linee guida caricamento</h2>
-      <ul>
-        <li>I file rimangono esterni: la Suite genera un URL mock come <code>https://storage.mock/templates/&lt;code&gt;-v&lt;version&gt;.docx</code>.</li>
-        <li>Compila i placeholder principali per facilitare l'integrazione con CER e Contratti.</li>
-        <li>Ogni codice mantiene una sola versione attiva alla volta; le altre restano consultabili o eliminabili.</li>
-      </ul>
-    </section>
+      <section class="card soft">
+        <h2>Placeholder disponibili</h2>
+        <p class="info-text">I modelli possono utilizzare le seguenti variabili. La generazione sostituisce automaticamente i valori, se disponibili.</p>
+        <ul class="placeholder-list">
+          <li><strong>cliente</strong>: {{cliente.nome}}, {{cliente.piva}}, {{cliente.email}}, {{cliente.telefono}}, {{cliente.indirizzo}}</li>
+          <li><strong>pod</strong>: {{pod}}, {{cabina}}</li>
+          <li><strong>cer</strong>: {{cer.nome}}, {{cer.comune}}, {{cer.trader}}, {{cer.quota_condivisa}}</li>
+          <li><strong>impianto</strong>: {{impianto.nome}}, {{impianto.potenza_kw}}</li>
+          <li><strong>sistema</strong>: {{data}}, {{oggi}}, {{anno}}, {{sistema.periodo}}</li>
+        </ul>
+        <div class="card soft mt-4">
+          <h3>Best practice</h3>
+          <ul>
+            <li>Usa placeholder coerenti con il naming sopra indicato.</li>
+            <li>Aggiungi note operative direttamente nel modello per guidare i consulenti.</li>
+            <li>Collega i modelli alle CER dal modulo configurazione (campo "Pacchetto modelli").</li>
+          </ul>
+        </div>
+      </section>
+    </div>
   </main>
 
   <div class="modal" id="upload-modal" aria-hidden="true">
