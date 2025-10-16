@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>MIND — Suite</title>
   <link rel="icon" href="/assets/img/mind.png">
-  <link rel="stylesheet" href="/assets/css/style.css?v=41"/>
+  <link rel="stylesheet" href="/assets/css/style.css?v=42"/>
   <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
   <script type="module" src="/assets/js/identity.js?v=1"></script>
+  <script type="module" src="/assets/js/identity-gate.js?v=1"></script>
   <script type="module" src="/assets/js/app.js?v=41"></script>
   <script type="module" src="/assets/js/preventivi.js?v=41"></script>
 </head>
@@ -41,7 +42,7 @@
     </div>
   </header>
 
-  <main class="container wide preventivi-layout">
+  <main class="container wide preventivi-layout" data-requires-any-role="preventivi">
     <section class="card hero">
       <h2>Pipeline preventivi unificata</h2>
       <p>Questa vista raccoglie opportunità provenienti da CRM, simulatori e moduli CT3.0: puoi monitorare importi, probabilità di chiusura, scadenze e attività successive senza uscire dalla suite.</p>
