@@ -244,22 +244,39 @@ function mergeCustomerLists(existing, incoming) {
   return result;
 }
 
+function extractClientsPayload(payload) {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.clients)) return payload.clients;
+  if (Array.isArray(payload.results)) return payload.results;
+  if (Array.isArray(payload.items)) return payload.items;
+  return [];
+}
+
 async function syncCustomersFromApi() {
   try {
     const res = await fetch(`${API_BASE}/clients`);
-    if (!res.ok) return;
-    const payload = await res.json();
-    if (!payload?.ok || !Array.isArray(payload.data)) return;
-    const normalized = payload.data.map(normalizeApiCustomer).filter(Boolean);
-    if (!normalized.length) return;
-    const merged = mergeCustomerLists(allCustomers(), normalized);
-    customers = merged;
-    saveCustomers(customers);
+    const payload = await res.json().catch(() => null);
+    if (!res.ok || payload?.ok === false) {
+      throw new Error(payload?.error || payload?.message || 'Errore caricamento clienti CRM');
+    }
+    const records = extractClientsPayload(payload);
+    if (records.length) {
+      const normalized = records.map(normalizeApiCustomer).filter(Boolean);
+      if (normalized.length) {
+        const merged = mergeCustomerLists(allCustomers(), normalized);
+        customers = merged;
+        saveCustomers(customers);
+      }
+    }
+  } catch (err) {
+    console.warn('Impossibile sincronizzare i clienti dal CRM remoto', err);
+    toast(err?.message ? `CRM: ${err.message}` : 'Impossibile sincronizzare i clienti dal CRM remoto');
+  } finally {
     renderMembersPicker();
     updatePlantOwnerOptions();
     updateCerValidationUI();
-  } catch (err) {
-    console.warn('Impossibile sincronizzare i clienti dal CRM remoto', err);
   }
 }
 
@@ -365,7 +382,7 @@ function init() {
   }
 
   detailAddMemberBtn?.addEventListener('click', () => openMemberModal(detailCard?.dataset.cerId || ''));
-  detailAddPlantBtn?.addEventListener('click', () => openPlantModal(detailCard?.dataset.cerId || ''));
+  detailAddPlantBtn?.addEventListener('click', () => openCerPlantModal(detailCard?.dataset.cerId || ''));
   detailEditBtn?.addEventListener('click', () => {
     if (!detailCard?.dataset.cerId) return;
     loadCerDetail(detailCard.dataset.cerId);
@@ -382,13 +399,13 @@ function init() {
   memberModalSaveBtn?.addEventListener('click', submitMemberModal);
 
   plantModal?.querySelectorAll('[data-close-modal]')?.forEach(btn => {
-    btn.addEventListener('click', closePlantModal);
+    btn.addEventListener('click', closeCerPlantModal);
   });
-  plantModalForm?.addEventListener('submit', submitPlantModal);
+  plantModalForm?.addEventListener('submit', submitCerPlantModal);
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       closeMemberModal();
-      closePlantModal();
+      closeCerPlantModal();
     }
   });
 
@@ -1241,7 +1258,7 @@ function submitMemberModal() {
   }
 }
 
-function openPlantModal(cerId) {
+function openCerPlantModal(cerId) {
   if (!plantModal || !plantModalName || !plantModalOwner || !plantModalFeedback) return;
   const cer = cers.find(c => c.id === cerId);
   if (!cer) {
@@ -1269,19 +1286,19 @@ function openPlantModal(cerId) {
   window.setTimeout(() => plantModalName?.focus(), 0);
 }
 
-function closePlantModal() {
+function closeCerPlantModal() {
   if (!plantModal) return;
   plantModal.classList.remove('open');
   plantModal.setAttribute('aria-hidden', 'true');
   delete plantModal.dataset.cerId;
 }
 
-function submitPlantModal(event) {
+function submitCerPlantModal(event) {
   event.preventDefault();
   if (!plantModal || !plantModalName || !plantModalOwner || !plantModalFeedback) return;
   const cerId = plantModal.dataset.cerId;
   if (!cerId) {
-    closePlantModal();
+    closeCerPlantModal();
     return;
   }
   const name = plantModalName?.value?.trim() || '';
@@ -1317,8 +1334,17 @@ function submitPlantModal(event) {
   });
   if (updated) {
     toast('Impianto aggiunto alla CER.');
-    closePlantModal();
+    closeCerPlantModal();
   }
+}
+
+if (typeof window !== 'undefined') {
+  window.openCerPlantModal = openCerPlantModal;
+  window.closeCerPlantModal = closeCerPlantModal;
+  window.submitCerPlantModal = submitCerPlantModal;
+  if (!window.openPlantModal) window.openPlantModal = openCerPlantModal;
+  if (!window.closePlantModal) window.closePlantModal = closeCerPlantModal;
+  if (!window.submitPlantModal) window.submitPlantModal = submitCerPlantModal;
 }
 
 function updateCerRecord(cerId, updater) {
@@ -2279,7 +2305,7 @@ function initPlantsModule() {
   modalEls.energy = document.getElementById('plant-modal-energy');
   modalEls.saveBtn = document.getElementById('plant-modal-save');
   modalEls.recalcBtn = document.getElementById('plant-modal-recalc');
-  modalEls.closeBtns = document.querySelectorAll('[data-close-modal]');
+  modalEls.closeBtns = modalEls.root ? modalEls.root.querySelectorAll('[data-close-modal]') : [];
 
   if (!plantsCerSelect || !plantsPeriodInput || !plantsTableBody) return;
 
@@ -2320,12 +2346,12 @@ function initPlantsModule() {
       toast(`Anteprima aggiornata: ${formatKwh(res.totals.E)} kWh condivisi`);
     }
   });
-  modalEls.closeBtns?.forEach(btn => btn.addEventListener('click', closePlantModal));
+  modalEls.closeBtns?.forEach(btn => btn.addEventListener('click', closePlantConfigModal));
   modalEls.root?.addEventListener('click', (e) => {
-    if (e.target === modalEls.root) closePlantModal();
+    if (e.target === modalEls.root) closePlantConfigModal();
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closePlantModal();
+    if (e.key === 'Escape') closePlantConfigModal();
   });
 
   refreshCerOptions();
@@ -2463,7 +2489,7 @@ function renderPlantsTable() {
       <td>${renderValidationBadge(validation)}</td>
       <td><button class="btn ghost" data-plant="${plant.id}">Configura</button></td>
     `;
-    tr.querySelector('[data-plant]').addEventListener('click', () => openPlantModal(plant));
+    tr.querySelector('[data-plant]').addEventListener('click', () => openPlantConfigModal(plant));
     plantsTableBody.appendChild(tr);
   });
 }
@@ -2500,7 +2526,7 @@ function renderValidationBadge(validation) {
   return `<span class="${cls}" title="${validation.message}">${icons[validation.status] || ''}<span>${validation.message}</span></span>`;
 }
 
-async function openPlantModal(plant) {
+async function openPlantConfigModal(plant) {
   try {
     const allocation = await ensureAllocationData(plant.id, plantState.period);
     plantState.modalPlantId = plant.id;
@@ -2524,11 +2550,16 @@ async function openPlantModal(plant) {
   }
 }
 
-function closePlantModal() {
+function closePlantConfigModal() {
   modalEls.root?.classList.remove('open');
   modalEls.root?.setAttribute('aria-hidden', 'true');
   modalEls.error?.classList.add('hidden');
   plantState.modalPlantId = null;
+}
+
+if (typeof window !== 'undefined') {
+  window.openPlantConfigModal = openPlantConfigModal;
+  window.closePlantConfigModal = closePlantConfigModal;
 }
 
 function syncPercentages(source) {
@@ -2670,7 +2701,7 @@ async function savePlantConfiguration() {
       plantState.lastResults = null;
       hideAllocationsPreview();
       toast('SAFE MODE attivo: configurazione impianto non persistita (dry-run).');
-      closePlantModal();
+      closePlantConfigModal();
       return;
     }
     const idx = plantState.plants.findIndex(p => p.id === plantState.modalPlantId);
@@ -2681,7 +2712,7 @@ async function savePlantConfiguration() {
     plantState.lastResults = null;
     hideAllocationsPreview();
     toast('Configurazione impianto salvata');
-    closePlantModal();
+    closePlantConfigModal();
   } catch (err) {
     if (modalEls.error) {
       modalEls.error.textContent = err.message || 'Errore durante il salvataggio';
