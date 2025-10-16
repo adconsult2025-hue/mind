@@ -12,6 +12,12 @@ let logoutButton = null;
 let whoamiBadge = null;
 let sessionControlsBound = false;
 let identityInitialized = false;
+let widgetRetryTimer = null;
+let widgetRetryAttempts = 0;
+
+const MAX_WIDGET_RETRY_ATTEMPTS = 20;
+const WIDGET_RETRY_DELAY_MS = 150;
+let widgetListenersBound = false;
 
 export const identityReady = new Promise((resolve) => {
   readyResolver = resolve;
@@ -51,11 +57,33 @@ function getWindow() {
   return typeof window !== 'undefined' ? window : null;
 }
 
+function scheduleWidgetRetry() {
+  if (widgetListenersBound || identityInitialized) {
+    widgetRetryAttempts = 0;
+    if (widgetRetryTimer) {
+      clearTimeout(widgetRetryTimer);
+      widgetRetryTimer = null;
+    }
+    return;
+  }
+  if (widgetRetryAttempts >= MAX_WIDGET_RETRY_ATTEMPTS) return;
+  if (widgetRetryTimer) return;
+  widgetRetryTimer = setTimeout(() => {
+    widgetRetryTimer = null;
+    widgetRetryAttempts += 1;
+    initNetlifyIdentity();
+    ensureWidgetHandlers();
+  }, WIDGET_RETRY_DELAY_MS * Math.max(1, widgetRetryAttempts + 1));
+}
+
 function initNetlifyIdentity() {
   if (identityInitialized) return;
   const w = getWindow();
   const widget = w?.netlifyIdentity;
-  if (!widget?.init) return;
+  if (!widget?.init) {
+    scheduleWidgetRetry();
+    return;
+  }
   identityInitialized = true;
   try {
     const apiUrl = `${w.location.origin}/.netlify/identity`;
@@ -63,6 +91,7 @@ function initNetlifyIdentity() {
   } catch (error) {
     console.warn('Impossibile inizializzare Netlify Identity:', error);
   }
+  scheduleWidgetRetry();
 }
 
 function safeLocalStorage() {
@@ -606,12 +635,14 @@ function handleStorageEvent(event) {
   }
 }
 
-let widgetListenersBound = false;
-
 function ensureWidgetHandlers() {
   const w = getWindow();
   const widget = w?.netlifyIdentity;
-  if (!widget || widgetListenersBound) return;
+  if (!widget) {
+    scheduleWidgetRetry();
+    return;
+  }
+  if (widgetListenersBound) return;
   widgetListenersBound = true;
 
   widget.on?.('logout', () => {
