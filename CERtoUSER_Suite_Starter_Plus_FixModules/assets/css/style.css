@@ -136,6 +136,12 @@ img {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.toolbar .nav-item {
+  white-space: nowrap;
 }
 
 .header-actions {
@@ -682,6 +688,19 @@ body:not(.dark) .data-table {
   border-bottom: none;
 }
 
+.data-table tbody tr {
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.data-table tbody tr:hover {
+  background: rgba(53, 201, 201, 0.08);
+}
+
+.data-table tbody tr.active {
+  background: rgba(53, 201, 201, 0.16);
+}
+
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -714,6 +733,18 @@ body:not(.dark) .status-badge {
   background: rgba(249, 115, 22, 0.18);
   border-color: rgba(249, 115, 22, 0.4);
   color: #fed7aa;
+}
+
+.status-badge.info {
+  background: rgba(59, 130, 246, 0.18);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #bfdbfe;
+}
+
+.status-badge.muted {
+  background: rgba(71, 85, 105, 0.25);
+  border-color: rgba(148, 163, 184, 0.4);
+  color: #e2e8f0;
 }
 
 .weights-tabs {
@@ -1334,6 +1365,129 @@ body:not(.dark) .review-grid .field-row {
   background: rgba(248, 113, 113, 0.18);
   border-color: rgba(248, 113, 113, 0.3);
   color: #fca5a5;
+}
+
+.preventivi-layout {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.preventivi-layout .grid-2 {
+  align-items: flex-start;
+}
+
+.preventivi-metrics {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.preventivi-metrics .metric-card {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: rgba(12, 26, 31, 0.72);
+  border: 1px solid rgba(53, 201, 201, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.metric-card span {
+  font-size: 0.85rem;
+  color: var(--brand-muted);
+}
+
+.metric-card strong {
+  font-size: 1.4rem;
+  color: var(--brand-text);
+}
+
+.preventivi-table-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.preventivo-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.preventivo-detail header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.preventivo-detail .badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.preventivo-detail .detail-list {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin: 0;
+}
+
+.preventivo-detail .detail-list dt {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--brand-muted);
+}
+
+.preventivo-detail .detail-list dd {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--brand-text);
+}
+
+.preventivo-actions,
+.preventivo-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.preventivo-actions li,
+.preventivo-history li {
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: rgba(12, 26, 31, 0.66);
+  border: 1px solid rgba(53, 201, 201, 0.1);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.preventivo-history time {
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  color: var(--brand-muted);
+  text-transform: uppercase;
+}
+
+.preventivo-actions strong,
+.preventivo-history strong {
+  color: var(--brand-text);
+}
+
+.preventivo-empty {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: rgba(12, 26, 31, 0.6);
+  border: 1px dashed rgba(53, 201, 201, 0.25);
+  color: var(--brand-muted);
+  text-align: center;
 }
 
 .checklist {
