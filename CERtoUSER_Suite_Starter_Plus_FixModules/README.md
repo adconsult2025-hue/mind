@@ -6,7 +6,7 @@ Questa repository contiene la versione starter della suite MIND per la gestione 
 
 La suite utilizza ora Firebase Authentication per proteggere hub, moduli e API serverless. Ogni utente autenticato riceve i ruoli associati al proprio profilo (Superadmin, Admin, Agente, Resp. CER, Prosumer, Produttore, Consumer) e l'interfaccia abilita automaticamente le funzionalità pertinenti.
 
-1. **Configura il client** — compila `config/firebase-config.js` con le credenziali del progetto Firebase (apiKey, authDomain, projectId, appId). Il file fornisce l'oggetto `window.__FIREBASE_CONFIG__` consumato dai moduli front-end. In alternativa puoi caricare un tuo script `type="module"` che inizializzi Firebase e assegni `window.firebaseApp`/`window.firebaseAuth` (ad esempio tramite lo snippet mostrato nella richiesta): la suite rileva automaticamente l'app/istanza già inizializzata e la riutilizza.
+1. **Configura il client** — il file `config/firebase-config.js` espone ora direttamente il frammento `const firebaseConfig = { ... }` con i parametri ufficiali del progetto `certouser-suite` e assegna l'oggetto a `window.__FIREBASE_CONFIG__` per tutte le pagine della suite. Se devi usare un altro progetto, modifica quel file mantenendo lo stesso schema oppure carica un tuo script `type="module"` che inizializzi Firebase e assegni `window.firebaseApp`/`window.firebaseAuth`: la suite rileva automaticamente l'istanza esistente e la riutilizza.
 2. **Configura le funzioni Netlify** — imposta la variabile d'ambiente `FIREBASE_SERVICE_ACCOUNT` con il JSON del service account (preferibilmente Base64-encoded) per permettere alle funzioni di verificare gli ID token (`firebase-admin` viene inizializzato automaticamente).
 3. **Assegna i ruoli** — utilizza i custom claims di Firebase per aggiungere l'array `roles` all'utente. I mapping supportano alias comuni (`resp_cer`, `cer_manager`, `producer`, `member`, ecc.) e gestiscono l'ereditarietà (es. il Superadmin eredita i permessi Admin/Agente).
 
@@ -20,7 +20,7 @@ I Superadmin possono amministrare gli account direttamente dall'interfaccia `/mo
 
 Le chiamate alle API amministrative richiedono un ID token con ruolo `superadmin`; le modifiche propagano automaticamente i nuovi claims revocando i refresh token precedenti.
 
-L'endpoint `/.netlify/functions/whoami` restituisce le informazioni della sessione autenticata (email, ruoli e claims principali). Le pagine di login e le intestazioni mostrano lo stato della sessione e consentono il logout.
+L'endpoint `/.netlify/functions/whoami` restituisce le informazioni della sessione autenticata (email, ruoli e claims principali). Le pagine di login e le intestazioni mostrano lo stato della sessione e consentono il logout, senza più alcun bypass locale: gli script di sviluppo (`config/dev.js` e `assets/js/dev-auth.js`) non vengono caricati.
 
 ## Database Postgres
 
