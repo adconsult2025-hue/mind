@@ -1,5 +1,33 @@
 export const BRAND_NAME = 'MIND';
 
+const UNIVERSAL_PERMISSION_TOKENS = new Set([
+  '*',
+  'all',
+  'any',
+  'full-access',
+  'full_access',
+  'unrestricted',
+  'everything'
+]);
+
+const ADMIN_ROLE_TOKENS = new Set([
+  'admin',
+  'administrator',
+  'superadmin',
+  'super-admin',
+  'owner',
+  'editor',
+  'manager',
+  'staff',
+  'operator',
+  'backoffice',
+  'back-office',
+  'poweruser',
+  'power-user',
+  'cer-admin',
+  'cer_manager'
+]);
+
 if (typeof window !== 'undefined') {
   window.BRAND_NAME = BRAND_NAME;
   const safeModeFlag = (() => {
@@ -20,6 +48,102 @@ if (typeof window !== 'undefined') {
     }
   };
   const CORE_NAV_MODULES = Object.keys(NAV_MODULE_CONFIG);
+
+  function normalizeToken(value) {
+    return typeof value === 'string' ? value.trim().toLowerCase() : '';
+  }
+
+  function collectRoleTokens() {
+    const tokens = new Set();
+    if (typeof window === 'undefined') return tokens;
+    const session = window.MIND_IDENTITY;
+    const user = session?.user;
+    if (!user || typeof user !== 'object') return tokens;
+    const sources = [
+      user.roles,
+      user.role,
+      user.app_metadata?.roles,
+      user.app_metadata?.role,
+      user.user_metadata?.roles,
+      user.user_metadata?.role,
+      user.metadata?.roles,
+      user.metadata?.role,
+      user.data?.roles,
+      user.data?.role
+    ];
+    sources.forEach((value) => {
+      if (!value) return;
+      if (Array.isArray(value)) {
+        value.forEach((item) => {
+          const normalized = normalizeToken(item);
+          if (normalized) tokens.add(normalized);
+        });
+      } else if (value instanceof Set) {
+        value.forEach((item) => {
+          const normalized = normalizeToken(item);
+          if (normalized) tokens.add(normalized);
+        });
+      } else {
+        const normalized = normalizeToken(value);
+        if (normalized) tokens.add(normalized);
+      }
+    });
+    return tokens;
+  }
+
+  function collectTokensFromIterable(source) {
+    const tokens = new Set();
+    if (!source) return tokens;
+    const addToken = (token) => {
+      const normalized = normalizeToken(token);
+      if (normalized) tokens.add(normalized);
+    };
+    if (Array.isArray(source)) {
+      source.forEach(addToken);
+    } else if (source instanceof Set) {
+      source.forEach(addToken);
+    } else if (typeof source === 'string') {
+      addToken(source);
+    } else if (typeof source[Symbol.iterator] === 'function') {
+      for (const item of source) {
+        addToken(item);
+      }
+    }
+    return tokens;
+  }
+
+  function buildModuleTokenSet(moduleName, permissionName) {
+    const tokens = new Set();
+    const moduleToken = normalizeToken(moduleName);
+    const permissionToken = normalizeToken(permissionName);
+    if (moduleToken) {
+      tokens.add(moduleToken);
+      tokens.add(`${moduleToken}:view`);
+      tokens.add(`${moduleToken}:read`);
+      tokens.add(`${moduleToken}:access`);
+      tokens.add(`${moduleToken}:*`);
+      tokens.add(`view:${moduleToken}`);
+      tokens.add(`read:${moduleToken}`);
+      tokens.add(`access:${moduleToken}`);
+      tokens.add(`${moduleToken}_view`);
+      tokens.add(`${moduleToken}-view`);
+      tokens.add(`${moduleToken}_access`);
+      tokens.add(`${moduleToken}-access`);
+      tokens.add(`${moduleToken}.view`);
+    }
+    if (permissionToken) {
+      tokens.add(permissionToken);
+    }
+    return tokens;
+  }
+
+  function hasAnyToken(candidateTokens, requiredTokens) {
+    if (!candidateTokens || !requiredTokens) return false;
+    for (const token of requiredTokens) {
+      if (candidateTokens.has(token)) return true;
+    }
+    return false;
+  }
 
   ['DEFAULT_VISIBLE_MODULES', 'VISIBLE_MODULES'].forEach((prop) => {
     const list = window[prop];
@@ -157,11 +281,33 @@ if (typeof window !== 'undefined') {
 
   function hasModuleAccess(permissionName, moduleName) {
     const permissions = window.USER_PERMISSIONS;
+    const normalizedModuleTokens = buildModuleTokenSet(moduleName, permissionName);
+    const roleTokens = collectRoleTokens();
+    if (hasAnyToken(roleTokens, UNIVERSAL_PERMISSION_TOKENS) || hasAnyToken(roleTokens, ADMIN_ROLE_TOKENS)) {
+      return true;
+    }
+    if (normalizedModuleTokens.size && hasAnyToken(roleTokens, normalizedModuleTokens)) {
+      return true;
+    }
     if (Array.isArray(permissions)) {
-      return permissions.includes(permissionName) || permissions.includes(moduleName);
+      const tokens = collectTokensFromIterable(permissions);
+      if (hasAnyToken(tokens, UNIVERSAL_PERMISSION_TOKENS) || hasAnyToken(tokens, ADMIN_ROLE_TOKENS)) {
+        return true;
+      }
+      if (normalizedModuleTokens.size && hasAnyToken(tokens, normalizedModuleTokens)) {
+        return true;
+      }
+      return tokens.has(normalizeToken(permissionName)) || tokens.has(normalizeToken(moduleName));
     }
     if (permissions instanceof Set) {
-      return permissions.has(permissionName) || permissions.has(moduleName);
+      const tokens = collectTokensFromIterable(permissions);
+      if (hasAnyToken(tokens, UNIVERSAL_PERMISSION_TOKENS) || hasAnyToken(tokens, ADMIN_ROLE_TOKENS)) {
+        return true;
+      }
+      if (normalizedModuleTokens.size && hasAnyToken(tokens, normalizedModuleTokens)) {
+        return true;
+      }
+      return tokens.has(normalizeToken(permissionName)) || tokens.has(normalizeToken(moduleName));
     }
     if (permissions && typeof permissions === 'object') {
       if (typeof permissions.can === 'function') {
@@ -176,15 +322,41 @@ if (typeof window !== 'undefined') {
         if (value === true) return true;
         if (value === false) return false;
       }
+      const roleCandidates = [];
+      if (Array.isArray(permissions.roles)) roleCandidates.push(...permissions.roles);
+      if (permissions.role) roleCandidates.push(permissions.role);
+      if (roleCandidates.length) {
+        const roleTokensFromObject = collectTokensFromIterable(roleCandidates);
+        if (hasAnyToken(roleTokensFromObject, UNIVERSAL_PERMISSION_TOKENS) || hasAnyToken(roleTokensFromObject, ADMIN_ROLE_TOKENS)) {
+          return true;
+        }
+        if (normalizedModuleTokens.size && hasAnyToken(roleTokensFromObject, normalizedModuleTokens)) {
+          return true;
+        }
+      }
       let modulePermissions = moduleName ? permissions[moduleName] : undefined;
       if (!modulePermissions && permissions.modules && typeof permissions.modules === 'object') {
         modulePermissions = permissions.modules[moduleName];
       }
       if (Array.isArray(modulePermissions)) {
-        return modulePermissions.includes('view') || modulePermissions.includes(permissionName);
+        const tokens = collectTokensFromIterable(modulePermissions);
+        if (hasAnyToken(tokens, UNIVERSAL_PERMISSION_TOKENS) || hasAnyToken(tokens, ADMIN_ROLE_TOKENS)) {
+          return true;
+        }
+        if (normalizedModuleTokens.size && hasAnyToken(tokens, normalizedModuleTokens)) {
+          return true;
+        }
+        return tokens.has('view') || tokens.has(normalizeToken(permissionName));
       }
       if (modulePermissions instanceof Set) {
-        return modulePermissions.has('view') || modulePermissions.has(permissionName);
+        const tokens = collectTokensFromIterable(modulePermissions);
+        if (hasAnyToken(tokens, UNIVERSAL_PERMISSION_TOKENS) || hasAnyToken(tokens, ADMIN_ROLE_TOKENS)) {
+          return true;
+        }
+        if (normalizedModuleTokens.size && hasAnyToken(tokens, normalizedModuleTokens)) {
+          return true;
+        }
+        return tokens.has('view') || tokens.has(normalizeToken(permissionName));
       }
       if (modulePermissions && typeof modulePermissions === 'object') {
         if (Object.prototype.hasOwnProperty.call(modulePermissions, 'view')) {
@@ -194,6 +366,13 @@ if (typeof window !== 'undefined') {
           const value = modulePermissions[permissionName];
           if (value === true) return true;
           if (value === false) return false;
+        }
+        const nestedTokens = collectTokensFromIterable(modulePermissions.roles || []);
+        if (hasAnyToken(nestedTokens, UNIVERSAL_PERMISSION_TOKENS) || hasAnyToken(nestedTokens, ADMIN_ROLE_TOKENS)) {
+          return true;
+        }
+        if (normalizedModuleTokens.size && hasAnyToken(nestedTokens, normalizedModuleTokens)) {
+          return true;
         }
       }
     }
