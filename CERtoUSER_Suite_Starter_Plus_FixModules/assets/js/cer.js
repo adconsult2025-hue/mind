@@ -365,7 +365,7 @@ function init() {
   }
 
   detailAddMemberBtn?.addEventListener('click', () => openMemberModal(detailCard?.dataset.cerId || ''));
-  detailAddPlantBtn?.addEventListener('click', () => openPlantModal(detailCard?.dataset.cerId || ''));
+  detailAddPlantBtn?.addEventListener('click', () => openCerPlantModal(detailCard?.dataset.cerId || ''));
   detailEditBtn?.addEventListener('click', () => {
     if (!detailCard?.dataset.cerId) return;
     loadCerDetail(detailCard.dataset.cerId);
@@ -382,13 +382,13 @@ function init() {
   memberModalSaveBtn?.addEventListener('click', submitMemberModal);
 
   plantModal?.querySelectorAll('[data-close-modal]')?.forEach(btn => {
-    btn.addEventListener('click', closePlantModal);
+    btn.addEventListener('click', closeCerPlantModal);
   });
-  plantModalForm?.addEventListener('submit', submitPlantModal);
+  plantModalForm?.addEventListener('submit', submitCerPlantModal);
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       closeMemberModal();
-      closePlantModal();
+      closeCerPlantModal();
     }
   });
 
@@ -1241,7 +1241,7 @@ function submitMemberModal() {
   }
 }
 
-function openPlantModal(cerId) {
+function openCerPlantModal(cerId) {
   if (!plantModal || !plantModalName || !plantModalOwner || !plantModalFeedback) return;
   const cer = cers.find(c => c.id === cerId);
   if (!cer) {
@@ -1269,19 +1269,19 @@ function openPlantModal(cerId) {
   window.setTimeout(() => plantModalName?.focus(), 0);
 }
 
-function closePlantModal() {
+function closeCerPlantModal() {
   if (!plantModal) return;
   plantModal.classList.remove('open');
   plantModal.setAttribute('aria-hidden', 'true');
   delete plantModal.dataset.cerId;
 }
 
-function submitPlantModal(event) {
+function submitCerPlantModal(event) {
   event.preventDefault();
   if (!plantModal || !plantModalName || !plantModalOwner || !plantModalFeedback) return;
   const cerId = plantModal.dataset.cerId;
   if (!cerId) {
-    closePlantModal();
+    closeCerPlantModal();
     return;
   }
   const name = plantModalName?.value?.trim() || '';
@@ -1317,7 +1317,7 @@ function submitPlantModal(event) {
   });
   if (updated) {
     toast('Impianto aggiunto alla CER.');
-    closePlantModal();
+    closeCerPlantModal();
   }
 }
 
@@ -2320,12 +2320,12 @@ function initPlantsModule() {
       toast(`Anteprima aggiornata: ${formatKwh(res.totals.E)} kWh condivisi`);
     }
   });
-  modalEls.closeBtns?.forEach(btn => btn.addEventListener('click', closePlantModal));
+  modalEls.closeBtns?.forEach(btn => btn.addEventListener('click', closePlantConfigModal));
   modalEls.root?.addEventListener('click', (e) => {
-    if (e.target === modalEls.root) closePlantModal();
+    if (e.target === modalEls.root) closePlantConfigModal();
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closePlantModal();
+    if (e.key === 'Escape') closePlantConfigModal();
   });
 
   refreshCerOptions();
@@ -2463,7 +2463,7 @@ function renderPlantsTable() {
       <td>${renderValidationBadge(validation)}</td>
       <td><button class="btn ghost" data-plant="${plant.id}">Configura</button></td>
     `;
-    tr.querySelector('[data-plant]').addEventListener('click', () => openPlantModal(plant));
+    tr.querySelector('[data-plant]').addEventListener('click', () => openPlantConfigModal(plant));
     plantsTableBody.appendChild(tr);
   });
 }
@@ -2500,7 +2500,7 @@ function renderValidationBadge(validation) {
   return `<span class="${cls}" title="${validation.message}">${icons[validation.status] || ''}<span>${validation.message}</span></span>`;
 }
 
-async function openPlantModal(plant) {
+async function openPlantConfigModal(plant) {
   try {
     const allocation = await ensureAllocationData(plant.id, plantState.period);
     plantState.modalPlantId = plant.id;
@@ -2524,7 +2524,7 @@ async function openPlantModal(plant) {
   }
 }
 
-function closePlantModal() {
+function closePlantConfigModal() {
   modalEls.root?.classList.remove('open');
   modalEls.root?.setAttribute('aria-hidden', 'true');
   modalEls.error?.classList.add('hidden');
@@ -2670,7 +2670,7 @@ async function savePlantConfiguration() {
       plantState.lastResults = null;
       hideAllocationsPreview();
       toast('SAFE MODE attivo: configurazione impianto non persistita (dry-run).');
-      closePlantModal();
+      closePlantConfigModal();
       return;
     }
     const idx = plantState.plants.findIndex(p => p.id === plantState.modalPlantId);
@@ -2681,7 +2681,7 @@ async function savePlantConfiguration() {
     plantState.lastResults = null;
     hideAllocationsPreview();
     toast('Configurazione impianto salvata');
-    closePlantModal();
+    closePlantConfigModal();
   } catch (err) {
     if (modalEls.error) {
       modalEls.error.textContent = err.message || 'Errore durante il salvataggio';
