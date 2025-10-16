@@ -54,11 +54,11 @@ if (typeof window !== 'undefined') {
   let navItemsCache = [];
   const NAV_MODULE_CONFIG = {
     simulatori: {
-      label: 'SIMULATORI',
+      label: 'SIMULATORE',
       href: '/modules/simulatori/index.html'
     },
     preventivi: {
-      label: 'PREVENTIVI',
+      label: 'PREVENTIVATORE',
       href: '/modules/preventivi/index.html'
     },
     utenti: {
