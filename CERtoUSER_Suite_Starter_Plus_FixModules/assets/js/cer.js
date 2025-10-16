@@ -3379,6 +3379,282 @@ function setEnergyFeedback(message, isError = false) {
 }
 
 // -----------------------------
+// Energy management
+// -----------------------------
+function initEnergyModule() {
+  energyCerSelect = document.getElementById('energy-cer-select');
+  energyPeriodInput = document.getElementById('energy-period');
+  energyFeedback = document.getElementById('energy-feedback');
+  energyPeriodLabel = document.getElementById('energy-period-label');
+  energyProductionPeriod = document.getElementById('energy-production-period');
+  energyConsumiWrap = document.getElementById('energy-consumi-table-wrap');
+  energyConsumiTableBody = document.querySelector('#energy-consumi-table tbody');
+  energyConsumiEmpty = document.getElementById('energy-consumi-empty');
+  energyProductionWrap = document.getElementById('energy-production-table-wrap');
+  energyProductionTableBody = document.querySelector('#energy-production-table tbody');
+  energyProductionEmpty = document.getElementById('energy-production-empty');
+
+  if (energyPeriodInput) {
+    energyState.period = energyPeriodInput.value || currentPeriod();
+    energyPeriodInput.value = energyState.period;
+    energyPeriodInput.addEventListener('change', () => {
+      energyState.period = energyPeriodInput.value || currentPeriod();
+      renderEnergyTables();
+    });
+  } else {
+    energyState.period = currentPeriod();
+  }
+
+  energyCerSelect?.addEventListener('change', () => {
+    energyState.selectedCerId = energyCerSelect.value || '';
+    renderEnergyTables();
+  });
+
+  energyConsumiTableBody?.addEventListener('click', onEnergyConsumiClick);
+  energyProductionTableBody?.addEventListener('click', onEnergyProductionClick);
+
+  renderEnergyTables();
+}
+
+function onEnergyConsumiClick(event) {
+  const btn = event.target.closest('[data-save-consumo]');
+  if (!btn) return;
+  const memberId = btn.dataset.saveConsumo;
+  if (memberId) {
+    saveConsumptionForMember(memberId);
+  }
+}
+
+function onEnergyProductionClick(event) {
+  const btn = event.target.closest('[data-save-produzione]');
+  if (!btn) return;
+  const plantId = btn.dataset.saveProduzione;
+  if (plantId) {
+    saveProductionForPlant(plantId);
+  }
+}
+
+function renderEnergyTables() {
+  if (!energyPeriodLabel) energyPeriodLabel = document.getElementById('energy-period-label');
+  if (!energyProductionPeriod) energyProductionPeriod = document.getElementById('energy-production-period');
+  setEnergyFeedback('');
+  const period = energyState.period || currentPeriod();
+  if (energyPeriodInput && energyPeriodInput.value !== period) {
+    energyPeriodInput.value = period;
+  }
+  if (energyPeriodLabel) {
+    energyPeriodLabel.textContent = period ? `Periodo ${period}` : '';
+  }
+  if (energyProductionPeriod) {
+    energyProductionPeriod.textContent = period ? `Periodo ${period}` : '';
+  }
+
+  const availableIds = cers.map(c => c.id);
+  if (energyState.selectedCerId && !availableIds.includes(energyState.selectedCerId)) {
+    energyState.selectedCerId = '';
+  }
+  if (!energyState.selectedCerId && availableIds.length) {
+    energyState.selectedCerId = availableIds[0];
+  }
+  if (energyCerSelect && energyCerSelect.value !== energyState.selectedCerId) {
+    energyCerSelect.value = energyState.selectedCerId || '';
+  }
+
+  const cer = cers.find(c => c.id === energyState.selectedCerId) || null;
+  renderEnergyConsumi(cer, period);
+  renderEnergyProduzione(cer, period);
+}
+
+function renderEnergyConsumi(cer, period) {
+  if (!energyConsumiTableBody || !energyConsumiEmpty) return;
+  energyConsumiTableBody.innerHTML = '';
+  if (!cer) {
+    if (energyConsumiWrap) energyConsumiWrap.hidden = true;
+    energyConsumiEmpty.textContent = cers.length
+      ? 'Seleziona una CER per visualizzare i partecipanti.'
+      : 'Crea una CER per iniziare a registrare i consumi.';
+    energyConsumiEmpty.hidden = false;
+    return;
+  }
+
+  const members = Array.isArray(cer.membri) ? cer.membri : [];
+  if (!members.length) {
+    if (energyConsumiWrap) energyConsumiWrap.hidden = true;
+    energyConsumiEmpty.textContent = 'Aggiungi partecipanti alla CER per registrare i consumi.';
+    energyConsumiEmpty.hidden = false;
+    return;
+  }
+
+  const records = Array.isArray(cer.consumi) ? cer.consumi : [];
+  if (energyConsumiWrap) energyConsumiWrap.hidden = false;
+  energyConsumiEmpty.hidden = true;
+
+  members.forEach(member => {
+    const record = records.find(item => String(item.memberId) === String(member.id) && item.period === period);
+    const value = record && record.kwh != null ? Number(record.kwh) : null;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(member.nome || 'Partecipante')}</strong><br/><small>${escapeHtml(member.pod || '')}</small></td>
+      <td>${escapeHtml(member.ruolo || '-')}</td>
+      <td>
+        <input class="input" type="number" min="0" step="0.01" data-input-consumo="${escapeHtml(member.id)}" value="${value != null ? value : ''}" placeholder="0"/>
+      </td>
+      <td class="actions">
+        <button class="btn ghost" type="button" data-save-consumo="${escapeHtml(member.id)}">Salva</button>
+      </td>
+    `;
+    energyConsumiTableBody.appendChild(tr);
+  });
+}
+
+function renderEnergyProduzione(cer, period) {
+  if (!energyProductionTableBody || !energyProductionEmpty) return;
+  energyProductionTableBody.innerHTML = '';
+  if (!cer) {
+    if (energyProductionWrap) energyProductionWrap.hidden = true;
+    energyProductionEmpty.textContent = cers.length
+      ? 'Seleziona una CER per visualizzare gli impianti.'
+      : 'Crea una CER e collega impianti per gestire la produzione.';
+    energyProductionEmpty.hidden = false;
+    return;
+  }
+
+  const plants = Array.isArray(cer.impianti) ? cer.impianti.filter(plant => isProductionAllowedRole(plant.titolareRuolo)) : [];
+  if (!plants.length) {
+    if (energyProductionWrap) energyProductionWrap.hidden = true;
+    energyProductionEmpty.textContent = 'Nessun impianto con titolare Prosumer/Consumer disponibile.';
+    energyProductionEmpty.hidden = false;
+    return;
+  }
+
+  const records = Array.isArray(cer.produzione) ? cer.produzione : [];
+  if (energyProductionWrap) energyProductionWrap.hidden = false;
+  energyProductionEmpty.hidden = true;
+
+  plants.forEach(plant => {
+    const record = records.find(item => String(item.plantId) === String(plant.id) && item.period === period);
+    const value = record && record.kwh != null ? Number(record.kwh) : null;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(plant.nome || 'Impianto')}</strong></td>
+      <td>${escapeHtml(plant.titolareNome || '')} · ${escapeHtml(plant.titolareRuolo || '')}</td>
+      <td>
+        <input class="input" type="number" min="0" step="0.01" data-input-produzione="${escapeHtml(plant.id)}" value="${value != null ? value : ''}" placeholder="0"/>
+      </td>
+      <td class="actions">
+        <button class="btn ghost" type="button" data-save-produzione="${escapeHtml(plant.id)}">Salva</button>
+      </td>
+    `;
+    energyProductionTableBody.appendChild(tr);
+  });
+}
+
+function saveConsumptionForMember(memberId) {
+  const cerId = energyState.selectedCerId;
+  if (!cerId) {
+    setEnergyFeedback('Seleziona una CER per salvare i consumi.', true);
+    return;
+  }
+  const period = energyState.period || currentPeriod();
+  const input = energyConsumiTableBody?.querySelector(`[data-input-consumo="${CSS.escape(memberId)}"]`);
+  if (!input) return;
+  const rawValue = input.value.trim();
+  const value = rawValue === '' ? null : Number(rawValue);
+  if (rawValue !== '' && (!Number.isFinite(value) || value < 0)) {
+    setEnergyFeedback('Inserisci un valore kWh valido (>= 0).', true);
+    input.focus();
+    return;
+  }
+
+  const updated = updateCerRecord(cerId, (draft) => {
+    const members = Array.isArray(draft.membri) ? draft.membri : [];
+    if (!members.some(m => String(m.id) === String(memberId))) {
+      setEnergyFeedback('Il partecipante non appartiene più alla CER.', true);
+      return false;
+    }
+    const list = Array.isArray(draft.consumi) ? draft.consumi.map(item => ({ ...item })) : [];
+    const idx = list.findIndex(item => String(item.memberId || item.member_id) === String(memberId) && item.period === period);
+    if (rawValue === '') {
+      if (idx !== -1) list.splice(idx, 1);
+    } else {
+      const entry = idx !== -1 ? list[idx] : { id: uid('cer-consumo'), memberId, period };
+      entry.memberId = memberId;
+      entry.period = period;
+      entry.kwh = Number(value.toFixed(2));
+      if (idx === -1) list.push(entry);
+      else list[idx] = entry;
+    }
+    draft.consumi = list;
+    return true;
+  });
+
+  if (updated) {
+    setEnergyFeedback(rawValue === '' ? 'Consumo rimosso.' : 'Consumo aggiornato.');
+    renderEnergyTables();
+  }
+}
+
+function saveProductionForPlant(plantId) {
+  const cerId = energyState.selectedCerId;
+  if (!cerId) {
+    setEnergyFeedback('Seleziona una CER per salvare la produzione.', true);
+    return;
+  }
+  const period = energyState.period || currentPeriod();
+  const input = energyProductionTableBody?.querySelector(`[data-input-produzione="${CSS.escape(plantId)}"]`);
+  if (!input) return;
+  const rawValue = input.value.trim();
+  const value = rawValue === '' ? null : Number(rawValue);
+  if (rawValue !== '' && (!Number.isFinite(value) || value < 0)) {
+    setEnergyFeedback('Inserisci un valore kWh valido (>= 0).', true);
+    input.focus();
+    return;
+  }
+
+  const updated = updateCerRecord(cerId, (draft) => {
+    const plants = Array.isArray(draft.impianti) ? draft.impianti : [];
+    const plant = plants.find(p => String(p.id) === String(plantId));
+    if (!plant) {
+      setEnergyFeedback('Impianto non trovato nella CER.', true);
+      return false;
+    }
+    if (!isProductionAllowedRole(plant.titolareRuolo)) {
+      setEnergyFeedback('La produzione è registrabile solo per impianti intestati a Prosumer o Consumer.', true);
+      return false;
+    }
+    const list = Array.isArray(draft.produzione) ? draft.produzione.map(item => ({ ...item })) : [];
+    const idx = list.findIndex(item => String(item.plantId || item.plant_id) === String(plantId) && item.period === period);
+    if (rawValue === '') {
+      if (idx !== -1) list.splice(idx, 1);
+    } else {
+      const entry = idx !== -1 ? list[idx] : { id: uid('cer-produzione'), plantId, period };
+      entry.plantId = plantId;
+      entry.period = period;
+      entry.kwh = Number(value.toFixed(2));
+      if (idx === -1) list.push(entry);
+      else list[idx] = entry;
+    }
+    draft.produzione = list;
+    return true;
+  });
+
+  if (updated) {
+    setEnergyFeedback(rawValue === '' ? 'Produzione rimossa.' : 'Produzione aggiornata.');
+    renderEnergyTables();
+  }
+}
+
+function isProductionAllowedRole(role) {
+  return ENERGY_ALLOWED_ROLES.has(String(role || '').toLowerCase());
+}
+
+function setEnergyFeedback(message, isError = false) {
+  if (!energyFeedback) return;
+  energyFeedback.textContent = message || '';
+  energyFeedback.classList.toggle('error-text', Boolean(isError && message));
+}
+
+// -----------------------------
 // Plants & allocations
 // -----------------------------
 let plantsCerSelect;
