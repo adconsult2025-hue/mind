@@ -1,5 +1,6 @@
 import { allCustomers, saveCustomers, uid, progressCustomers, saveProgressCustomers } from './storage.js';
 import { STATE as CRONO_STATE } from './cronoprogramma.js?v=36';
+import { safeGuardAction } from './safe.js';
 
 const API_BASE = '/api';
 
@@ -54,6 +55,18 @@ const state = {
 let customers = allCustomers();
 let selectedCustomer = null;
 const clientDocsStore = new Map();
+
+function emitCustomersChanged(list = customers) {
+  if (typeof window === 'undefined') return;
+  try {
+    const payload = Array.isArray(list) ? list.map((customer) => ({ ...customer })) : [];
+    window.dispatchEvent(new CustomEvent('crm:customers-changed', {
+      detail: { customers: payload }
+    }));
+  } catch (err) {
+    console.warn('Impossibile notificare aggiornamento clienti CRM', err);
+  }
+}
 
 function mergeCustomerData(base, update) {
   const result = { ...base };
@@ -151,6 +164,7 @@ async function syncCustomersFromApi() {
     const merged = mergeCustomerLists(allCustomers(), normalized);
     customers = merged;
     saveCustomers(customers);
+    emitCustomersChanged(customers);
     render();
   } catch (err) {
     console.warn('Impossibile sincronizzare i clienti dal CRM remoto', err);
@@ -317,6 +331,7 @@ function rowItem(c) {
     if (!confirm('Eliminare il cliente?')) return;
     customers = customers.filter((x) => x.id !== c.id);
     saveCustomers(customers);
+    emitCustomersChanged(customers);
     render();
   };
   r.querySelector('[data-edit]').onclick = () => editCustomer(c);
@@ -1139,6 +1154,7 @@ if (form) {
       customers.push(data);
     }
     saveCustomers(customers);
+    emitCustomersChanged(customers);
     form.reset();
     delete form.dataset.editing;
     render();
@@ -1173,6 +1189,7 @@ function init() {
 window.addEventListener('storage', (event) => {
   if (event.key === 'customers') {
     customers = allCustomers();
+    emitCustomersChanged(customers);
     render();
   }
 });

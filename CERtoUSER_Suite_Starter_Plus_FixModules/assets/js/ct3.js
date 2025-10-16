@@ -5,6 +5,7 @@ import {
   getFallbackPhases,
   getFallbackPresetDocs
 } from './ct3_rules.js?v=36';
+import { safeGuardAction, isDryRunResult } from './safe.js';
 
 const API_BASE = '/api';
 const STORAGE_CLIENTS_KEY = 'customers';
@@ -43,6 +44,10 @@ if (typeof document !== 'undefined') {
     refreshDocumentPreset();
     computeIncentive();
   });
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('crm:customers-changed', handleCrmCustomersChanged);
 }
 
 function cacheElements() {
@@ -278,6 +283,23 @@ function normalizeClient(client) {
     email: client.email || '',
     telefono: client.tel || client.telefono || ''
   };
+}
+
+function handleCrmCustomersChanged(event) {
+  const incoming = Array.isArray(event?.detail?.customers) ? event.detail.customers : readLocalClients();
+  const normalized = incoming.map(normalizeClient).filter(Boolean);
+  const previousId = state.selectedClient?.id || state.currentCase.client_id;
+  state.clients = normalized;
+  if (previousId) {
+    const refreshed = state.clients.find((item) => item.id === previousId) || null;
+    state.selectedClient = refreshed;
+    if (refreshed) {
+      state.currentCase.client_id = refreshed.id;
+    }
+  }
+  updateClientSummary();
+  handleClientSearch();
+  updateActionStates();
 }
 
 async function loadCatalog() {
