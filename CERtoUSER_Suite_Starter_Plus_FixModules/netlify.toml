@@ -8,3 +8,6 @@
 
 [[plugins]]
   package = "@netlify/plugin-functions-install-core"
+
+[build.environment]
+  DEV_NO_AUTH = "true"
