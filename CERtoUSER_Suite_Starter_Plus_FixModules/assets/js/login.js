@@ -1,8 +1,13 @@
-import { identityReady, signInWithEmailPassword, logout, getSessionSync } from './identity.js';
+import {
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  getIdTokenResult,
+  signOut
+} from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js';
 
 const params = new URLSearchParams(window.location.search);
 const redirectParam = params.get('redirect');
-const redirectTarget = redirectParam && redirectParam.startsWith('/') ? redirectParam : '/';
+const redirectTarget = redirectParam && redirectParam.startsWith('/') ? redirectParam : '/index.html';
 
 const form = document.querySelector('#login-form');
 const emailInput = form?.querySelector('input[type="email"]');
@@ -12,6 +17,27 @@ const statusBox = document.querySelector('[data-login-status]');
 const errorBox = document.querySelector('[data-login-error]');
 const logoutButton = document.querySelector('[data-action="logout-current"]');
 const goBackButton = document.querySelector('[data-action="go-back"]');
+
+function waitAuth() {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    (function spin() {
+      if (window.__authError === 'NO_CONFIG') {
+        reject(new Error('Configurazione Firebase mancante.'));
+        return;
+      }
+      if (window.__authReady && window.firebaseAuth) {
+        resolve(window.firebaseAuth);
+        return;
+      }
+      if (Date.now() - start > 5000) {
+        reject(new Error('Firebase Authentication non inizializzato.'));
+        return;
+      }
+      setTimeout(spin, 50);
+    })();
+  });
+}
 
 function setStatus(type, message) {
   if (!statusBox) return;
@@ -24,7 +50,7 @@ function setStatus(type, message) {
   statusBox.textContent = message;
 }
 
-function setError(message) {
+function showError(message) {
   if (!errorBox) return;
   if (!message) {
     errorBox.textContent = '';
@@ -66,82 +92,98 @@ function redirectToTarget() {
   window.location.assign(redirectTarget);
 }
 
-function handleAuthenticatedSession(session, options = {}) {
-  const { redirect = false } = options;
-  if (!session || !session.user) {
+function describeUser(user) {
+  if (!user) return 'utente';
+  return user.displayName || user.email || 'utente';
+}
+
+function handleAuthState(user) {
+  if (!user) {
     setStatus('info', 'Inserisci le credenziali fornite dall\'amministratore.');
-    setError('');
+    showError('');
     if (logoutButton) logoutButton.hidden = true;
     if (goBackButton) goBackButton.hidden = false;
     return;
   }
 
-  setStatus('success', `Accesso effettuato come ${session.user.full_name || session.user.email || 'utente'}.`);
-  setError('');
+  setStatus('success', `Accesso effettuato come ${describeUser(user)}.`);
+  showError('');
   if (logoutButton) logoutButton.hidden = false;
   if (goBackButton) goBackButton.hidden = false;
-  if (redirect) {
-    setTimeout(() => redirectToTarget(), 480);
-  }
 }
 
-if (form) {
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    if (!emailInput || !passwordInput) return;
-    const email = emailInput.value.trim();
-    const password = passwordInput.value;
-    if (!email || !password) {
-      setError('Inserisci sia email sia password.');
-      return;
-    }
-    setError('');
-    setStatus('info', 'Verifica delle credenziali in corso…');
-    setLoading(true);
-    try {
-      await signInWithEmailPassword(email, password);
-      const session = getSessionSync();
-      handleAuthenticatedSession(session, { redirect: true });
-    } catch (error) {
-      console.warn('[login] errore autenticazione:', error);
-      setStatus('error', 'Accesso non riuscito.');
-      setError(translateAuthError(error));
-    } finally {
-      setLoading(false);
-    }
+function handleAuthError(error) {
+  console.warn('[login] errore autenticazione:', error);
+  setStatus('error', 'Accesso non riuscito.');
+  showError(translateAuthError(error));
+}
+
+function disableForm() {
+  if (!form) return;
+  const controls = form.querySelectorAll('input, button');
+  controls.forEach((control) => {
+    control.disabled = true;
   });
 }
 
-if (logoutButton) {
-  logoutButton.addEventListener('click', () => {
-    logout()
-      .then(() => {
-        setStatus('info', 'Sessione terminata. Inserisci le nuove credenziali.');
-        setError('');
-      })
-      .catch((error) => {
-        console.warn('[login] impossibile eseguire il logout:', error);
-        setError('Logout non riuscito. Riprovare.');
+waitAuth()
+  .then((auth) => {
+    onAuthStateChanged(auth, (user) => {
+      handleAuthState(user);
+      if (user) {
+        logoutButton?.removeAttribute('hidden');
+      }
+    });
+
+    if (form) {
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!emailInput || !passwordInput) return;
+        const email = emailInput.value.trim();
+        const password = passwordInput.value;
+        if (!email || !password) {
+          showError('Inserisci sia email sia password.');
+          return;
+        }
+        setStatus('info', 'Verifica delle credenziali in corso…');
+        showError('');
+        setLoading(true);
+        try {
+          const credentials = await signInWithEmailAndPassword(auth, email, password);
+          await getIdTokenResult(credentials.user, true);
+          handleAuthState(credentials.user);
+          setTimeout(redirectToTarget, 300);
+        } catch (error) {
+          handleAuthError(error);
+        } finally {
+          setLoading(false);
+        }
       });
+    }
+
+    if (logoutButton) {
+      logoutButton.addEventListener('click', () => {
+        signOut(auth)
+          .then(() => {
+            setStatus('info', 'Sessione terminata. Inserisci le nuove credenziali.');
+            showError('');
+          })
+          .catch((error) => {
+            console.warn('[login] impossibile eseguire il logout:', error);
+            showError('Logout non riuscito. Riprovare.');
+          });
+      });
+    }
+  })
+  .catch((error) => {
+    console.warn('[login] inizializzazione Firebase fallita:', error);
+    setStatus('error', 'Autenticazione non disponibile.');
+    showError(error?.message || 'Configurazione Firebase non disponibile.');
+    disableForm();
   });
-}
 
 if (goBackButton) {
   goBackButton.addEventListener('click', () => {
     window.location.assign('/');
   });
 }
-
-identityReady
-  .then((session) => {
-    if (session && session.user) {
-      handleAuthenticatedSession(session);
-    } else {
-      setStatus('info', 'Inserisci le credenziali fornite dall\'amministratore.');
-    }
-  })
-  .catch((error) => {
-    console.warn('[login] impossibile verificare la sessione corrente:', error);
-    setStatus('error', 'Impossibile verificare la sessione.');
-    setError('Verifica la connessione o riprova più tardi.');
-  });
