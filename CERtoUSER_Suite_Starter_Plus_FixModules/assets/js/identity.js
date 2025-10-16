@@ -11,10 +11,21 @@ let loginButton = null;
 let logoutButton = null;
 let whoamiBadge = null;
 let sessionControlsBound = false;
+let identityInitialized = false;
 
 export const identityReady = new Promise((resolve) => {
   readyResolver = resolve;
 });
+
+export const waitIdentity = identityReady.then((session) => session?.user ?? null);
+
+const globalScope = typeof window !== 'undefined'
+  ? window
+  : (typeof globalThis !== 'undefined' ? globalThis : undefined);
+
+const originalFetch = typeof globalScope?.fetch === 'function'
+  ? globalScope.fetch.bind(globalScope)
+  : null;
 
 if (typeof window !== 'undefined') {
   window.MIND_IDENTITY_READY = identityReady;
@@ -38,6 +49,20 @@ function settleReady(value) {
 
 function getWindow() {
   return typeof window !== 'undefined' ? window : null;
+}
+
+function initNetlifyIdentity() {
+  if (identityInitialized) return;
+  const w = getWindow();
+  const widget = w?.netlifyIdentity;
+  if (!widget?.init) return;
+  identityInitialized = true;
+  try {
+    const apiUrl = `${w.location.origin}/.netlify/identity`;
+    widget.init({ APIUrl: apiUrl });
+  } catch (error) {
+    console.warn('Impossibile inizializzare Netlify Identity:', error);
+  }
 }
 
 function safeLocalStorage() {
@@ -300,6 +325,61 @@ export function getSessionSync() {
   return currentSession;
 }
 
+function isSameOriginRequest(url) {
+  if (!url) return false;
+  if (typeof window === 'undefined') return false;
+  try {
+    const target = new URL(url, window.location.origin);
+    return target.origin === window.location.origin;
+  } catch (error) {
+    return false;
+  }
+}
+
+const AUTH_PATH_PREFIXES = ['/api', '/api2', '/.netlify/functions'];
+
+function shouldBypassAuth(url) {
+  if (!isSameOriginRequest(url)) return true;
+  try {
+    const target = new URL(url, window.location.origin);
+    if (target.pathname.startsWith('/.netlify/identity')) {
+      return true;
+    }
+    if (target.pathname.startsWith('/login')) {
+      return true;
+    }
+    return !AUTH_PATH_PREFIXES.some((prefix) => target.pathname.startsWith(prefix));
+  } catch (error) {
+    return true;
+  }
+}
+
+async function resolveAuthSession() {
+  const sync = getSessionSync();
+  if (isSessionValid(sync)) {
+    return sync;
+  }
+  try {
+    const ready = await identityReady;
+    if (isSessionValid(ready)) {
+      return ready;
+    }
+  } catch (error) {
+    // ignore settle errors, handled elsewhere
+  }
+  return null;
+}
+
+function buildRequest(input, init) {
+  if (input instanceof Request) {
+    if (init && Object.keys(init).length > 0) {
+      return new Request(input, init);
+    }
+    return input;
+  }
+  return new Request(input, init);
+}
+
 export function loadSession() {
   const stored = readStoredSession();
   if (!isSessionValid(stored)) {
@@ -355,6 +435,42 @@ export function logout(reason = 'manual') {
   if (w && !isLoginRoute()) {
     redirectToLogin(reason);
   }
+}
+
+export async function authFetch(input, init = {}) {
+  if (!originalFetch) {
+    return fetch(input, init);
+  }
+
+  const request = buildRequest(input, init);
+  if (shouldBypassAuth(request.url)) {
+    return originalFetch(request);
+  }
+
+  const session = await resolveAuthSession();
+  const token = session?.accessToken;
+
+  if (!token) {
+    return originalFetch(request);
+  }
+
+  const headers = new Headers(request.headers || undefined);
+  if (!headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  if (!headers.has('Accept')) {
+    headers.set('Accept', headers.get('Accept') || 'application/json');
+  }
+
+  const finalInit = {
+    ...init,
+    headers,
+    credentials: init?.credentials ?? request.credentials ?? 'include',
+    signal: init?.signal ?? request.signal ?? undefined
+  };
+
+  const finalRequest = new Request(request, finalInit);
+  return originalFetch(finalRequest);
 }
 
 export async function fetchIdentityUser(accessToken) {
@@ -502,6 +618,50 @@ function ensureWidgetHandlers() {
     logout('widget');
   });
 
+  widget.on?.('login', async (user) => {
+    if (!user) return;
+    const plain = sanitizeIdentityUser(user);
+    let accessToken = null;
+    let refreshToken = null;
+    let expiresAt = null;
+    let tokenType = 'Bearer';
+
+    try {
+      accessToken = await user.jwt?.();
+    } catch (error) {
+      console.warn('Impossibile ottenere JWT da Netlify Identity:', error);
+    }
+
+    const userToken = user.token && typeof user.token === 'object' ? user.token : null;
+    if (userToken) {
+      refreshToken = userToken.refresh_token ?? null;
+      tokenType = userToken.token_type || tokenType;
+      if (typeof userToken.expires_at === 'number') {
+        expiresAt = userToken.expires_at;
+      } else if (typeof userToken.expires_in === 'number') {
+        expiresAt = Date.now() + userToken.expires_in * 1000;
+      }
+      if (!accessToken && typeof userToken.access_token === 'string') {
+        accessToken = userToken.access_token;
+      }
+    }
+
+    if (!accessToken) return;
+
+    const now = Date.now();
+    const session = {
+      accessToken,
+      tokenType,
+      refreshToken: refreshToken ?? currentSession?.refreshToken ?? null,
+      expiresAt: typeof expiresAt === 'number' ? expiresAt : now + 3600 * 1000,
+      createdAt: now,
+      user: plain || null
+    };
+
+    saveSession(session, { source: 'widget-login' });
+    settleReady(session);
+  });
+
   widget.on?.('init', (user) => {
     if (!user) return;
     const plain = sanitizeIdentityUser(user);
@@ -535,6 +695,8 @@ async function bootstrap(initialSession) {
     settleReady(null);
     return null;
   }
+
+  initNetlifyIdentity();
 
   if (!isSessionValid(initialSession)) {
     handleMissingSession('missing');
@@ -590,6 +752,13 @@ bootstrap(storedSession).catch((error) => {
   settleReady(null);
 });
 
+if (typeof window !== 'undefined') {
+  if (originalFetch && !window.__ORIGINAL_FETCH__) {
+    window.__ORIGINAL_FETCH__ = originalFetch;
+  }
+  window.authFetch = authFetch;
+}
+
 export default {
   loadSession,
   saveSession,
@@ -597,6 +766,7 @@ export default {
   getSessionSync,
   clearSession,
   logout,
+  authFetch,
   identityReady,
   fetchIdentityUser
 };
