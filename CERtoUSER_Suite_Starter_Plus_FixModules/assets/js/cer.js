@@ -138,6 +138,13 @@ let tabPanels = [];
 let customers = [];
 let cers = [];
 let cerTemplates = [];
+let cerTemplatesLoadPromise = null;
+let cerTemplatesLastErrorAt = 0;
+let cerTemplatesFallbackActive = false;
+let cerTemplatesErrorToastShown = false;
+let normalizedFallbackCerTemplates = null;
+const CER_TEMPLATES_RETRY_DELAY = 5 * 60 * 1000;
+const CER_TEMPLATES_FALLBACK_MESSAGE = 'Modelli CER non disponibili dal server. Uso dei modelli locali.';
 const cerDocsStore = new Map();
 const customTemplateNames = new Map();
 
@@ -151,6 +158,17 @@ const DOC_TEMPLATE_UPLOADS = [
   { key: 'informativa_gdpr', label: 'Modello Informativa GDPR (HTML)', displayName: "l'Informativa GDPR", help: 'Il modello può utilizzare i segnaposto {{SUBJECT_*}} per i dati del soggetto titolare.' },
   { key: 'accordo_produttore_prosumer', label: 'Modello Accordo Produttore/Prosumer (HTML)', displayName: "l'Accordo Produttore/Prosumer", help: 'Disponibile solo per membri con ruolo Produttore o Prosumer. Usa i segnaposto {{MEMBER_*}}.' },
 ];
+
+const FALLBACK_CER_TEMPLATES = DOC_TEMPLATE_UPLOADS.map((tpl) => ({
+  id: tpl.key,
+  code: tpl.key.toUpperCase(),
+  slug: tpl.key,
+  module: 'cer',
+  name: tpl.displayName || tpl.label,
+  status: 'active',
+  enabled: true,
+  active: true,
+}));
 
 function sanitizePod(value) {
   if (!value) return null;
@@ -432,33 +450,109 @@ function init() {
   }
 }
 
-async function loadCerTemplates() {
-  if (!templateSelect) return;
+async function loadCerTemplates(options = {}) {
+  const templates = await resolveCerTemplates(options);
+  if (templateSelect) {
+    populateCerTemplateSelect();
+  }
+  return templates;
+}
+
+function getCerTemplateEndpoints() {
   const endpoints = ['/api2/templates'];
-  if (!endpoints.includes(`${API_BASE}/templates`)) {
-    endpoints.push(`${API_BASE}/templates`);
+  const apiEndpoint = `${API_BASE}/templates`;
+  if (!endpoints.includes(apiEndpoint)) {
+    endpoints.push(apiEndpoint);
+  }
+  return endpoints;
+}
+
+async function resolveCerTemplates({ forceRefresh = false } = {}) {
+  const now = Date.now();
+  const cached = Array.isArray(cerTemplates) ? cerTemplates : [];
+  const shouldRetryRemote =
+    forceRefresh
+    || !cached.length
+    || (cerTemplatesFallbackActive && now - cerTemplatesLastErrorAt >= CER_TEMPLATES_RETRY_DELAY);
+
+  if (!shouldRetryRemote && cached.length) {
+    return cached;
   }
 
-  let loaded = [];
+  if (cerTemplatesLoadPromise) {
+    return cerTemplatesLoadPromise;
+  }
+
+  const fallbackTemplates = getFallbackCerTemplates();
+  const endpoints = getCerTemplateEndpoints();
+
+  cerTemplatesLoadPromise = (async () => {
+    const { templates, errors } = await fetchCerTemplatesFromApi(endpoints);
+    if (templates.length) {
+      cerTemplatesFallbackActive = false;
+      cerTemplatesLastErrorAt = 0;
+      cerTemplatesErrorToastShown = false;
+      cerTemplates = templates;
+      return templates;
+    }
+
+    cerTemplates = fallbackTemplates;
+    if (errors.length) {
+      cerTemplatesFallbackActive = true;
+      cerTemplatesLastErrorAt = Date.now();
+      if (!cerTemplatesErrorToastShown) {
+        toast(CER_TEMPLATES_FALLBACK_MESSAGE);
+        cerTemplatesErrorToastShown = true;
+      }
+    } else {
+      cerTemplatesFallbackActive = false;
+      cerTemplatesLastErrorAt = 0;
+      cerTemplatesErrorToastShown = false;
+    }
+    return cerTemplates;
+  })()
+    .catch((err) => {
+      console.error('resolveCerTemplates error', err);
+      cerTemplates = fallbackTemplates;
+      cerTemplatesFallbackActive = true;
+      cerTemplatesLastErrorAt = Date.now();
+      if (!cerTemplatesErrorToastShown) {
+        toast(CER_TEMPLATES_FALLBACK_MESSAGE);
+        cerTemplatesErrorToastShown = true;
+      }
+      return cerTemplates;
+    })
+    .finally(() => {
+      cerTemplatesLoadPromise = null;
+    });
+
+  return cerTemplatesLoadPromise;
+}
+
+async function fetchCerTemplatesFromApi(endpoints) {
   const errors = [];
+  let templates = [];
 
   for (const endpoint of endpoints) {
     try {
-      loaded = await requestCerTemplates(endpoint);
-      cerTemplates = loaded;
-      if (loaded.length > 0 || endpoint === endpoints[endpoints.length - 1]) {
+      templates = await requestCerTemplates(endpoint);
+      if (templates.length || endpoint === endpoints[endpoints.length - 1]) {
         break;
       }
-    } catch (err) {
-      errors.push({ endpoint, error: err });
-      console.error('loadCerTemplates error', endpoint, err);
+    } catch (error) {
+      errors.push({ endpoint, error });
+      console.error('loadCerTemplates error', endpoint, error);
     }
   }
 
-  if (!loaded.length && errors.length === endpoints.length) {
-    cerTemplates = [];
+  return { templates, errors };
+}
+
+function getFallbackCerTemplates() {
+  if (!normalizedFallbackCerTemplates) {
+    normalizedFallbackCerTemplates = filterCerTemplates(FALLBACK_CER_TEMPLATES);
   }
-  populateCerTemplateSelect();
+  return normalizedFallbackCerTemplates.map((tpl) => ({ ...tpl }));
 }
 
 async function requestCerTemplates(endpoint) {
@@ -1837,12 +1931,11 @@ function handleCerDocEvent(detail) {
 // ===== Templates CER: fetch & render =====
 async function fetchCerTemplates() {
   try {
-    const r = await fetch('/api2/templates', { headers: { Accept: 'application/json' } });
-    const list = await r.json();
-    return filterCerTemplates(extractTemplatesList(list));
+    const templates = await resolveCerTemplates();
+    return Array.isArray(templates) ? templates : [];
   } catch (e) {
     console.error('fetchCerTemplates:', e);
-    return [];
+    return getFallbackCerTemplates();
   }
 }
 
