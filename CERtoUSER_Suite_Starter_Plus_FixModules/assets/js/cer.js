@@ -138,6 +138,13 @@ let tabPanels = [];
 let customers = [];
 let cers = [];
 let cerTemplates = [];
+let cerTemplatesLoadPromise = null;
+let cerTemplatesLastErrorAt = 0;
+let cerTemplatesFallbackActive = false;
+let cerTemplatesErrorToastShown = false;
+let normalizedFallbackCerTemplates = null;
+const CER_TEMPLATES_RETRY_DELAY = 5 * 60 * 1000;
+const CER_TEMPLATES_FALLBACK_MESSAGE = 'Modelli CER non disponibili dal server. Uso dei modelli locali.';
 const cerDocsStore = new Map();
 const customTemplateNames = new Map();
 
@@ -151,6 +158,17 @@ const DOC_TEMPLATE_UPLOADS = [
   { key: 'informativa_gdpr', label: 'Modello Informativa GDPR (HTML)', displayName: "l'Informativa GDPR", help: 'Il modello può utilizzare i segnaposto {{SUBJECT_*}} per i dati del soggetto titolare.' },
   { key: 'accordo_produttore_prosumer', label: 'Modello Accordo Produttore/Prosumer (HTML)', displayName: "l'Accordo Produttore/Prosumer", help: 'Disponibile solo per membri con ruolo Produttore o Prosumer. Usa i segnaposto {{MEMBER_*}}.' },
 ];
+
+const FALLBACK_CER_TEMPLATES = DOC_TEMPLATE_UPLOADS.map((tpl) => ({
+  id: tpl.key,
+  code: tpl.key.toUpperCase(),
+  slug: tpl.key,
+  module: 'cer',
+  name: tpl.displayName || tpl.label,
+  status: 'active',
+  enabled: true,
+  active: true,
+}));
 
 function sanitizePod(value) {
   if (!value) return null;
@@ -244,22 +262,39 @@ function mergeCustomerLists(existing, incoming) {
   return result;
 }
 
+function extractClientsPayload(payload) {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.clients)) return payload.clients;
+  if (Array.isArray(payload.results)) return payload.results;
+  if (Array.isArray(payload.items)) return payload.items;
+  return [];
+}
+
 async function syncCustomersFromApi() {
   try {
     const res = await fetch(`${API_BASE}/clients`);
-    if (!res.ok) return;
-    const payload = await res.json();
-    if (!payload?.ok || !Array.isArray(payload.data)) return;
-    const normalized = payload.data.map(normalizeApiCustomer).filter(Boolean);
-    if (!normalized.length) return;
-    const merged = mergeCustomerLists(allCustomers(), normalized);
-    customers = merged;
-    saveCustomers(customers);
+    const payload = await res.json().catch(() => null);
+    if (!res.ok || payload?.ok === false) {
+      throw new Error(payload?.error || payload?.message || 'Errore caricamento clienti CRM');
+    }
+    const records = extractClientsPayload(payload);
+    if (records.length) {
+      const normalized = records.map(normalizeApiCustomer).filter(Boolean);
+      if (normalized.length) {
+        const merged = mergeCustomerLists(allCustomers(), normalized);
+        customers = merged;
+        saveCustomers(customers);
+      }
+    }
+  } catch (err) {
+    console.warn('Impossibile sincronizzare i clienti dal CRM remoto', err);
+    toast(err?.message ? `CRM: ${err.message}` : 'Impossibile sincronizzare i clienti dal CRM remoto');
+  } finally {
     renderMembersPicker();
     updatePlantOwnerOptions();
     updateCerValidationUI();
-  } catch (err) {
-    console.warn('Impossibile sincronizzare i clienti dal CRM remoto', err);
   }
 }
 
@@ -365,7 +400,7 @@ function init() {
   }
 
   detailAddMemberBtn?.addEventListener('click', () => openMemberModal(detailCard?.dataset.cerId || ''));
-  detailAddPlantBtn?.addEventListener('click', () => openPlantModal(detailCard?.dataset.cerId || ''));
+  detailAddPlantBtn?.addEventListener('click', () => openCerPlantModal(detailCard?.dataset.cerId || ''));
   detailEditBtn?.addEventListener('click', () => {
     if (!detailCard?.dataset.cerId) return;
     loadCerDetail(detailCard.dataset.cerId);
@@ -382,13 +417,13 @@ function init() {
   memberModalSaveBtn?.addEventListener('click', submitMemberModal);
 
   plantModal?.querySelectorAll('[data-close-modal]')?.forEach(btn => {
-    btn.addEventListener('click', closePlantModal);
+    btn.addEventListener('click', closeCerPlantModal);
   });
-  plantModalForm?.addEventListener('submit', submitPlantModal);
+  plantModalForm?.addEventListener('submit', submitCerPlantModal);
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       closeMemberModal();
-      closePlantModal();
+      closeCerPlantModal();
     }
   });
 
@@ -415,33 +450,109 @@ function init() {
   }
 }
 
-async function loadCerTemplates() {
-  if (!templateSelect) return;
+async function loadCerTemplates(options = {}) {
+  const templates = await resolveCerTemplates(options);
+  if (templateSelect) {
+    populateCerTemplateSelect();
+  }
+  return templates;
+}
+
+function getCerTemplateEndpoints() {
   const endpoints = ['/api2/templates'];
-  if (!endpoints.includes(`${API_BASE}/templates`)) {
-    endpoints.push(`${API_BASE}/templates`);
+  const apiEndpoint = `${API_BASE}/templates`;
+  if (!endpoints.includes(apiEndpoint)) {
+    endpoints.push(apiEndpoint);
+  }
+  return endpoints;
+}
+
+async function resolveCerTemplates({ forceRefresh = false } = {}) {
+  const now = Date.now();
+  const cached = Array.isArray(cerTemplates) ? cerTemplates : [];
+  const shouldRetryRemote =
+    forceRefresh
+    || !cached.length
+    || (cerTemplatesFallbackActive && now - cerTemplatesLastErrorAt >= CER_TEMPLATES_RETRY_DELAY);
+
+  if (!shouldRetryRemote && cached.length) {
+    return cached;
   }
 
-  let loaded = [];
+  if (cerTemplatesLoadPromise) {
+    return cerTemplatesLoadPromise;
+  }
+
+  const fallbackTemplates = getFallbackCerTemplates();
+  const endpoints = getCerTemplateEndpoints();
+
+  cerTemplatesLoadPromise = (async () => {
+    const { templates, errors } = await fetchCerTemplatesFromApi(endpoints);
+    if (templates.length) {
+      cerTemplatesFallbackActive = false;
+      cerTemplatesLastErrorAt = 0;
+      cerTemplatesErrorToastShown = false;
+      cerTemplates = templates;
+      return templates;
+    }
+
+    cerTemplates = fallbackTemplates;
+    if (errors.length) {
+      cerTemplatesFallbackActive = true;
+      cerTemplatesLastErrorAt = Date.now();
+      if (!cerTemplatesErrorToastShown) {
+        toast(CER_TEMPLATES_FALLBACK_MESSAGE);
+        cerTemplatesErrorToastShown = true;
+      }
+    } else {
+      cerTemplatesFallbackActive = false;
+      cerTemplatesLastErrorAt = 0;
+      cerTemplatesErrorToastShown = false;
+    }
+    return cerTemplates;
+  })()
+    .catch((err) => {
+      console.error('resolveCerTemplates error', err);
+      cerTemplates = fallbackTemplates;
+      cerTemplatesFallbackActive = true;
+      cerTemplatesLastErrorAt = Date.now();
+      if (!cerTemplatesErrorToastShown) {
+        toast(CER_TEMPLATES_FALLBACK_MESSAGE);
+        cerTemplatesErrorToastShown = true;
+      }
+      return cerTemplates;
+    })
+    .finally(() => {
+      cerTemplatesLoadPromise = null;
+    });
+
+  return cerTemplatesLoadPromise;
+}
+
+async function fetchCerTemplatesFromApi(endpoints) {
   const errors = [];
+  let templates = [];
 
   for (const endpoint of endpoints) {
     try {
-      loaded = await requestCerTemplates(endpoint);
-      cerTemplates = loaded;
-      if (loaded.length > 0 || endpoint === endpoints[endpoints.length - 1]) {
+      templates = await requestCerTemplates(endpoint);
+      if (templates.length || endpoint === endpoints[endpoints.length - 1]) {
         break;
       }
-    } catch (err) {
-      errors.push({ endpoint, error: err });
-      console.error('loadCerTemplates error', endpoint, err);
+    } catch (error) {
+      errors.push({ endpoint, error });
+      console.error('loadCerTemplates error', endpoint, error);
     }
   }
 
-  if (!loaded.length && errors.length === endpoints.length) {
-    cerTemplates = [];
+  return { templates, errors };
+}
+
+function getFallbackCerTemplates() {
+  if (!normalizedFallbackCerTemplates) {
+    normalizedFallbackCerTemplates = filterCerTemplates(FALLBACK_CER_TEMPLATES);
   }
-  populateCerTemplateSelect();
+  return normalizedFallbackCerTemplates.map((tpl) => ({ ...tpl }));
 }
 
 async function requestCerTemplates(endpoint) {
@@ -1241,7 +1352,7 @@ function submitMemberModal() {
   }
 }
 
-function openPlantModal(cerId) {
+function openCerPlantModal(cerId) {
   if (!plantModal || !plantModalName || !plantModalOwner || !plantModalFeedback) return;
   const cer = cers.find(c => c.id === cerId);
   if (!cer) {
@@ -1269,19 +1380,19 @@ function openPlantModal(cerId) {
   window.setTimeout(() => plantModalName?.focus(), 0);
 }
 
-function closePlantModal() {
+function closeCerPlantModal() {
   if (!plantModal) return;
   plantModal.classList.remove('open');
   plantModal.setAttribute('aria-hidden', 'true');
   delete plantModal.dataset.cerId;
 }
 
-function submitPlantModal(event) {
+function submitCerPlantModal(event) {
   event.preventDefault();
   if (!plantModal || !plantModalName || !plantModalOwner || !plantModalFeedback) return;
   const cerId = plantModal.dataset.cerId;
   if (!cerId) {
-    closePlantModal();
+    closeCerPlantModal();
     return;
   }
   const name = plantModalName?.value?.trim() || '';
@@ -1317,8 +1428,17 @@ function submitPlantModal(event) {
   });
   if (updated) {
     toast('Impianto aggiunto alla CER.');
-    closePlantModal();
+    closeCerPlantModal();
   }
+}
+
+if (typeof window !== 'undefined') {
+  window.openCerPlantModal = openCerPlantModal;
+  window.closeCerPlantModal = closeCerPlantModal;
+  window.submitCerPlantModal = submitCerPlantModal;
+  if (!window.openPlantModal) window.openPlantModal = openCerPlantModal;
+  if (!window.closePlantModal) window.closePlantModal = closeCerPlantModal;
+  if (!window.submitPlantModal) window.submitPlantModal = submitCerPlantModal;
 }
 
 function updateCerRecord(cerId, updater) {
@@ -1811,12 +1931,11 @@ function handleCerDocEvent(detail) {
 // ===== Templates CER: fetch & render =====
 async function fetchCerTemplates() {
   try {
-    const r = await fetch('/api2/templates', { headers: { Accept: 'application/json' } });
-    const list = await r.json();
-    return filterCerTemplates(extractTemplatesList(list));
+    const templates = await resolveCerTemplates();
+    return Array.isArray(templates) ? templates : [];
   } catch (e) {
     console.error('fetchCerTemplates:', e);
-    return [];
+    return getFallbackCerTemplates();
   }
 }
 
@@ -2279,7 +2398,7 @@ function initPlantsModule() {
   modalEls.energy = document.getElementById('plant-modal-energy');
   modalEls.saveBtn = document.getElementById('plant-modal-save');
   modalEls.recalcBtn = document.getElementById('plant-modal-recalc');
-  modalEls.closeBtns = document.querySelectorAll('[data-close-modal]');
+  modalEls.closeBtns = modalEls.root ? modalEls.root.querySelectorAll('[data-close-modal]') : [];
 
   if (!plantsCerSelect || !plantsPeriodInput || !plantsTableBody) return;
 
@@ -2320,12 +2439,12 @@ function initPlantsModule() {
       toast(`Anteprima aggiornata: ${formatKwh(res.totals.E)} kWh condivisi`);
     }
   });
-  modalEls.closeBtns?.forEach(btn => btn.addEventListener('click', closePlantModal));
+  modalEls.closeBtns?.forEach(btn => btn.addEventListener('click', closePlantConfigModal));
   modalEls.root?.addEventListener('click', (e) => {
-    if (e.target === modalEls.root) closePlantModal();
+    if (e.target === modalEls.root) closePlantConfigModal();
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closePlantModal();
+    if (e.key === 'Escape') closePlantConfigModal();
   });
 
   refreshCerOptions();
@@ -2463,7 +2582,7 @@ function renderPlantsTable() {
       <td>${renderValidationBadge(validation)}</td>
       <td><button class="btn ghost" data-plant="${plant.id}">Configura</button></td>
     `;
-    tr.querySelector('[data-plant]').addEventListener('click', () => openPlantModal(plant));
+    tr.querySelector('[data-plant]').addEventListener('click', () => openPlantConfigModal(plant));
     plantsTableBody.appendChild(tr);
   });
 }
@@ -2500,7 +2619,7 @@ function renderValidationBadge(validation) {
   return `<span class="${cls}" title="${validation.message}">${icons[validation.status] || ''}<span>${validation.message}</span></span>`;
 }
 
-async function openPlantModal(plant) {
+async function openPlantConfigModal(plant) {
   try {
     const allocation = await ensureAllocationData(plant.id, plantState.period);
     plantState.modalPlantId = plant.id;
@@ -2524,11 +2643,16 @@ async function openPlantModal(plant) {
   }
 }
 
-function closePlantModal() {
+function closePlantConfigModal() {
   modalEls.root?.classList.remove('open');
   modalEls.root?.setAttribute('aria-hidden', 'true');
   modalEls.error?.classList.add('hidden');
   plantState.modalPlantId = null;
+}
+
+if (typeof window !== 'undefined') {
+  window.openPlantConfigModal = openPlantConfigModal;
+  window.closePlantConfigModal = closePlantConfigModal;
 }
 
 function syncPercentages(source) {
@@ -2670,7 +2794,7 @@ async function savePlantConfiguration() {
       plantState.lastResults = null;
       hideAllocationsPreview();
       toast('SAFE MODE attivo: configurazione impianto non persistita (dry-run).');
-      closePlantModal();
+      closePlantConfigModal();
       return;
     }
     const idx = plantState.plants.findIndex(p => p.id === plantState.modalPlantId);
@@ -2681,7 +2805,7 @@ async function savePlantConfiguration() {
     plantState.lastResults = null;
     hideAllocationsPreview();
     toast('Configurazione impianto salvata');
-    closePlantModal();
+    closePlantConfigModal();
   } catch (err) {
     if (modalEls.error) {
       modalEls.error.textContent = err.message || 'Errore durante il salvataggio';
