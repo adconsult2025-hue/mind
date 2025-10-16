@@ -11,10 +11,13 @@ let loginButton = null;
 let logoutButton = null;
 let whoamiBadge = null;
 let sessionControlsBound = false;
+let identityInitialized = false;
 
 export const identityReady = new Promise((resolve) => {
   readyResolver = resolve;
 });
+
+export const waitIdentity = identityReady.then((session) => session?.user ?? null);
 
 const globalScope = typeof window !== 'undefined'
   ? window
@@ -46,6 +49,20 @@ function settleReady(value) {
 
 function getWindow() {
   return typeof window !== 'undefined' ? window : null;
+}
+
+function initNetlifyIdentity() {
+  if (identityInitialized) return;
+  const w = getWindow();
+  const widget = w?.netlifyIdentity;
+  if (!widget?.init) return;
+  identityInitialized = true;
+  try {
+    const apiUrl = `${w.location.origin}/.netlify/identity`;
+    widget.init({ APIUrl: apiUrl });
+  } catch (error) {
+    console.warn('Impossibile inizializzare Netlify Identity:', error);
+  }
 }
 
 function safeLocalStorage() {
@@ -601,6 +618,50 @@ function ensureWidgetHandlers() {
     logout('widget');
   });
 
+  widget.on?.('login', async (user) => {
+    if (!user) return;
+    const plain = sanitizeIdentityUser(user);
+    let accessToken = null;
+    let refreshToken = null;
+    let expiresAt = null;
+    let tokenType = 'Bearer';
+
+    try {
+      accessToken = await user.jwt?.();
+    } catch (error) {
+      console.warn('Impossibile ottenere JWT da Netlify Identity:', error);
+    }
+
+    const userToken = user.token && typeof user.token === 'object' ? user.token : null;
+    if (userToken) {
+      refreshToken = userToken.refresh_token ?? null;
+      tokenType = userToken.token_type || tokenType;
+      if (typeof userToken.expires_at === 'number') {
+        expiresAt = userToken.expires_at;
+      } else if (typeof userToken.expires_in === 'number') {
+        expiresAt = Date.now() + userToken.expires_in * 1000;
+      }
+      if (!accessToken && typeof userToken.access_token === 'string') {
+        accessToken = userToken.access_token;
+      }
+    }
+
+    if (!accessToken) return;
+
+    const now = Date.now();
+    const session = {
+      accessToken,
+      tokenType,
+      refreshToken: refreshToken ?? currentSession?.refreshToken ?? null,
+      expiresAt: typeof expiresAt === 'number' ? expiresAt : now + 3600 * 1000,
+      createdAt: now,
+      user: plain || null
+    };
+
+    saveSession(session, { source: 'widget-login' });
+    settleReady(session);
+  });
+
   widget.on?.('init', (user) => {
     if (!user) return;
     const plain = sanitizeIdentityUser(user);
@@ -634,6 +695,8 @@ async function bootstrap(initialSession) {
     settleReady(null);
     return null;
   }
+
+  initNetlifyIdentity();
 
   if (!isSessionValid(initialSession)) {
     handleMissingSession('missing');
@@ -689,11 +752,11 @@ bootstrap(storedSession).catch((error) => {
   settleReady(null);
 });
 
-if (typeof window !== 'undefined' && originalFetch && !window.__MIND_FETCH_PATCHED__) {
-  window.__MIND_FETCH_PATCHED__ = true;
-  window.__ORIGINAL_FETCH__ = originalFetch;
+if (typeof window !== 'undefined') {
+  if (originalFetch && !window.__ORIGINAL_FETCH__) {
+    window.__ORIGINAL_FETCH__ = originalFetch;
+  }
   window.authFetch = authFetch;
-  window.fetch = (input, init) => authFetch(input, init);
 }
 
 export default {
