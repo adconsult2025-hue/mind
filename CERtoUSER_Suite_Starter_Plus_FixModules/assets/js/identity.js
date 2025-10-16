@@ -6,80 +6,35 @@ import {
   signOut,
   setPersistence,
   browserLocalPersistence,
-  browserSessionPersistence
+  browserSessionPersistence,
+  getIdTokenResult
 } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js';
 
-const IDENTITY_EVENT = 'mind:identity';
-const PERSISTENCE_FALLBACKS = [browserLocalPersistence, browserSessionPersistence];
-const PLACEHOLDER_MARKERS = ['YOUR_FIREBASE_API_KEY', 'YOUR_FIREBASE_APP_ID', 'your-project-id'];
-const ROLE_INHERITANCE = {
-  superadmin: ['admin', 'agente', 'resp-cer', 'prosumer', 'produttore', 'consumer'],
-  admin: ['agente', 'resp-cer', 'prosumer', 'produttore', 'consumer'],
-  agente: ['resp-cer', 'prosumer', 'produttore', 'consumer']
-};
-const ROLE_LABEL_CANONICAL = new Map([
-  ['superadmin', 'superadmin'],
-  ['super-admin', 'superadmin'],
-  ['super admin', 'superadmin'],
-  ['owner', 'superadmin'],
-  ['root', 'superadmin'],
-  ['admin', 'admin'],
-  ['administrator', 'admin'],
-  ['agente', 'agente'],
-  ['agent', 'agente'],
-  ['sales', 'agente'],
-  ['resp cer', 'resp-cer'],
-  ['resp_cer', 'resp-cer'],
-  ['resp-cer', 'resp-cer'],
-  ['responsabilecer', 'resp-cer'],
-  ['responsabile cer', 'resp-cer'],
-  ['cer_manager', 'resp-cer'],
-  ['cer-manager', 'resp-cer'],
-  ['prosumer', 'prosumer'],
-  ['producer', 'produttore'],
-  ['produttore', 'produttore'],
-  ['consumer', 'consumer'],
-  ['member', 'consumer'],
-  ['utente', 'consumer']
-]);
-const FALLBACK_SESSION = { reason: 'unauthenticated' };
+const FALLBACK_SESSION = Object.freeze({
+  accessToken: null,
+  refreshToken: null,
+  expiresAt: 0,
+  createdAt: Date.now(),
+  user: null,
+  claims: {},
+  roles: [],
+  territories: [],
+  source: 'firebase-auth'
+});
 
-let currentSession = createSession(FALLBACK_SESSION);
-let currentFirebaseUser = null;
 let firebaseApp = null;
 let firebaseAuth = null;
-let initializationPromise = null;
-let readyResolver = null;
+let currentSession = { ...FALLBACK_SESSION };
+let readyResolve;
+let readyReject;
+let readySettled = false;
 
-export const identityReady = new Promise((resolve) => {
-  readyResolver = resolve;
+export const identityReady = new Promise((resolve, reject) => {
+  readyResolve = resolve;
+  readyReject = reject;
 });
 
 export const waitIdentity = identityReady.then((session) => session?.user ?? null);
-
-function normalizeToken(value) {
-  if (typeof value !== 'string') return '';
-  return value.trim().toLowerCase();
-}
-
-function canonicalizeRole(rawRole) {
-  const normalized = normalizeToken(String(rawRole).replace(/[._]/g, ' '));
-  if (!normalized) return null;
-  if (ROLE_LABEL_CANONICAL.has(normalized)) {
-    return ROLE_LABEL_CANONICAL.get(normalized);
-  }
-  return normalized;
-}
-
-function expandRoleSet(roleSet) {
-  const expanded = new Set(roleSet);
-  for (const role of roleSet) {
-    const inherited = ROLE_INHERITANCE[role];
-    if (!inherited) continue;
-    inherited.forEach((child) => expanded.add(child));
-  }
-  return expanded;
-}
 
 function ensureArray(value) {
   if (!value) return [];
@@ -97,6 +52,28 @@ function ensureArray(value) {
   return [];
 }
 
+function canonicalizeRole(value) {
+  if (!value) return null;
+  const normalized = String(value).trim().toLowerCase().replace(/[._]/g, '-');
+  const aliases = {
+    'super-admin': 'superadmin',
+    'super admin': 'superadmin',
+    owner: 'superadmin',
+    root: 'superadmin',
+    administrator: 'admin',
+    agent: 'agente',
+    sales: 'agente',
+    'resp cer': 'resp-cer',
+    'resp_cer': 'resp-cer',
+    'resp-cer': 'resp-cer',
+    responsabilecer: 'resp-cer',
+    producer: 'produttore',
+    member: 'consumer',
+    utente: 'consumer'
+  };
+  return aliases[normalized] || normalized;
+}
+
 function extractRolesFromClaims(claims = {}) {
   const tokens = new Set();
   const sources = [
@@ -104,465 +81,264 @@ function extractRolesFromClaims(claims = {}) {
     claims.roles,
     claims.user_role,
     claims.user_roles,
-    claims.userRoles,
-    claims.app_metadata?.roles,
-    claims.user_metadata?.roles,
-    claims['custom:role'],
-    claims['custom:roles'],
-    claims.permissions,
     claims.allowedRoles,
-    claims.allowed_roles
+    claims.allowed_roles,
+    claims.app_metadata?.roles,
+    claims.user_metadata?.roles
   ];
-
   const hasuraClaims = claims['https://hasura.io/jwt/claims'];
   if (hasuraClaims) {
     sources.push(hasuraClaims['x-hasura-default-role']);
     sources.push(hasuraClaims['x-hasura-allowed-roles']);
   }
-
   sources.forEach((source) => {
     ensureArray(source).forEach((item) => {
       const canonical = canonicalizeRole(item);
       if (canonical) tokens.add(canonical);
     });
   });
-
-  if (claims.isSuperAdmin === true) {
-    tokens.add('superadmin');
-  }
-  if (claims.isAdmin === true) {
-    tokens.add('admin');
-  }
-
-  if (tokens.size > 0) {
-    tokens.add('authenticated');
-  }
-
-  return expandRoleSet(tokens);
+  if (claims.isSuperAdmin === true) tokens.add('superadmin');
+  if (claims.isAdmin === true) tokens.add('admin');
+  if (tokens.size > 0) tokens.add('authenticated');
+  return Array.from(tokens);
 }
 
-function extractTerritories(claims = {}) {
-  const territoryKeys = ['territories', 'territori', 'territory', 'cabine', 'cabine_primarie', 'areas'];
-  const territories = new Set();
-  territoryKeys.forEach((key) => {
+function extractTerritoriesFromClaims(claims = {}) {
+  const keys = ['territories', 'territori', 'territory', 'cabine', 'cabine_primarie', 'areas'];
+  const values = new Set();
+  keys.forEach((key) => {
     ensureArray(claims[key]).forEach((item) => {
       const normalized = typeof item === 'string' ? item.trim() : item;
-      if (normalized) territories.add(normalized);
+      if (normalized) values.add(normalized);
     });
   });
-  return Array.from(territories);
+  return Array.from(values);
 }
 
-function createSession(overrides = {}) {
-  const session = {
-    accessToken: null,
-    refreshToken: null,
-    tokenType: 'Bearer',
-    createdAt: Date.now(),
-    expiresAt: 0,
-    user: null,
-    claims: {},
-    roles: [],
-    territories: [],
-    source: 'firebase-auth',
-    ...overrides
-  };
-
-  if (session.user && typeof session.user === 'object') {
-    const roles = ensureArray(session.user.roles);
-    session.roles = roles;
-    session.territories = ensureArray(session.user.territories);
+function ensureFirebaseConfig() {
+  const config = (typeof window !== 'undefined' && window.__FIREBASE_CONFIG__) || null;
+  if (!config || !config.apiKey || !config.projectId || !config.appId) {
+    throw new Error('[identity] Configurazione Firebase mancante o incompleta.');
   }
-
-  return session;
+  return config;
 }
 
-function syncWindowSession() {
-  if (typeof window === 'undefined') return;
-  window.MIND_IDENTITY = currentSession;
-  window.MIND_IDENTITY_READY = identityReady;
-  window.MIND_IDENTITY_ROLES = currentSession.roles || [];
-  window.dispatchEvent?.(new Event('mind:identity-sync'));
+function ensureFirebase() {
+  if (firebaseAuth) return firebaseAuth;
+  const config = ensureFirebaseConfig();
+  if (!getApps().length) {
+    firebaseApp = initializeApp(config);
+  } else {
+    firebaseApp = getApp();
+  }
+  firebaseAuth = getAuth(firebaseApp);
+  if (typeof window !== 'undefined') {
+    if (!window.firebaseApp) window.firebaseApp = firebaseApp;
+    if (!window.firebaseAuth) window.firebaseAuth = firebaseAuth;
+  }
+  setPersistence(firebaseAuth, browserLocalPersistence).catch(() =>
+    setPersistence(firebaseAuth, browserSessionPersistence).catch(() => undefined)
+  );
+  return firebaseAuth;
 }
 
-function emitIdentityEvent(type, detailSession = currentSession) {
-  if (typeof window === 'undefined') return;
-  const detail = { type, session: detailSession };
-  try {
-    const event = new CustomEvent(IDENTITY_EVENT, { detail });
-    window.dispatchEvent(event);
-  } catch (error) {
-    try {
-      const legacyEvent = document.createEvent('CustomEvent');
-      legacyEvent.initCustomEvent(IDENTITY_EVENT, false, false, detail);
-      window.dispatchEvent(legacyEvent);
-    } catch (legacyError) {
-      console.warn('[identity] impossibile emettere evento Identity:', legacyError || error);
+function buildSession(user, claims = {}, tokenResult = null) {
+  if (!user) {
+    return { ...FALLBACK_SESSION, createdAt: Date.now(), reason: 'unauthenticated' };
+  }
+  const roles = extractRolesFromClaims(claims);
+  const territories = extractTerritoriesFromClaims(claims);
+  const accessToken = tokenResult?.token || null;
+  const refreshToken = user.stsTokenManager?.refreshToken || user.refreshToken || null;
+  const expiresAt = tokenResult?.expirationTime ? Date.parse(tokenResult.expirationTime) : 0;
+  const profile = {
+    id: user.uid,
+    uid: user.uid,
+    email: user.email || null,
+    email_verified: user.emailVerified,
+    phone_number: user.phoneNumber || null,
+    full_name: user.displayName || user.email || user.phoneNumber || 'Account',
+    displayName: user.displayName || user.email || user.phoneNumber || 'Account',
+    photoURL: user.photoURL || null,
+    roles,
+    territories,
+    claims,
+    metadata: {
+      creationTime: user.metadata?.creationTime || null,
+      lastSignInTime: user.metadata?.lastSignInTime || null
+    },
+    app_metadata: {
+      roles,
+      territories,
+      claims
+    },
+    user_metadata: {
+      territories
     }
+  };
+  return {
+    accessToken,
+    refreshToken,
+    expiresAt,
+    createdAt: Date.now(),
+    user: profile,
+    claims,
+    roles,
+    territories,
+    source: 'firebase-auth'
+  };
+}
+
+function dispatchIdentityEvent(session, type = 'update') {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+  try {
+    const detail = { session, type };
+    window.dispatchEvent(new CustomEvent('mind:identity', { detail }));
+  } catch (error) {
+    console.warn('[identity] impossibile emettere evento identity:', error);
   }
 }
 
 function settleReady(session) {
-  if (typeof readyResolver === 'function') {
-    readyResolver(session);
-    readyResolver = null;
+  if (readySettled) return;
+  readySettled = true;
+  if (typeof readyResolve === 'function') {
+    readyResolve(session);
+    readyResolve = null;
+    readyReject = null;
   }
 }
 
-function updateSession(session, options = {}) {
-  currentSession = createSession(session);
-  syncWindowSession();
-  emitIdentityEvent(options.type || 'update', currentSession);
-  return currentSession;
+function rejectReady(error) {
+  if (readySettled) return;
+  readySettled = true;
+  if (typeof readyReject === 'function') {
+    readyReject(error);
+  }
 }
 
-function clearSession(reason = 'manual') {
-  const session = createSession({ reason, user: null, roles: [], territories: [] });
-  updateSession(session, { type: 'clear' });
+function updateSession(session, eventType = 'update') {
+  currentSession = session;
+  if (typeof window !== 'undefined') {
+    window.MIND_IDENTITY = session;
+    window.MIND_IDENTITY_READY = identityReady;
+    window.MIND_IDENTITY_ROLES = session?.roles || [];
+    window.currentUser = session?.user || null;
+  }
+  dispatchIdentityEvent(session, eventType);
+  settleReady(session);
   return session;
 }
 
-async function rebuildSessionFromUser(forceRefresh = false) {
-  if (!currentFirebaseUser) {
-    return clearSession('signed-out');
+function handleAuthChange(user) {
+  if (!user) {
+    updateSession(buildSession(null), 'signed-out');
+    return;
   }
-
-  try {
-    const tokenResult = await currentFirebaseUser.getIdTokenResult(forceRefresh);
-    const claims = tokenResult?.claims || {};
-    const roles = Array.from(extractRolesFromClaims(claims));
-    const territories = extractTerritories(claims);
-    const profile = {
-      id: currentFirebaseUser.uid,
-      uid: currentFirebaseUser.uid,
-      email: currentFirebaseUser.email || null,
-      email_verified: currentFirebaseUser.emailVerified,
-      phone_number: currentFirebaseUser.phoneNumber || null,
-      full_name:
-        currentFirebaseUser.displayName || currentFirebaseUser.email || currentFirebaseUser.phoneNumber || 'Account',
-      displayName:
-        currentFirebaseUser.displayName || currentFirebaseUser.email || currentFirebaseUser.phoneNumber || 'Account',
-      photoURL: currentFirebaseUser.photoURL || null,
-      roles,
-      territories,
-      claims,
-      metadata: {
-        creationTime: currentFirebaseUser.metadata?.creationTime || null,
-        lastSignInTime: currentFirebaseUser.metadata?.lastSignInTime || null
-      },
-      app_metadata: {
-        roles,
-        territories,
-        claims
-      },
-      user_metadata: {
-        territories
-      }
-    };
-
-    const expiresAt = tokenResult?.expirationTime ? Date.parse(tokenResult.expirationTime) : 0;
-    const refreshToken = currentFirebaseUser.stsTokenManager?.refreshToken || currentFirebaseUser.refreshToken || null;
-
-    const session = createSession({
-      accessToken: tokenResult?.token || null,
-      refreshToken,
-      expiresAt,
-      createdAt: Date.now(),
-      user: profile,
-      claims,
-      roles,
-      territories
+  getIdTokenResult(user, true)
+    .then((tokenResult) => {
+      const claims = tokenResult?.claims || {};
+      updateSession(buildSession(user, claims, tokenResult), 'session');
+    })
+    .catch((error) => {
+      console.warn('[identity] impossibile recuperare i claims Firebase:', error);
+      updateSession(buildSession(user), 'session-error');
     });
+}
 
-    updateSession(session, { type: 'session' });
-    return session;
+function initializeIdentity() {
+  try {
+    const auth = ensureFirebase();
+    onAuthStateChanged(auth, handleAuthChange, (error) => {
+      console.error('[identity] errore listener auth:', error);
+      rejectReady(error);
+    });
   } catch (error) {
-    console.error('[identity] impossibile aggiornare la sessione Firebase:', error);
-    return clearSession('token-error');
+    console.error('[identity] inizializzazione Firebase fallita:', error);
+    const session = { ...FALLBACK_SESSION, reason: 'config-missing', error };
+    updateSession(session, 'error');
   }
 }
 
-async function configurePersistence(auth) {
-  if (!auth) return;
-  let lastError = null;
-  for (const strategy of PERSISTENCE_FALLBACKS) {
-    try {
-      await setPersistence(auth, strategy);
-      return;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  if (lastError) {
-    console.warn('[identity] impossibile impostare la persistenza Firebase:', lastError);
-  }
-}
-
-function isConfigValueValid(value) {
-  if (!value || typeof value !== 'string') return false;
-  return !PLACEHOLDER_MARKERS.some((marker) => value.includes(marker));
-}
-
-function isFirebaseConfigValid(config) {
-  if (!config || typeof config !== 'object') return false;
-  const requiredKeys = ['apiKey', 'authDomain', 'projectId', 'appId'];
-  return requiredKeys.every((key) => isConfigValueValid(config[key]));
-}
-
-function extractConfigFromApp(app) {
-  if (!app || typeof app !== 'object') return null;
-  const options = app.options || app._options;
-  if (isFirebaseConfigValid(options)) {
-    return { ...options };
-  }
-  return null;
-}
-
-function resolveProvidedFirebase() {
-  if (typeof window === 'undefined') return null;
-  const providedAuth = window.firebaseAuth || null;
-  const providedApp = window.firebaseApp || providedAuth?.app || null;
-  const config = extractConfigFromApp(providedApp);
-
-  if (providedApp || providedAuth || config) {
-    return {
-      app: providedApp || null,
-      auth: providedAuth || null,
-      config: config || null
-    };
-  }
-
-  return null;
-}
-
-function resolveFirebaseConfig() {
-  if (typeof window === 'undefined') return null;
-  const directConfig = window.__FIREBASE_CONFIG__ || window.firebaseConfig || window._firebaseConfig;
-  if (isFirebaseConfigValid(directConfig)) {
-    return { ...directConfig };
-  }
-
-  const jsonScript = document.querySelector('script[type="application/json"][data-firebase-config]');
-  if (jsonScript) {
-    try {
-      const parsed = JSON.parse(jsonScript.textContent || '{}');
-      if (isFirebaseConfigValid(parsed)) {
-        return parsed;
-      }
-    } catch (error) {
-      console.warn('[identity] configurazione Firebase JSON non valida:', error);
-    }
-  }
-
-  const provided = resolveProvidedFirebase();
-  if (provided?.config) {
-    return provided.config;
-  }
-
-  return null;
-}
-
-function initializeFirebase() {
-  if (initializationPromise) {
-    return initializationPromise;
-  }
-
-  initializationPromise = (async () => {
-    if (typeof window === 'undefined') {
-      settleReady(currentSession);
-      return false;
-    }
-
-    let config = resolveFirebaseConfig();
-    const provided = resolveProvidedFirebase();
-
-    if (!firebaseApp && provided?.app) {
-      firebaseApp = provided.app;
-    }
-    if (!firebaseAuth && provided?.auth) {
-      firebaseAuth = provided.auth;
-    }
-    if (!config && provided?.config) {
-      config = provided.config;
-    }
-    if (!firebaseApp && firebaseAuth?.app) {
-      firebaseApp = firebaseAuth.app;
-    }
-    if (config && typeof window !== 'undefined' && !isFirebaseConfigValid(window.__FIREBASE_CONFIG__)) {
-      window.__FIREBASE_CONFIG__ = { ...config };
-    }
-    if (!firebaseApp) {
-      if (getApps().length) {
-        firebaseApp = getApp();
-      } else if (config) {
-        firebaseApp = initializeApp(config);
-      }
-    }
-    if (!firebaseAuth && firebaseApp) {
-      firebaseAuth = getAuth(firebaseApp);
-    }
-    if (!firebaseApp && firebaseAuth?.app) {
-      firebaseApp = firebaseAuth.app;
-    }
-    if (firebaseApp && typeof window !== 'undefined') {
-      window.firebaseApp = firebaseApp;
-    }
-    if (firebaseAuth && typeof window !== 'undefined') {
-      window.firebaseAuth = firebaseAuth;
-    }
-    if (!firebaseAuth) {
-      console.warn('[identity] configurazione Firebase mancante o incompleta. Accesso disabilitato finché non viene fornita.');
-      clearSession('firebase-config-missing');
-      settleReady(currentSession);
-      return false;
-    }
-
-    try {
-      void configurePersistence(firebaseAuth);
-
-      onAuthStateChanged(
-        firebaseAuth,
-        (user) => {
-          currentFirebaseUser = user;
-          if (!user) {
-            const session = clearSession('signed-out');
-            settleReady(session);
-            return;
-          }
-          rebuildSessionFromUser(false)
-            .then((session) => settleReady(session))
-            .catch((error) => {
-              console.error('[identity] errore durante l\'inizializzazione della sessione:', error);
-              settleReady(currentSession);
-            });
-        },
-        (error) => {
-          console.error('[identity] osservatore Firebase interrotto:', error);
-          settleReady(currentSession);
-        }
-      );
-
-      return true;
-    } catch (error) {
-      console.error('[identity] inizializzazione Firebase fallita:', error);
-      clearSession('firebase-init-error');
-      settleReady(currentSession);
-      return false;
-    }
-  })();
-
-  return initializationPromise;
-}
-
-initializeFirebase();
+initializeIdentity();
 
 export function getSessionSync() {
   return currentSession;
 }
 
 export function loadSession() {
-  return currentSession;
+  if (readySettled) {
+    return Promise.resolve(currentSession);
+  }
+  return identityReady;
 }
 
 export function isSessionValid() {
-  return Boolean(currentSession?.user && currentSession?.accessToken);
+  return Boolean(currentSession?.user);
 }
 
-export async function saveSession(session = currentSession, options = {}) {
-  updateSession(session, options);
+export async function saveSession(session = currentSession) {
+  updateSession(session, 'manual');
   return currentSession;
 }
 
-export { clearSession };
+export function clearSession() {
+  return updateSession(buildSession(null), 'clear');
+}
 
-export async function logout(reason = 'manual') {
-  await initializeFirebase();
-  if (!firebaseAuth) {
-    clearSession(reason);
-    return;
+export async function logout() {
+  try {
+    const auth = ensureFirebase();
+    await signOut(auth);
+    clearSession();
+  } catch (error) {
+    console.warn('[identity] logout fallito:', error);
+    throw error;
+  }
+}
+
+export async function signInWithEmailPassword(email, password) {
+  const auth = ensureFirebase();
+  if (!email || !password) {
+    throw new Error('Email e password sono obbligatorie.');
   }
   try {
-    await signOut(firebaseAuth);
+    await signInWithEmailAndPassword(auth, email, password);
+    return getSessionSync();
   } catch (error) {
-    console.warn('[identity] logout Firebase fallito:', error);
-  } finally {
-    clearSession(reason);
+    console.warn('[identity] autenticazione fallita:', error);
+    throw error;
   }
-}
-
-export async function signInWithEmailPassword(email, password, options = {}) {
-  await initializeFirebase();
-  if (!firebaseAuth) {
-    throw new Error('Firebase Authentication non inizializzato.');
-  }
-
-  if (options.persistence === 'session') {
-    try {
-      await setPersistence(firebaseAuth, browserSessionPersistence);
-    } catch (error) {
-      console.warn('[identity] impossibile impostare la persistenza di sessione:', error);
-    }
-  }
-
-  const credential = await signInWithEmailAndPassword(firebaseAuth, email, password);
-  currentFirebaseUser = credential.user;
-  return rebuildSessionFromUser(true);
-}
-
-async function ensureFreshToken() {
-  if (!currentFirebaseUser) {
-    return null;
-  }
-
-  const expiresAt = currentSession?.expiresAt || 0;
-  const now = Date.now();
-  if (!currentSession?.accessToken || !expiresAt || now > expiresAt - 60_000) {
-    await rebuildSessionFromUser(true);
-  }
-  return currentSession?.accessToken || null;
 }
 
 export async function authFetch(input, init = {}) {
-  const requestInit = { ...init };
-  const headers = new Headers(requestInit.headers || {});
-  const token = await ensureFreshToken();
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
+  const session = await loadSession();
+  const headers = new Headers(init.headers || {});
+  if (session?.accessToken) {
+    headers.set('Authorization', `Bearer ${session.accessToken}`);
   }
-  requestInit.headers = headers;
-  return fetch(input, requestInit);
+  return fetch(input, { ...init, headers });
 }
 
 export async function fetchIdentityUser() {
-  if (!currentSession?.user) {
-    return null;
-  }
-  if (!currentFirebaseUser) {
-    return currentSession.user;
-  }
-  await ensureFreshToken();
-  return currentSession.user;
+  const session = await loadSession();
+  return session?.user || null;
 }
 
-syncWindowSession();
-emitIdentityEvent('boot', currentSession);
-
-identityReady.then((session) => {
-  if (!session) {
-    clearSession('init');
-  }
-});
+if (typeof window !== 'undefined') {
+  window.identity = window.identity || { init() {}, ready: true };
+}
 
 export default {
-  identityReady,
   waitIdentity,
+  identityReady,
   getSessionSync,
   loadSession,
   saveSession,
   isSessionValid,
   clearSession,
   logout,
+  signInWithEmailPassword,
   authFetch,
-  fetchIdentityUser,
-  signInWithEmailPassword
+  fetchIdentityUser
 };
