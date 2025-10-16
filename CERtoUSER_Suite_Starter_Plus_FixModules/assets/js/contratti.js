@@ -36,7 +36,7 @@ function init() {
   customerSelect = document.getElementById('contract-customer-select');
   cerSelect = document.getElementById('contract-cer-select');
   generateBtn = document.getElementById('contract-generate');
-  preventivoBtn = document.getElementById('btn-genera-preventivo');
+  preventivoBtn = document.getElementById('btn-cabina-preventivo');
   printBtn = document.getElementById('contract-print');
   uploadBtn = document.getElementById('contract-upload');
   fileInput = document.getElementById('contract-file');
