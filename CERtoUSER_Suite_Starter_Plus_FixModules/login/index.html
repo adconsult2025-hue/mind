@@ -8,13 +8,8 @@
   <link rel="stylesheet" href="/assets/css/style.css?v=42"/>
   <meta name="description" content="Accedi alla suite MIND con le credenziali Firebase fornite dall'amministratore."/>
   <!-- carica questo PRIMA di qualsiasi login/guard -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
-    import { getAuth } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js";
-    import { getFirestore } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
-
-    // TODO: INCOLLA qui il config dal tuo progetto Firebase
-    const firebaseConfig = {
+  <script>
+    window.__FIREBASE_CONFIG__ = {
       apiKey: "AIzaSyCpiVr9bGZIQSD0epXeB8oeqJxOdK7Sj1Q",
       authDomain: "certouser-suite.firebaseapp.com",
       databaseURL: "https://certouser-suite-default-rtdb.europe-west1.firebasedatabase.app",
@@ -24,21 +19,10 @@
       appId: "1:793101596335:web:98ff2f37a4bf490e80865a",
       measurementId: "G-GGQ272GKD5"
     };
-
-    if (!firebaseConfig?.apiKey || !firebaseConfig?.projectId) {
-      console.warn("[identity] configurazione Firebase mancante o incompleta. Accesso disabilitato finché non viene fornita.");
-      window.__authError = "NO_CONFIG";
-    } else {
-      const app = initializeApp(firebaseConfig);
-      // Esponi global per altri script già scritti
-      window.firebaseApp = app;
-      window.firebaseAuth = getAuth(app);
-      window.firebaseDB = getFirestore(app);
-      window.__authReady = true;
-    }
   </script>
   <!-- Entry point for the login experience -->
   <script type="module" src="/assets/js/login.js?v=2"></script>
+  <script type="module" src="/assets/js/firebase-init.js"></script>
 </head>
 <body class="login-page dark">
   <main class="login-shell">
