@@ -2369,3 +2369,11 @@ body.login-page {
     padding: clamp(1.5rem, 6vw, 2rem);
   }
 }
+
+/* --- Identity Gate v2 --- */
+.gate-dim { opacity: 0.45; pointer-events: none; filter: grayscale(30%); }
+.gate-hidden { display: none !important; }
+.gate-banner { position: fixed; right: 16px; bottom: 16px; z-index: 70;
+  padding: 12px 14px; border-radius: 12px; background: #111827; border: 1px solid #374151;
+  color: #e5e7eb; font-size: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+.gate-banner.hidden { display: none; }
