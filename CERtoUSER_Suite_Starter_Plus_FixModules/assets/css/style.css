@@ -2487,3 +2487,17 @@ body.login-page {
   padding: 12px 14px; border-radius: 12px; background: #111827; border: 1px solid #374151;
   color: #e5e7eb; font-size: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
 .gate-banner.hidden { display: none; }
+
+.table .row.selected {
+  background-color: rgba(33, 150, 243, 0.12);
+}
+
+.table .row.selected:hover {
+  background-color: rgba(33, 150, 243, 0.18);
+}
+
+.table .row > .select {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

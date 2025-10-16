@@ -1,6 +1,7 @@
-import { STATE as CRONO_STATE } from './cronoprogramma.js?v=36';
+import { STATE as CRONO_STATE, addDocRowLocally, updateDocRowLocally } from './cronoprogramma.js?v=36';
 import { apiFetch } from './api.js?v=36';
 import { safeGuardAction, isDryRunResult } from './safe.js';
+import { allCER } from './storage.js';
 
 const API_BASE = '/api';
 
@@ -44,7 +45,8 @@ const state = {
   pendingTab: '',
   production: new Map(),
   workflows: new Map(),
-  docs: new Map()
+  docs: new Map(),
+  localMode: false
 };
 
 let tableBody;
@@ -171,13 +173,82 @@ window.addEventListener('cronoprogramma:doc-updated', (event) => {
   handlePlantDocEvent(event.detail);
 });
 
+function buildLocalPlantsFromCer() {
+  const cers = allCER();
+  const fallback = [];
+  cers.forEach((cer) => {
+    const members = Array.isArray(cer?.membri) ? cer.membri : [];
+    const impianti = Array.isArray(cer?.impianti) ? cer.impianti : [];
+    impianti.forEach((plant) => {
+      const ownerId = String(plant.titolareId || plant.titolare_id || '');
+      const owner = members.find((member) => String(member.id) === ownerId) || null;
+      const totals = plant.production_totals || plant.produzione || {};
+      fallback.push({
+        id: plant.id || `${cer.id || 'cer'}_${Math.random().toString(36).slice(2)}`,
+        name: plant.nome || 'Impianto',
+        cer_id: cer.id || '',
+        cer_name: cer.nome || '',
+        tipologia: plant.tipologia || plant.tipo || (owner?.ruolo || plant.titolareRuolo || ''),
+        pod_id_produttore: plant.pod_id_produttore || owner?.pod || '',
+        production_totals: {
+          daily: Number(totals.daily || 0),
+          monthly: Number(totals.monthly || 0),
+          yearly: Number(totals.yearly || totals.annuale || 0)
+        },
+        last_reading: plant.last_reading || null,
+        inverter_api_key: plant.inverter_api_key || '',
+        potenza_kwp: plant.potenza_kwp != null ? Number(plant.potenza_kwp) : null,
+        owner_id: owner?.id || ownerId,
+        owner_name: owner?.nome || plant.titolareNome || '',
+        owner_role: owner?.ruolo || plant.titolareRuolo || '',
+        local: true
+      });
+    });
+  });
+  return fallback;
+}
+
+function activateLocalPlantsFallback(message = '') {
+  const fallbackPlants = buildLocalPlantsFromCer();
+  state.localMode = true;
+  state.plants = fallbackPlants;
+  state.production.clear();
+  state.workflows.clear();
+  state.docs.clear();
+  buildCerOptions();
+  renderPlantsTable();
+  if (fallbackPlants.length) {
+    const feedback = message || `Modalità locale attiva: ${fallbackPlants.length} impianti recuperati dalle CER.`;
+    setFeedback(feedback);
+    const currentId = state.selectedPlantId;
+    const target = fallbackPlants.find((item) => item.id === currentId)?.id || fallbackPlants[0].id;
+    if (target) selectPlant(target);
+  } else {
+    const fallbackMessage = message || 'Modalità locale: nessun impianto configurato nelle CER.';
+    setFeedback(fallbackMessage);
+    state.selectedPlantId = '';
+    detailCard?.setAttribute('hidden', 'hidden');
+    clearPlantCrono();
+  }
+}
+
+window.addEventListener('cer:cers-changed', () => {
+  if (!state.localMode) return;
+  activateLocalPlantsFallback('Impianti locali aggiornati in base alle modifiche delle CER.');
+});
+
 async function loadPlants(force = false) {
   try {
     setFeedback('Caricamento impianti…');
+    state.localMode = false;
     const res = await fetch(`${API_BASE}/plants${force ? `?ts=${Date.now()}` : ''}`);
     const payload = await res.json();
     if (!res.ok || payload.ok === false) throw new Error(payload.error?.message || 'Errore caricamento impianti');
     state.plants = Array.isArray(payload.data) ? payload.data : [];
+    if (!state.plants.length) {
+      activateLocalPlantsFallback('Nessun impianto disponibile dal backend: caricamento da configurazioni CER.');
+      return;
+    }
     buildCerOptions();
     renderPlantsTable();
     if (state.pendingSelectPlantId) {
@@ -216,7 +287,7 @@ async function loadPlants(force = false) {
     }
     setFeedback(state.plants.length ? `${state.plants.length} impianti disponibili` : 'Nessun impianto configurato');
   } catch (err) {
-    setFeedback(err.message || 'Errore durante il caricamento degli impianti', true);
+    activateLocalPlantsFallback(err.message || 'Impossibile raggiungere il backend: uso i dati degli impianti configurati nelle CER.');
   }
 }
 
@@ -232,7 +303,10 @@ function buildCerOptions() {
   const options = new Map();
   options.set('', 'Tutte le CER');
   state.plants.forEach(plant => {
-    if (plant.cer_id) options.set(plant.cer_id, plant.cer_id);
+    if (plant.cer_id) {
+      const label = plant.cer_name ? `${plant.cer_name} (${plant.cer_id})` : plant.cer_id;
+      if (!options.has(plant.cer_id)) options.set(plant.cer_id, label);
+    }
   });
   cerSelect.innerHTML = '';
   options.forEach((label, value) => {
@@ -266,8 +340,11 @@ function renderPlantsTable() {
     const tr = document.createElement('tr');
     tr.dataset.id = plant.id;
     if (plant.id === state.selectedPlantId) tr.classList.add('active');
+    const cerLabel = plant.cer_name || plant.cer_id ? `<br/><small>${escapeHtml(plant.cer_name || plant.cer_id)}</small>` : '';
+    const ownerLabel = plant.owner_name ? `<br/><small>${escapeHtml(plant.owner_name)}${plant.owner_role ? ` · ${escapeHtml(plant.owner_role)}` : ''}</small>` : '';
+    const podLabel = plant.pod_id_produttore ? `<br/><small>${escapeHtml(plant.pod_id_produttore)}</small>` : '';
     tr.innerHTML = `
-      <td><strong>${plant.name}</strong><br/><small>${plant.pod_id_produttore || ''}</small></td>
+      <td><strong>${escapeHtml(plant.name)}</strong>${cerLabel}${ownerLabel}${podLabel}</td>
       <td>${plant.tipologia || '-'}</td>
       <td>${formatLastReading(last)}</td>
       <td>${formatKwh(totals.daily)}</td>
@@ -283,6 +360,11 @@ function selectPlant(plantId) {
   state.selectedPlantId = plantId;
   CRONO_STATE.currentPlantId = plantId;
   renderPlantsTable();
+  if (state.localMode) {
+    renderPlantDetail();
+    renderPlantCrono(plantId);
+    return;
+  }
   loadPlantProduction(plantId);
   renderPlantCrono(plantId);
 }
@@ -312,7 +394,19 @@ function renderPlantDetail() {
   }
   detailCard.removeAttribute('hidden');
   detailName.textContent = plant.name;
-  detailMeta.textContent = plant.cer_id ? `CER: ${plant.cer_id} · Tipologia ${plant.tipologia || '-'}` : `Tipologia ${plant.tipologia || '-'}`;
+  const metaParts = [];
+  if (plant.cer_name || plant.cer_id) metaParts.push(`CER: ${plant.cer_name || plant.cer_id}`);
+  if (plant.tipologia) metaParts.push(`Tipologia ${plant.tipologia}`);
+  const ownerName = plant.owner_name || plant.titolare || plant.titolareNome || '';
+  const ownerRole = plant.owner_role || plant.titolareRuolo || '';
+  if (ownerName) metaParts.push(`Titolare ${ownerName}${ownerRole ? ` (${ownerRole})` : ''}`);
+  if (plant.potenza_kwp !== null && plant.potenza_kwp !== undefined && plant.potenza_kwp !== '') {
+    const potenzaValue = Number(plant.potenza_kwp);
+    if (Number.isFinite(potenzaValue)) {
+      metaParts.push(`Potenza ${potenzaValue.toFixed(2)} kWp`);
+    }
+  }
+  detailMeta.textContent = metaParts.length ? metaParts.join(' · ') : `Tipologia ${plant.tipologia || '-'}`;
 
   const totals = prod?.totals || plant.production_totals || { daily: 0, monthly: 0, yearly: 0 };
   metricDaily.textContent = `${formatKwh(totals.daily)} kWh`;
@@ -437,6 +531,14 @@ async function renderPlantCrono(plantId) {
   if (!cronoContainer) return;
   if (!plantId) {
     clearPlantCrono();
+    return;
+  }
+  if (state.localMode) {
+    if (!state.workflows.has(plantId)) {
+      state.workflows.set(plantId, []);
+    }
+    setCronoFeedback('Modalità locale: aggiorna manualmente checklist e documenti.');
+    buildPlantCronoUI(plantId);
     return;
   }
   setCronoFeedback('Caricamento cronoprogramma…');
@@ -692,6 +794,11 @@ async function submitDocForm(event) {
 
 async function applyPreset(plantId, type) {
   if (!plantId || !type) return;
+  if (state.localMode) {
+    setCronoFeedback('Preset documentale non disponibile in modalità locale: aggiungi i documenti manualmente.');
+    toast('Preset non disponibile senza backend attivo.');
+    return;
+  }
   setCronoFeedback('Applicazione preset documentale…');
   try {
     await apiFetch(`${PLANT_DOCS_API}/preset`, {
@@ -708,6 +815,19 @@ async function applyPreset(plantId, type) {
 
 async function uploadPlantDoc(plantId, phase, filename) {
   if (!plantId || !phase) throw new Error('Fase o impianto non valido');
+  if (state.localMode) {
+    const doc = addDocRowLocally({
+      filename,
+      entity_type: 'plant',
+      entity_id: plantId,
+      phase,
+      uploaded_at: new Date().toISOString()
+    }, { entityType: 'plant', entityId: plantId, phase });
+    upsertPlantDoc({ ...doc, plant_id: plantId });
+    toast('Documento registrato (modalità locale).');
+    await renderPlantCrono(plantId);
+    return;
+  }
   try {
     await apiFetch(`${API_BASE}/docs/upload`, {
       method: 'POST',
@@ -724,6 +844,15 @@ async function uploadPlantDoc(plantId, phase, filename) {
 
 async function markDoc(docId, status) {
   if (!docId || !status) return;
+  if (state.localMode) {
+    const updated = updateDocRowLocally(docId, status, { entityType: 'plant', entityId: state.selectedPlantId, phase: null });
+    if (updated) {
+      upsertPlantDoc({ ...updated, plant_id: state.selectedPlantId });
+      toast(status === 'approved' ? 'Documento approvato.' : 'Stato documento aggiornato.');
+      await renderPlantCrono(state.selectedPlantId);
+    }
+    return;
+  }
   try {
     await apiFetch(`${API_BASE}/docs/mark`, {
       method: 'POST',
@@ -739,6 +868,16 @@ async function markDoc(docId, status) {
 
 async function advancePlantPhase(plantId, phase, status) {
   if (!plantId || !phase || !status) return;
+  if (state.localMode) {
+    const current = state.workflows.get(plantId) || [];
+    const map = new Map(current.map((entry) => [entry.phase, { ...entry }]));
+    const existing = map.get(phase) || { phase, status: 'todo' };
+    map.set(phase, { ...existing, status });
+    state.workflows.set(plantId, Array.from(map.values()));
+    toast(status === 'done' ? 'Fase completata (modalità locale).' : 'Fase aggiornata (modalità locale).');
+    await renderPlantCrono(plantId);
+    return;
+  }
   try {
     await apiFetch(`${PLANT_WORKFLOWS_API}/advance`, {
       method: 'POST',
