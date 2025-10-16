@@ -47,6 +47,7 @@
     <div class="tabs">
       <button class="tab-btn active" type="button" data-tab="setup">Configurazione CER</button>
       <button class="tab-btn" type="button" data-tab="plants">Impianti fotovoltaici</button>
+      <button class="tab-btn" type="button" data-tab="energy">Consumi &amp; Produzione</button>
       <button class="tab-btn" type="button" data-tab="documents">Documenti</button>
       <button class="tab-btn" type="button" data-tab="allocations">Riparti</button>
       <button class="tab-btn" type="button" data-tab="cronoprogramma">Cronoprogramma CER</button>
@@ -242,6 +243,77 @@
           </table>
         </div>
 
+      </section>
+    </section>
+
+    <section class="tab-panel" data-panel="energy">
+      <section class="card">
+        <div class="row-between">
+          <div>
+            <h2>Consumi &amp; Produzione</h2>
+            <p class="info-text">Monitora i consumi per ogni partecipante con fasce F1/F2/F3 e gestisci i dati mensili o annuali, insieme alla produzione degli impianti nel periodo selezionato.</p>
+          </div>
+          <div class="actions">
+            <label>
+              <small>Seleziona CER</small>
+              <select id="energy-cer-select"></select>
+            </label>
+            <label>
+              <small>Periodo</small>
+              <input type="month" id="energy-period"/>
+            </label>
+          </div>
+        </div>
+
+        <p id="energy-feedback" class="info-text"></p>
+
+        <div class="grid-2 energy-grid">
+          <section class="card soft">
+            <div class="row-between">
+              <h3>Consumi partecipanti</h3>
+              <span class="badge muted" id="energy-period-label"></span>
+            </div>
+            <p class="info-text" id="energy-consumi-empty">Seleziona una CER per visualizzare i partecipanti.</p>
+            <div class="table-wrap" id="energy-consumi-table-wrap" hidden>
+              <table class="data-table" id="energy-consumi-table">
+                <thead>
+                  <tr>
+                    <th>Partecipante</th>
+                    <th>Ruolo</th>
+                    <th>Frequenza &amp; periodo</th>
+                    <th>F1 (kWh)</th>
+                    <th>F2 (kWh)</th>
+                    <th>F3 (kWh)</th>
+                    <th>Totale</th>
+                    <th class="nowrap">Azioni</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="card soft">
+            <div class="row-between">
+              <h3>Produzione impianti</h3>
+              <span class="badge muted" id="energy-production-period"></span>
+            </div>
+            <p class="info-text" id="energy-production-empty">Aggiungi impianti per registrare la produzione.</p>
+            <div class="table-wrap" id="energy-production-table-wrap" hidden>
+              <table class="data-table" id="energy-production-table">
+                <thead>
+                  <tr>
+                    <th>Impianto</th>
+                    <th>Titolare</th>
+                    <th>Produzione kWh</th>
+                    <th class="nowrap">Azioni</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       </section>
     </section>
 
