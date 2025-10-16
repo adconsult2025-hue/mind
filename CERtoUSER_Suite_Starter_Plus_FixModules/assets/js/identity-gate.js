@@ -1,98 +1,245 @@
-// assets/js/identity-gate.js (safe gate)
 (function () {
-  function onReady(fn) {
-    if (document.readyState !== "loading") fn();
-    else document.addEventListener("DOMContentLoaded", fn);
-  }
-  async function getUserRoles() {
-    const u = window.netlifyIdentity?.currentUser?.();
-    if (!u) return [];
-    try {
-      await u.jwt();
-    } catch {}
-    return u?.app_metadata?.roles || [];
-  }
-  function hasAny(roles, allowed) {
-    return roles.some((r) => allowed.includes(r));
+  const MODULE_ROLE_MAP = {
+    hub: ['superadmin', 'admin', 'agente', 'resp-cer', 'prosumer', 'produttore', 'consumer'],
+    crm: ['superadmin', 'admin', 'agente'],
+    cer: ['superadmin', 'admin', 'agente', 'resp-cer', 'prosumer', 'produttore', 'consumer'],
+    impianti: ['superadmin', 'admin', 'agente', 'prosumer', 'produttore'],
+    preventivi: ['superadmin', 'admin', 'agente'],
+    modelli: ['superadmin', 'admin'],
+    contratti: ['superadmin', 'admin'],
+    simulatori: ['superadmin', 'admin'],
+    ct3: ['superadmin', 'admin'],
+    utenti: ['superadmin']
+  };
+
+  const ROLE_INHERITANCE = {
+    superadmin: ['admin', 'agente', 'resp-cer', 'prosumer', 'produttore', 'consumer'],
+    admin: ['agente', 'resp-cer', 'prosumer', 'produttore', 'consumer'],
+    agente: ['resp-cer', 'prosumer', 'produttore', 'consumer']
+  };
+
+  const ROLE_ALIASES = new Map([
+    ['superadmin', 'superadmin'],
+    ['super-admin', 'superadmin'],
+    ['super admin', 'superadmin'],
+    ['owner', 'superadmin'],
+    ['root', 'superadmin'],
+    ['admin', 'admin'],
+    ['administrator', 'admin'],
+    ['agente', 'agente'],
+    ['agent', 'agente'],
+    ['sales', 'agente'],
+    ['resp cer', 'resp-cer'],
+    ['resp_cer', 'resp-cer'],
+    ['resp-cer', 'resp-cer'],
+    ['responsabilecer', 'resp-cer'],
+    ['responsabile cer', 'resp-cer'],
+    ['cer_manager', 'resp-cer'],
+    ['cer-manager', 'resp-cer'],
+    ['prosumer', 'prosumer'],
+    ['producer', 'produttore'],
+    ['produttore', 'produttore'],
+    ['consumer', 'consumer'],
+    ['member', 'consumer'],
+    ['utente', 'consumer'],
+    ['authenticated', 'authenticated']
+  ]);
+
+  const DEFAULT_DENIED_MESSAGE = 'Accesso non autorizzato per il tuo ruolo.';
+  let currentRoles = new Set();
+  let currentSession = null;
+
+  function normalizeToken(value) {
+    if (typeof value !== 'string') return '';
+    return value.trim().toLowerCase();
   }
 
-  function ensureBanner() {
-    let b = document.querySelector("[data-gate-banner]");
-    if (!b) {
-      b = document.createElement("div");
-      b.setAttribute("data-gate-banner", "1");
-      b.className = "gate-banner hidden";
-      b.innerHTML = "Sezione non abilitata per il tuo profilo.";
-      document.body.appendChild(b);
+  function canonicalizeRole(rawRole) {
+    const token = normalizeToken(String(rawRole).replace(/[._]/g, ' '));
+    if (!token) return null;
+    if (ROLE_ALIASES.has(token)) {
+      return ROLE_ALIASES.get(token);
     }
-    return b;
+    return token;
   }
 
-  async function applyGates() {
-    const roles = await getUserRoles();
-    document.body.dataset.userRoles = roles.join(",");
-    document.body.classList.toggle("is-auth", roles.length > 0);
+  function expandRoles(roles) {
+    const expanded = new Set(roles);
+    roles.forEach((role) => {
+      const inherited = ROLE_INHERITANCE[role];
+      if (inherited) {
+        inherited.forEach((child) => expanded.add(child));
+      }
+    });
+    return expanded;
+  }
 
-    let anyLocked = false;
+  function collectRolesFromSession(session) {
+    const tokens = new Set();
+    if (!session) return tokens;
+    const user = session.user || {};
+    const sources = [
+      session.roles,
+      user.roles,
+      user.app_metadata?.roles,
+      user.user_metadata?.roles,
+      user.metadata?.roles,
+      user.data?.roles,
+      user.role,
+      user.app_metadata?.role,
+      user.user_metadata?.role,
+      session.claims?.role,
+      session.claims?.roles
+    ];
 
-    document.querySelectorAll("[data-requires-any-role]").forEach((el) => {
-      const allowed = el
-        .getAttribute("data-requires-any-role")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const ok = hasAny(roles, allowed);
-      el.classList.toggle("gate-locked", !ok);
-      el.setAttribute("aria-disabled", (!ok).toString());
-
-      const mode = (el.getAttribute("data-gate-mode") || "dim").toLowerCase();
-      if (!ok) {
-        anyLocked = true;
-        if (mode === "hide") {
-          el.classList.add("gate-hidden");
-          el.classList.remove("gate-dim");
-        } else {
-          el.classList.add("gate-dim");
-          el.classList.remove("gate-hidden");
-        }
+    sources.forEach((source) => {
+      if (!source) return;
+      if (Array.isArray(source)) {
+        source.forEach((item) => {
+          const canonical = canonicalizeRole(item);
+          if (canonical) tokens.add(canonical);
+        });
       } else {
-        el.classList.remove("gate-hidden", "gate-dim");
+        const canonical = canonicalizeRole(source);
+        if (canonical) tokens.add(canonical);
       }
     });
 
-    const banner = ensureBanner();
-    banner.classList.toggle("hidden", !anyLocked);
+    if (user && Object.keys(user).length && tokens.size === 0) {
+      tokens.add('authenticated');
+    }
+
+    return expandRoles(tokens);
   }
 
-  function boot() {
-    if (!window.netlifyIdentity) {
-      const s = document.createElement("script");
-      s.src = "https://identity.netlify.com/v1/netlify-identity-widget.js";
-      s.onload = () => {
-        netlifyIdentity.init?.();
-        wire();
-      };
-      document.head.appendChild(s);
-    } else {
-      netlifyIdentity.init?.();
-      wire();
+  function expandRequirements(tokens) {
+    const expanded = new Set();
+    tokens.forEach((token) => {
+      const normalized = normalizeToken(token);
+      if (!normalized) return;
+      if (MODULE_ROLE_MAP[normalized]) {
+        MODULE_ROLE_MAP[normalized].forEach((role) => expanded.add(role));
+        return;
+      }
+      const canonical = canonicalizeRole(normalized);
+      if (canonical) {
+        expanded.add(canonical);
+        return;
+      }
+      const moduleLike = normalized.split(':')[0].replace(/[-_.]/g, '');
+      if (MODULE_ROLE_MAP[moduleLike]) {
+        MODULE_ROLE_MAP[moduleLike].forEach((role) => expanded.add(role));
+      }
+    });
+    return Array.from(expanded);
+  }
+
+  function parseRequiredRoles(value) {
+    if (!value) return [];
+    return value
+      .split(',')
+      .map((token) => token.trim())
+      .filter(Boolean);
+  }
+
+  function ensureGateMessage(element) {
+    let message = element.querySelector('.identity-gate-message');
+    if (!message) {
+      message = document.createElement('div');
+      message.className = 'identity-gate-message';
+      const span = document.createElement('span');
+      message.appendChild(span);
+      element.appendChild(message);
+    }
+    return message;
+  }
+
+  function unlockElement(element) {
+    element.classList.remove('gate-locked', 'gate-hidden', 'gate-dim');
+    element.removeAttribute('aria-disabled');
+    const message = element.querySelector('.identity-gate-message');
+    if (message) {
+      message.hidden = true;
     }
   }
-  function wire() {
-    netlifyIdentity.off?.("init");
-    netlifyIdentity.off?.("login");
-    netlifyIdentity.off?.("logout");
-    netlifyIdentity.on?.("init", () => applyGates());
-    netlifyIdentity.on?.("login", () => location.reload());
-    netlifyIdentity.on?.("logout", () => location.reload());
-    applyGates();
+
+  function lockElement(element, reason) {
+    element.classList.add('gate-locked');
+    element.setAttribute('aria-disabled', 'true');
+    const message = ensureGateMessage(element);
+    if (message) {
+      message.hidden = false;
+      const span = message.querySelector('span');
+      if (span) {
+        span.textContent = reason || DEFAULT_DENIED_MESSAGE;
+      }
+    }
   }
 
-  window.IdentityGate = {
-    apply: applyGates,
-    getRoles: getUserRoles,
-    hasAny: async (list) => hasAny(await getUserRoles(), list),
-  };
+  function applyToElement(element) {
+    const tokens = parseRequiredRoles(element.getAttribute('data-requires-any-role'));
+    if (!tokens.length) {
+      unlockElement(element);
+      return;
+    }
+    const requiredRoles = expandRequirements(tokens);
+    const allowed = requiredRoles.some((role) => currentRoles.has(role));
+    if (allowed) {
+      unlockElement(element);
+    } else {
+      const message = element.getAttribute('data-gate-message') || DEFAULT_DENIED_MESSAGE;
+      lockElement(element, message);
+    }
+  }
 
-  onReady(boot);
+  function applyAccess(session = currentSession) {
+    currentSession = session;
+    currentRoles = collectRolesFromSession(session);
+    if (typeof document !== 'undefined' && document.body) {
+      if (currentRoles.size > 0) {
+        document.body.classList.add('is-auth');
+      } else {
+        document.body.classList.remove('is-auth');
+      }
+      document.body.dataset.userRoles = Array.from(currentRoles).join(',');
+      const territories = Array.isArray(session?.territories)
+        ? session.territories
+        : Array.isArray(session?.user?.territories)
+          ? session.user.territories
+          : [];
+      document.body.dataset.userTerritories = (territories || []).join(',');
+    }
+
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('[data-requires-any-role]').forEach(applyToElement);
+    }
+  }
+
+  function hasAny(requiredTokens = []) {
+    if (!requiredTokens || !requiredTokens.length) return true;
+    const expanded = expandRequirements(requiredTokens);
+    return expanded.some((role) => currentRoles.has(role));
+  }
+
+  function onReady(fn) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', fn, { once: true });
+    } else {
+      fn();
+    }
+  }
+
+  onReady(() => applyAccess(window.MIND_IDENTITY || null));
+
+  window.addEventListener('mind:identity', (event) => {
+    const session = event?.detail?.session || null;
+    applyAccess(session);
+  });
+
+  window.IdentityGate = {
+    apply: () => applyAccess(currentSession),
+    getRoles: async () => Array.from(currentRoles),
+    hasAny: async (tokens) => hasAny(Array.isArray(tokens) ? tokens : [tokens].filter(Boolean)),
+    getSession: () => currentSession
+  };
 })();

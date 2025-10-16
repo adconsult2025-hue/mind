@@ -85,7 +85,7 @@ exports.handler = guard(async function handler(event) {
     return preflight();
   }
 
-  const gate = requireRole(event, ['admin', 'superadmin']);
+  const gate = await requireRole(event, ['admin', 'superadmin']);
   if (!gate.ok) {
     return gate.response;
   }
