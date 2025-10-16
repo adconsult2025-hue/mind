@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node tools/prepare_site.js",
     "prepare:site": "node tools/prepare_site.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node tools/run_self_checks.js"
   },
   "keywords": [],
   "author": "",

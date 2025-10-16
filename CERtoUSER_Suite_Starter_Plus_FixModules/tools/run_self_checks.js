@@ -82,6 +82,46 @@ function defaultContext() {
 const context = {};
 const cleanups = [];
 
+const dataDir = path.join(functionsDir, '..', 'data');
+const templatesDataPath = path.join(dataDir, 'templates.json');
+const templatesUploadsPath = path.join(dataDir, 'templates_uploads');
+
+const templatesDataOriginal = fs.existsSync(templatesDataPath)
+  ? fs.readFileSync(templatesDataPath, 'utf8')
+  : null;
+
+let templatesUploadsBackup = null;
+if (fs.existsSync(templatesUploadsPath)) {
+  templatesUploadsBackup = fs.mkdtempSync(path.join(os.tmpdir(), 'certouser_templates_uploads_backup_'));
+  fs.cpSync(templatesUploadsPath, templatesUploadsBackup, { recursive: true });
+}
+
+cleanups.push(() => {
+  try {
+    if (templatesDataOriginal !== null) {
+      fs.mkdirSync(path.dirname(templatesDataPath), { recursive: true });
+      fs.writeFileSync(templatesDataPath, templatesDataOriginal);
+    } else {
+      fs.rmSync(templatesDataPath, { force: true });
+    }
+  } catch (err) {
+    // ignore restore errors
+  }
+
+  try {
+    if (templatesUploadsBackup) {
+      fs.rmSync(templatesUploadsPath, { recursive: true, force: true });
+      fs.mkdirSync(path.dirname(templatesUploadsPath), { recursive: true });
+      fs.cpSync(templatesUploadsBackup, templatesUploadsPath, { recursive: true });
+      fs.rmSync(templatesUploadsBackup, { recursive: true, force: true });
+    } else {
+      fs.rmSync(templatesUploadsPath, { recursive: true, force: true });
+    }
+  } catch (err) {
+    // ignore restore errors
+  }
+});
+
 function ok(details) {
   return { ok: true, details };
 }
@@ -105,6 +145,45 @@ const scenarios = [
       if (parsed.statusCode !== 200) return fail(`status ${parsed.statusCode}`);
       if (!parsed.body?.ok) return fail('flag ok mancante');
       return ok(`env=${parsed.body.env}`);
+    }
+  },
+  {
+    name: 'identity-signup → POST ruoli base',
+    module: 'identity-signup.js',
+    prepare: () => ({
+      ...defaultContext(),
+      httpMethod: 'POST',
+      path: '/.netlify/functions/identity-signup',
+      rawUrl: 'https://demo.local/.netlify/functions/identity-signup',
+      body: JSON.stringify({ user: { email: 'utente@example.com' } })
+    }),
+    validate: (res) => {
+      const parsed = parseResponse(res);
+      if (parsed.statusCode !== 200) return fail(`status ${parsed.statusCode}`);
+      const roles = parsed.body?.roles;
+      if (!Array.isArray(roles)) return fail('roles non è un array');
+      if (!roles.includes('editor')) return fail('ruolo editor mancante');
+      return ok(`ruoli=${roles.join(',')}`);
+    }
+  },
+  {
+    name: 'identity-signup → POST superadmin',
+    module: 'identity-signup.js',
+    prepare: () => ({
+      ...defaultContext(),
+      httpMethod: 'POST',
+      path: '/.netlify/functions/identity-signup',
+      rawUrl: 'https://demo.local/.netlify/functions/identity-signup',
+      body: JSON.stringify({ user: { email: 'adv.bg.david@gmail.com' } })
+    }),
+    validate: (res) => {
+      const parsed = parseResponse(res);
+      if (parsed.statusCode !== 200) return fail(`status ${parsed.statusCode}`);
+      const roles = parsed.body?.roles;
+      if (!Array.isArray(roles)) return fail('roles non è un array');
+      if (!roles.includes('editor')) return fail('ruolo editor mancante');
+      if (!roles.includes('superadmin')) return fail('ruolo superadmin mancante');
+      return ok(`ruoli=${roles.join(',')}`);
     }
   },
   {
@@ -851,20 +930,6 @@ const scenarios = [
       const parsed = parseResponse(res);
       if (parsed.statusCode !== 200) return fail(`status ${parsed.statusCode}`);
       if (!parsed.body?.ok) return fail('flag ok mancante');
-      const dataFile = path.join(functionsDir, '..', 'data', 'templates.json');
-      const uploadsDir = path.join(functionsDir, '..', 'data', 'templates_uploads');
-      cleanups.push(() => {
-        try {
-          fs.rmSync(dataFile, { force: true });
-        } catch (err) {
-          // ignore
-        }
-        try {
-          fs.rmSync(uploadsDir, { recursive: true, force: true });
-        } catch (err) {
-          // ignore
-        }
-      });
       return ok('template caricato');
     }
   },
@@ -897,26 +962,6 @@ const scenarios = [
       if (!created.file_meta) return fail('metadati file mancanti');
       if (!created.file_meta.path) return fail('path file mancante');
       if (!created.file_meta.size) return fail('size file mancante');
-      const dataFile = path.join(functionsDir, '..', 'data', 'templates.json');
-      const uploadsDir = path.join(functionsDir, '..', 'data', 'templates_uploads');
-      const tmpUploadsDir = path.join(os.tmpdir(), 'certouser_templates_uploads');
-      cleanups.push(() => {
-        try {
-          fs.rmSync(dataFile, { force: true });
-        } catch (err) {
-          // ignore
-        }
-        try {
-          fs.rmSync(uploadsDir, { recursive: true, force: true });
-        } catch (err) {
-          // ignore
-        }
-        try {
-          fs.rmSync(tmpUploadsDir, { recursive: true, force: true });
-        } catch (err) {
-          // ignore
-        }
-      });
       return ok('template con file caricato');
     }
   }
@@ -929,6 +974,116 @@ async function runScenario(scenario) {
   if (!event.queryStringParameters) event.queryStringParameters = {};
   const response = await handler(event, {});
   return scenario.validate(response);
+}
+
+function collectIdentityTargets() {
+  const targets = [
+    path.join(projectRoot, 'index.html'),
+    path.join(projectRoot, 'login', 'index.html')
+  ];
+
+  const modulesDir = path.join(projectRoot, 'modules');
+  if (fs.existsSync(modulesDir)) {
+    const entries = fs.readdirSync(modulesDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const moduleIndex = path.join(modulesDir, entry.name, 'index.html');
+      if (fs.existsSync(moduleIndex)) {
+        targets.push(moduleIndex);
+      }
+    }
+  }
+
+  return targets;
+}
+
+function checkIdentitySetup() {
+  const results = [];
+  const htmlTargets = collectIdentityTargets();
+  const widgetSnippet = 'https://identity.netlify.com/v1/netlify-identity-widget.js';
+  const moduleSnippet = '/assets/js/identity.js';
+
+  for (const file of htmlTargets) {
+    const rel = path.relative(projectRoot, file);
+    try {
+      const content = fs.readFileSync(file, 'utf8');
+      const hasWidget = content.includes(widgetSnippet);
+      const hasModule = content.includes(moduleSnippet);
+      if (hasWidget && hasModule) {
+        results.push({ target: rel, ok: true, details: 'widget e modulo inclusi' });
+      } else {
+        const missing = [];
+        if (!hasWidget) missing.push('widget Identity');
+        if (!hasModule) missing.push('modulo identity.js');
+        results.push({ target: rel, ok: false, message: `manca ${missing.join(' e ')}` });
+      }
+    } catch (error) {
+      results.push({ target: rel, ok: false, message: `impossibile leggere file (${error.message})` });
+    }
+  }
+
+  const identityPath = path.join(projectRoot, 'assets', 'js', 'identity.js');
+  const relIdentityPath = path.relative(projectRoot, identityPath);
+  try {
+    const content = fs.readFileSync(identityPath, 'utf8');
+    const hasInit = /widget\.init\(\s*\{\s*APIUrl:\s*apiUrl\s*\}\s*\)/.test(content);
+    const hasRelative = content.includes('/.netlify/identity');
+    const usesOrigin = content.includes('w.location.origin');
+    if (hasInit && hasRelative && usesOrigin) {
+      results.push({ target: relIdentityPath, ok: true, details: 'APIUrl dinamico sul dominio corrente' });
+    } else {
+      const missing = [];
+      if (!hasInit) missing.push('init APIUrl');
+      if (!hasRelative) missing.push('riferimento /.netlify/identity');
+      if (!usesOrigin) missing.push('uso window.location.origin');
+      results.push({ target: relIdentityPath, ok: false, message: `config Identity incompleta (${missing.join(', ')})` });
+    }
+  } catch (error) {
+    results.push({ target: relIdentityPath, ok: false, message: `impossibile leggere file (${error.message})` });
+  }
+
+  const redirectsPath = path.join(projectRoot, '_redirects');
+  const relRedirects = path.relative(projectRoot, redirectsPath);
+  if (fs.existsSync(redirectsPath)) {
+    try {
+      const content = fs.readFileSync(redirectsPath, 'utf8');
+      const lines = content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const conflicts = lines.filter((line) => line.includes('/.netlify/identity'));
+      if (conflicts.length > 0) {
+        results.push({ target: relRedirects, ok: false, message: 'contiene redirect su /.netlify/identity (potenziale conflitto)' });
+      } else {
+        results.push({ target: relRedirects, ok: true, details: 'nessun redirect che interferisce con Identity' });
+      }
+    } catch (error) {
+      results.push({ target: relRedirects, ok: false, message: `impossibile leggere file (${error.message})` });
+    }
+  } else {
+    results.push({ target: relRedirects || '_redirects', ok: true, details: 'nessun file _redirects, nessun conflitto' });
+  }
+
+  const netlifyTomlPath = path.join(projectRoot, 'netlify.toml');
+  const relNetlifyToml = path.relative(projectRoot, netlifyTomlPath);
+  if (fs.existsSync(netlifyTomlPath)) {
+    try {
+      const content = fs.readFileSync(netlifyTomlPath, 'utf8');
+      const hasBuild = /\[build\]/.test(content);
+      const hasPublish = /publish\s*=\s*['"]\./.test(content);
+      if (hasBuild && hasPublish) {
+        results.push({ target: relNetlifyToml, ok: true, details: 'configurazione build Netlify valida per dominio principale' });
+      } else {
+        const missing = [];
+        if (!hasBuild) missing.push('[build]');
+        if (!hasPublish) missing.push('publish="."');
+        results.push({ target: relNetlifyToml, ok: false, message: `configurazione Netlify incompleta (${missing.join(', ')})` });
+      }
+    } catch (error) {
+      results.push({ target: relNetlifyToml, ok: false, message: `impossibile leggere file (${error.message})` });
+    }
+  } else {
+    results.push({ target: relNetlifyToml || 'netlify.toml', ok: false, message: 'netlify.toml mancante' });
+  }
+
+  return results;
 }
 
 async function main() {
@@ -953,7 +1108,10 @@ async function main() {
     }
   }
 
-  const totalFailures = jsonFailures.length + apiResults.filter((item) => !item.ok).length;
+  const identityResults = checkIdentitySetup();
+  const totalFailures = jsonFailures.length
+    + apiResults.filter((item) => !item.ok).length
+    + identityResults.filter((item) => !item.ok).length;
 
   console.log('JSON files check:');
   jsonResults.forEach((item) => {
@@ -970,6 +1128,15 @@ async function main() {
       console.log(`  ✓ ${item.scenario}${item.details ? ` → ${item.details}` : ''}`);
     } else {
       console.log(`  ✗ ${item.scenario} → ${item.message}`);
+    }
+  });
+
+  console.log('\nIdentity setup check:');
+  identityResults.forEach((item) => {
+    if (item.ok) {
+      console.log(`  ✓ ${item.target}${item.details ? ` → ${item.details}` : ''}`);
+    } else {
+      console.log(`  ✗ ${item.target} → ${item.message}`);
     }
   });
 
