@@ -2,6 +2,7 @@ import { allCustomers, allCER, saveCER, uid, progressCERs, saveProgressCERs, sav
 import { saveDocFile, statutoTemplate, regolamentoTemplate, attoCostitutivoTemplate, adesioneTemplate, delegaGSETemplate, contrattoTraderTemplate, informativaGDPRTemplate, accordoProduttoreProsumerTemplate } from './docs.js';
 import { identityReady, getSessionSync } from './identity.js';
 import { STATE as CRONO_STATE, initCronoprogrammaUI, renderCronoprogramma } from './cronoprogramma.js?v=36';
+import { safeGuardAction, isDryRunResult } from './safe.js';
 
 const API_BASE = '/api';
 const CER_TEMPLATE_MODULES = new Set(['cer', 'contratti']);
@@ -384,6 +385,18 @@ window.addEventListener('storage', (event) => {
     updatePlantOwnerOptions();
     updateCerValidationUI();
   }
+});
+
+window.addEventListener('crm:customers-changed', (event) => {
+  const payload = event?.detail?.customers;
+  if (Array.isArray(payload)) {
+    customers = payload.map((customer) => ({ ...customer }));
+  } else {
+    customers = allCustomers();
+  }
+  renderMembersPicker();
+  updatePlantOwnerOptions();
+  updateCerValidationUI();
 });
 
 function init() {

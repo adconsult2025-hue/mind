@@ -9,9 +9,17 @@ if (typeof window !== 'undefined') {
   })();
   window.__SAFE_MODE__ = safeModeFlag;
   let toastContainer;
-  const SIMULATORI_MODULE = 'simulatori';
-  const PREVENTIVI_MODULE = 'preventivi';
-  const CORE_NAV_MODULES = [SIMULATORI_MODULE, PREVENTIVI_MODULE];
+  const NAV_MODULE_CONFIG = {
+    simulatori: {
+      label: 'SIMULATORI',
+      href: '/modules/simulatori/index.html'
+    },
+    preventivi: {
+      label: 'PREVENTIVI',
+      href: '/modules/preventivi/index.html'
+    }
+  };
+  const CORE_NAV_MODULES = Object.keys(NAV_MODULE_CONFIG);
 
   ['DEFAULT_VISIBLE_MODULES', 'VISIBLE_MODULES'].forEach((prop) => {
     const list = window[prop];
@@ -31,21 +39,31 @@ if (typeof window !== 'undefined') {
       el.textContent = BRAND_NAME;
     });
 
-    const navItems = document.querySelectorAll('.nav-item');
+    const navRoot = document.querySelector('.main-nav');
+    if (navRoot) {
+      CORE_NAV_MODULES.forEach((moduleName) => ensureNavItem(navRoot, moduleName));
+    }
+
+    const navItems = (navRoot || document).querySelectorAll('.nav-item');
     if (navItems.length) {
       const featureFlags = window.FEATURE_FLAGS || {};
-      CORE_NAV_MODULES.forEach((moduleName) => {
-        const navElements = document.querySelectorAll(`[data-module="${moduleName}"]`);
-        if (!navElements.length) return;
+      navItems.forEach((link) => {
+        const moduleName = link.getAttribute('data-module');
+        if (!moduleName) return;
         const permissionName = `${moduleName}:view`;
         const allowed = hasModuleAccess(permissionName, moduleName);
-        const disabled = featureFlags[moduleName] === false || !allowed;
-        if (disabled) {
-          navElements.forEach((el) => el.remove());
-        }
+        const featureDisabled = featureFlags[moduleName] === false;
+        const isCoreModule = CORE_NAV_MODULES.includes(moduleName);
+        const shouldDisable = !allowed || (featureDisabled && !isCoreModule);
+        const reason = !allowed
+          ? 'Sezione non abilitata per il tuo profilo.'
+          : (featureDisabled && !isCoreModule)
+            ? 'Modulo disattivato per questa istanza.'
+            : '';
+        setNavItemDisabled(link, shouldDisable, reason);
       });
 
-      const path = window.location.pathname;
+      const path = window.location.pathname || '';
       navItems.forEach((link) => {
         const moduleName = link.getAttribute('data-module');
         if (!moduleName) return;
@@ -83,6 +101,58 @@ if (typeof window !== 'undefined') {
       toast.classList.add('hide');
       setTimeout(() => toast.remove(), 300);
     }, 4000);
+  }
+
+  function ensureNavItem(navRoot, moduleName) {
+    if (!navRoot || !moduleName) return [];
+    let existing = navRoot.querySelectorAll(`[data-module="${moduleName}"]`);
+    if (existing.length) return Array.from(existing);
+    const config = NAV_MODULE_CONFIG[moduleName];
+    if (!config) return [];
+    const link = document.createElement('a');
+    link.className = 'btn nav-item';
+    link.setAttribute('data-module', moduleName);
+    link.href = config.href;
+    link.textContent = config.label;
+    const hubLink = navRoot.querySelector('.btn.ghost');
+    navRoot.insertBefore(link, hubLink || null);
+    existing = navRoot.querySelectorAll(`[data-module="${moduleName}"]`);
+    return Array.from(existing);
+  }
+
+  function navDisabledClickHandler(event) {
+    const target = event.currentTarget;
+    if (!target || target.dataset.navDisabled !== 'true') return;
+    event.preventDefault();
+    event.stopPropagation();
+    const reason = target.dataset.navDisabledReason;
+    if (reason) {
+      showToast(reason);
+    }
+  }
+
+  function setNavItemDisabled(element, disabled, reason = '') {
+    if (!element) return;
+    if (disabled) {
+      element.classList.add('nav-item-disabled');
+      element.setAttribute('aria-disabled', 'true');
+      element.dataset.navDisabled = 'true';
+      if (reason) {
+        element.dataset.navDisabledReason = reason;
+        element.title = reason;
+      } else {
+        delete element.dataset.navDisabledReason;
+        element.removeAttribute('title');
+      }
+      element.addEventListener('click', navDisabledClickHandler);
+    } else {
+      element.classList.remove('nav-item-disabled');
+      element.removeAttribute('aria-disabled');
+      element.dataset.navDisabled = 'false';
+      delete element.dataset.navDisabledReason;
+      element.removeAttribute('title');
+      element.removeEventListener('click', navDisabledClickHandler);
+    }
   }
 
   function hasModuleAccess(permissionName, moduleName) {

@@ -144,6 +144,18 @@ img {
   white-space: nowrap;
 }
 
+.nav-item-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: saturate(0.6);
+}
+
+.nav-item-disabled:hover,
+.nav-item-disabled:focus-visible {
+  transform: none;
+  text-decoration: none;
+}
+
 .header-actions {
   display: flex;
   align-items: center;

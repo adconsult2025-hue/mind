@@ -1,5 +1,6 @@
 import { STATE as CRONO_STATE } from './cronoprogramma.js?v=36';
 import { apiFetch } from './api.js?v=36';
+import { safeGuardAction, isDryRunResult } from './safe.js';
 
 const API_BASE = '/api';
 
