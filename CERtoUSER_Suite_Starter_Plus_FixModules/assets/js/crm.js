@@ -1,4 +1,4 @@
-import { allCustomers, saveCustomers, uid, progressCustomers, saveProgressCustomers } from './storage.js';
+import { allCustomers, saveCustomers, uid, progressCustomers, saveProgressCustomers, allCER } from './storage.js';
 import { STATE as CRONO_STATE } from './cronoprogramma.js?v=36';
 import { safeGuardAction } from './safe.js';
 
@@ -26,6 +26,12 @@ const clientCronoCard = document.getElementById('client-crono-card');
 const clientCronoTable = document.getElementById('client-crono-docs');
 const clientCronoEmpty = document.getElementById('client-crono-empty');
 const clientCronoButtons = document.querySelectorAll('[data-doc-upload][data-entity="client"]');
+const createCerBtn = document.getElementById('btn-create-cer');
+const clearSelectionBtn = document.getElementById('btn-clear-selection');
+const cerListContainer = document.getElementById('customer-cer-list');
+const cerEmptyState = document.getElementById('customer-cer-empty');
+const plantListContainer = document.getElementById('customer-plant-list');
+const plantEmptyState = document.getElementById('customer-plant-empty');
 
 const state = {
   modal: document.getElementById('modal-consumi'),
@@ -55,6 +61,8 @@ const state = {
 let customers = allCustomers();
 let selectedCustomer = null;
 const clientDocsStore = new Map();
+let cerCache = allCER();
+const selectedForCer = new Set();
 
 function emitCustomersChanged(list = customers) {
   if (typeof window === 'undefined') return;
@@ -229,6 +237,47 @@ function formatKwh(value) {
   return `${num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kWh`;
 }
 
+function formatKwp(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  return `${num.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kWp`;
+}
+
+function formatMonthLabel(value) {
+  if (value === null || value === undefined || value === '') return '—';
+  const str = String(value);
+  if (/^\d{4}-\d{2}$/.test(str)) {
+    return formatMonthLabel(str.split('-')[1]);
+  }
+  const normalized = str.padStart(2, '0');
+  const monthIndex = Number(normalized);
+  if (Number.isFinite(monthIndex) && monthIndex >= 1 && monthIndex <= 12) {
+    const date = new Date(Date.UTC(2025, monthIndex - 1, 1));
+    return date.toLocaleDateString('it-IT', { month: 'long' });
+  }
+  return str;
+}
+
+function consumptionPeriodTimestamp(entry = {}) {
+  const period = String(entry.period || entry.reference_period || '') || '';
+  if (/^\d{4}-\d{2}$/.test(period)) {
+    const [y, m] = period.split('-').map((part) => Number(part));
+    if (Number.isFinite(y) && Number.isFinite(m)) {
+      return Date.UTC(y, m - 1, 1);
+    }
+  }
+  const year = Number(entry.year || entry.anno);
+  const month = Number(entry.month || entry.mese);
+  if (Number.isFinite(year) && Number.isFinite(month)) {
+    return Date.UTC(year, month - 1, 1);
+  }
+  if (Number.isFinite(year)) {
+    return Date.UTC(year, 0, 1);
+  }
+  return 0;
+}
+
 function formatEuro(value) {
   if (value === null || value === undefined || value === '') return '—';
   return Number(value).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
@@ -263,6 +312,9 @@ function rowHeader() {
   const r = document.createElement('div');
   r.className = 'row header';
   r.innerHTML = `
+    <div class="select">
+      <input type="checkbox" id="select-all-clients" aria-label="Seleziona tutti i clienti visibili" />
+    </div>
     <div>Cliente</div>
     <div>POD</div>
     <div>Comune</div>
@@ -271,6 +323,50 @@ function rowHeader() {
     <div>Azioni</div>
   `;
   return r;
+}
+
+function toggleCustomerSelection(customerId, isSelected) {
+  const key = String(customerId || '');
+  if (!key) return;
+  if (isSelected) {
+    selectedForCer.add(key);
+  } else {
+    selectedForCer.delete(key);
+  }
+  if (listEl) {
+    render();
+  } else {
+    updateSelectionActionsState();
+  }
+}
+
+function clearCustomerSelection() {
+  if (!selectedForCer.size) return;
+  selectedForCer.clear();
+  if (listEl) {
+    render();
+  } else {
+    updateSelectionActionsState();
+  }
+}
+
+function updateSelectionActionsState() {
+  const count = selectedForCer.size;
+  if (createCerBtn) {
+    const baseLabel = 'Configura CER';
+    createCerBtn.disabled = count === 0;
+    createCerBtn.textContent = count ? `${baseLabel} (${count})` : baseLabel;
+    if (count && count < 3) {
+      createCerBtn.title = 'Seleziona almeno 3 clienti (incluso un Prosumer o Produttore) per una CER completa.';
+    } else if (count) {
+      createCerBtn.title = 'Apri la configurazione CER con i clienti selezionati.';
+    } else {
+      createCerBtn.title = 'Seleziona i clienti dal CRM per configurare una nuova CER.';
+    }
+  }
+  if (clearSelectionBtn) {
+    clearSelectionBtn.disabled = count === 0;
+  }
 }
 
 function renderCustProgress(c) {
@@ -312,7 +408,13 @@ function renderCustProgress(c) {
 function rowItem(c) {
   const r = document.createElement('div');
   r.className = 'row';
+  r.dataset.id = c.id;
+  const selected = selectedForCer.has(String(c.id));
+  if (selected) r.classList.add('selected');
   r.innerHTML = `
+    <div class="select">
+      <input type="checkbox" class="select-client" data-client="${c.id}" ${selected ? 'checked' : ''} aria-label="Seleziona ${escapeHtml(c.nome)}" />
+    </div>
     <div><strong>${c.nome}</strong><br/><small>${c.tipo} — ${c.email || ''} ${c.tel ? `· ${c.tel}` : ''}</small></div>
     <div><span class="badge blue">${c.pod}</span></div>
     <div>${c.comune || ''}</div>
@@ -332,6 +434,8 @@ function rowItem(c) {
     customers = customers.filter((x) => x.id !== c.id);
     saveCustomers(customers);
     emitCustomersChanged(customers);
+    selectedForCer.delete(String(c.id));
+    updateSelectionActionsState();
     render();
   };
   r.querySelector('[data-edit]').onclick = () => editCustomer(c);
@@ -352,6 +456,11 @@ function rowItem(c) {
     holder.appendChild(card);
     listEl.insertBefore(holder, r.nextSibling);
   };
+
+  const selectCb = r.querySelector('.select-client');
+  selectCb?.addEventListener('change', (event) => {
+    toggleCustomerSelection(c.id, event.target.checked);
+  });
 
   return r;
 }
@@ -374,13 +483,160 @@ function loadClientDetail(clientId) {
 }
 
 function render() {
-  const q = (searchEl?.value || '').toLowerCase().trim();
   if (!listEl) return;
+  const q = (searchEl?.value || '').toLowerCase().trim();
+  const visible = customers
+    .filter((c) => !q || [c.nome, c.pod, c.comune, c.cabina, c.tipo].some((x) => (x || '').toLowerCase().includes(q)));
+
+  const validIds = new Set(customers.map((c) => String(c.id)));
+  [...selectedForCer].forEach((id) => {
+    if (!validIds.has(id)) {
+      selectedForCer.delete(id);
+    }
+  });
+
   listEl.innerHTML = '';
   listEl.appendChild(rowHeader());
-  customers
-    .filter((c) => !q || [c.nome, c.pod, c.comune, c.cabina, c.tipo].some((x) => (x || '').toLowerCase().includes(q)))
-    .forEach((c) => listEl.appendChild(rowItem(c)));
+  visible.forEach((c) => listEl.appendChild(rowItem(c)));
+
+  const selectAll = listEl.querySelector('#select-all-clients');
+  if (selectAll) {
+    if (!visible.length) {
+      selectAll.checked = false;
+      selectAll.indeterminate = false;
+    } else {
+      const allSelected = visible.every((c) => selectedForCer.has(String(c.id)));
+      const someSelected = visible.some((c) => selectedForCer.has(String(c.id)));
+      selectAll.checked = allSelected;
+      selectAll.indeterminate = !allSelected && someSelected;
+    }
+    selectAll.addEventListener('change', () => {
+      if (selectAll.checked) {
+        visible.forEach((c) => selectedForCer.add(String(c.id)));
+      } else {
+        visible.forEach((c) => selectedForCer.delete(String(c.id)));
+      }
+      updateSelectionActionsState();
+      render();
+    });
+  }
+
+  updateSelectionActionsState();
+}
+
+function getCustomerCerMemberships(customerId) {
+  const key = String(customerId || '');
+  if (!key) return [];
+  return (Array.isArray(cerCache) ? cerCache : [])
+    .filter((cer) => Array.isArray(cer?.membri) && cer.membri.some((member) => String(member.id) === key))
+    .map((cer) => {
+      const member = cer.membri.find((m) => String(m.id) === key) || {};
+      return {
+        cerId: cer.id,
+        nome: cer.nome || 'CER',
+        ruolo: member.ruolo || member.role || 'Membro',
+        cabina: cer.cabina || '',
+        membri: Array.isArray(cer.membri) ? cer.membri.length : 0,
+      };
+    });
+}
+
+function getCustomerPlants(customerId) {
+  const key = String(customerId || '');
+  if (!key) return [];
+  const result = [];
+  (Array.isArray(cerCache) ? cerCache : []).forEach((cer) => {
+    const membri = Array.isArray(cer?.membri) ? cer.membri : [];
+    const impianti = Array.isArray(cer?.impianti) ? cer.impianti : [];
+    const member = membri.find((m) => String(m.id) === key) || null;
+    impianti.forEach((plant) => {
+      const ownerId = String(plant.titolareId || plant.titolare_id || '');
+      if (ownerId === key) {
+        result.push({
+          id: plant.id,
+          nome: plant.nome || 'Impianto',
+          cerId: cer.id,
+          cerNome: cer.nome || 'CER',
+          potenza: plant.potenza_kwp ?? plant.potenza ?? plant.kw ?? null,
+          ruolo: plant.titolareRuolo || plant.titolare_ruolo || member?.ruolo || '',
+        });
+      }
+    });
+  });
+  return result;
+}
+
+function renderCustomerAssociations(customer) {
+  if (!customer) {
+    if (cerListContainer) cerListContainer.innerHTML = '';
+    if (cerEmptyState) cerEmptyState.hidden = false;
+    if (plantListContainer) plantListContainer.innerHTML = '';
+    if (plantEmptyState) plantEmptyState.hidden = false;
+    return;
+  }
+  const key = String(customer.id || '');
+  if (!key) return;
+  const current = customers.find((c) => String(c.id) === key) || customer;
+  if (current && selectedCustomer && String(selectedCustomer.id) === key) {
+    selectedCustomer = current;
+  }
+
+  const memberships = getCustomerCerMemberships(key);
+  if (cerListContainer) {
+    cerListContainer.innerHTML = '';
+    if (!memberships.length) {
+      if (cerEmptyState) cerEmptyState.hidden = false;
+    } else {
+      memberships.forEach((entry) => {
+        const li = document.createElement('li');
+        const cabinaLabel = entry.cabina ? ` · Cabina ${escapeHtml(entry.cabina)}` : '';
+        const membersLabel = entry.membri ? ` · ${entry.membri} membri` : '';
+        const roleLabel = escapeHtml(entry.ruolo || 'Membro');
+        const href = `/modules/cer/index.html?cer_id=${encodeURIComponent(entry.cerId)}`;
+        li.innerHTML = `
+          <div class="row-between">
+            <div>
+              <strong>${escapeHtml(entry.nome)}</strong><br/>
+              <small>Ruolo: ${roleLabel}${membersLabel}${cabinaLabel}</small>
+            </div>
+            <div class="actions">
+              <a class="btn ghost" href="${href}">Apri CER</a>
+            </div>
+          </div>
+        `;
+        cerListContainer.appendChild(li);
+      });
+      if (cerEmptyState) cerEmptyState.hidden = true;
+    }
+  }
+
+  const plants = getCustomerPlants(key);
+  if (plantListContainer) {
+    plantListContainer.innerHTML = '';
+    if (!plants.length) {
+      if (plantEmptyState) plantEmptyState.hidden = false;
+    } else {
+      plants.forEach((entry) => {
+        const li = document.createElement('li');
+        const potenzaLabel = formatKwp(entry.potenza);
+        const role = entry.ruolo ? escapeHtml(entry.ruolo) : 'Titolare';
+        const href = `/modules/impianti/index.html?plant_id=${encodeURIComponent(entry.id)}&cer_id=${encodeURIComponent(entry.cerId)}`;
+        li.innerHTML = `
+          <div class="row-between">
+            <div>
+              <strong>${escapeHtml(entry.nome)}</strong><br/>
+              <small>${escapeHtml(entry.cerNome)} · Ruolo: ${role}${potenzaLabel ? ` · ${potenzaLabel}` : ''}</small>
+            </div>
+            <div class="actions">
+              <a class="btn ghost" href="${href}">Apri impianto</a>
+            </div>
+          </div>
+        `;
+        plantListContainer.appendChild(li);
+      });
+      if (plantEmptyState) plantEmptyState.hidden = true;
+    }
+  }
 }
 
 function openCustomerDetail(c) {
@@ -418,6 +674,7 @@ function openCustomerDetail(c) {
   if (clientCronoCard) {
     clientCronoCard.hidden = false;
   }
+  renderCustomerAssociations(c);
   renderClientDocs(c.id);
   loadClientDocs(c.id);
   loadConsumiForDetail(c.id);
@@ -431,6 +688,10 @@ function closeCustomerDetail() {
   if (clientCronoEmpty) clientCronoEmpty.hidden = false;
   if (clientCronoCard) clientCronoCard.hidden = true;
   CRONO_STATE.currentClientId = null;
+  if (cerListContainer) cerListContainer.innerHTML = '';
+  if (cerEmptyState) cerEmptyState.hidden = true;
+  if (plantListContainer) plantListContainer.innerHTML = '';
+  if (plantEmptyState) plantEmptyState.hidden = true;
 }
 
 function clientDocStatusBadge(status = 'uploaded') {
@@ -522,30 +783,34 @@ function handleClientDocEvent(detail) {
 
 async function loadConsumiForDetail(clientId) {
   if (!consumiHistory) return;
-  consumiHistory.innerHTML = '<tr><td colspan="5">Caricamento…</td></tr>';
+  consumiHistory.innerHTML = '<tr><td colspan="6">Caricamento…</td></tr>';
   try {
     const res = await fetch(`${API_BASE}/consumi?client_id=${encodeURIComponent(clientId)}`);
     const payload = await res.json();
     if (!res.ok || payload.ok === false) throw new Error(payload.error?.message || 'Errore caricamento consumi');
     renderConsumiHistoryTable(Array.isArray(payload.data) ? payload.data : []);
   } catch (err) {
-    consumiHistory.innerHTML = `<tr><td colspan="5" class="error-text">${err.message || 'Errore caricamento consumi'}</td></tr>`;
+    consumiHistory.innerHTML = `<tr><td colspan="6" class="error-text">${err.message || 'Errore caricamento consumi'}</td></tr>`;
   }
 }
 
 function renderConsumiHistoryTable(rows) {
   if (!consumiHistory) return;
-  const sorted = [...rows].sort((a, b) => Number(b.year || b.anno || 0) - Number(a.year || a.anno || 0));
+  const sorted = [...rows].sort((a, b) => consumptionPeriodTimestamp(b) - consumptionPeriodTimestamp(a));
   if (!sorted.length) {
-    consumiHistory.innerHTML = '<tr><td colspan="5">Nessun dato disponibile.</td></tr>';
+    consumiHistory.innerHTML = '<tr><td colspan="6">Nessun dato disponibile.</td></tr>';
     return;
   }
   consumiHistory.innerHTML = '';
   sorted.forEach(item => {
     const tr = document.createElement('tr');
-    const year = item.year || item.anno;
+    const period = String(item.period || item.reference_period || '') || null;
+    const year = item.year || item.anno || (period && period.includes('-') ? period.split('-')[0] : '');
+    const rawMonth = item.month || item.mese || (period && period.includes('-') ? period.split('-')[1] : period);
+    const monthLabel = formatMonthLabel(rawMonth);
     tr.innerHTML = `
       <td>${year}</td>
+      <td>${monthLabel}</td>
       <td>${formatKwh(item.f1_kwh)}</td>
       <td>${formatKwh(item.f2_kwh)}</td>
       <td>${formatKwh(item.f3_kwh)}</td>
@@ -1124,6 +1389,35 @@ if (importBillBtn) {
   });
 }
 
+if (createCerBtn) {
+  createCerBtn.addEventListener('click', () => {
+    const ids = Array.from(selectedForCer);
+    if (!ids.length) {
+      notify('Seleziona almeno un cliente dal CRM per configurare la CER.');
+      return;
+    }
+    const producers = ids.filter((id) => {
+      const customer = customers.find((c) => String(c.id) === id);
+      const role = String(customer?.ruolo || '').toLowerCase();
+      return role === 'prosumer' || role === 'produttore';
+    });
+    if (!producers.length) {
+      notify('Ricorda di includere almeno un cliente con ruolo Prosumer o Produttore nella selezione.');
+    }
+    if (ids.length < 3) {
+      notify('Per creare una CER completa servono almeno 3 clienti. Potrai aggiungerli nella schermata successiva.');
+    }
+    const url = `/modules/cer/index.html?prefill_members=${encodeURIComponent(ids.join(','))}`;
+    window.location.href = url;
+  });
+}
+
+if (clearSelectionBtn) {
+  clearSelectionBtn.addEventListener('click', () => {
+    clearCustomerSelection();
+  });
+}
+
 if (detailCloseBtn) {
   detailCloseBtn.addEventListener('click', closeCustomerDetail);
 }
@@ -1191,7 +1485,25 @@ window.addEventListener('storage', (event) => {
     customers = allCustomers();
     emitCustomersChanged(customers);
     render();
+    if (selectedCustomer) renderCustomerAssociations(selectedCustomer);
   }
+  if (event.key === 'cers') {
+    cerCache = allCER();
+    if (selectedCustomer) renderCustomerAssociations(selectedCustomer);
+  }
+});
+
+window.addEventListener('cer:cers-changed', (event) => {
+  const payload = event?.detail?.cers;
+  if (Array.isArray(payload)) {
+    cerCache = payload.map((cer) => ({ ...cer }));
+  } else {
+    cerCache = allCER();
+  }
+  if (selectedCustomer) {
+    renderCustomerAssociations(selectedCustomer);
+  }
+  updateSelectionActionsState();
 });
 
 if (typeof document !== 'undefined') {

@@ -157,6 +157,7 @@ let cerTemplatesLastErrorAt = 0;
 let cerTemplatesFallbackActive = false;
 let cerTemplatesErrorToastShown = false;
 let normalizedFallbackCerTemplates = null;
+let prefillMemberIds = null;
 const CER_TEMPLATES_RETRY_DELAY = 5 * 60 * 1000;
 const CER_TEMPLATES_FALLBACK_MESSAGE = 'Modelli CER non disponibili dal server. Uso dei modelli locali.';
 const cerDocsStore = new Map();
@@ -179,6 +180,16 @@ const energyAccess = {
 };
 
 let identitySession = null;
+
+function emitCerChanged() {
+  if (typeof window === 'undefined') return;
+  try {
+    const snapshot = cers.map((cer) => ({ ...cer }));
+    window.dispatchEvent(new CustomEvent('cer:cers-changed', { detail: { cers: snapshot } }));
+  } catch (err) {
+    console.warn('Impossibile notificare aggiornamento CER', err);
+  }
+}
 
 const DOC_TEMPLATE_UPLOADS = [
   { key: 'statuto', label: 'Modello Statuto (HTML)', displayName: 'lo Statuto' },
@@ -384,6 +395,10 @@ window.addEventListener('storage', (event) => {
     renderMembersPicker();
     updatePlantOwnerOptions();
     updateCerValidationUI();
+  } else if (event.key === 'cers') {
+    cers = allCER();
+    renderCERList();
+    refreshCerOptions();
   }
 });
 
@@ -431,8 +446,19 @@ function init() {
   plantModalKwp = document.getElementById('cer-plant-modal-kwp');
   plantModalFeedback = document.getElementById('cer-plant-modal-feedback');
 
+  const params = new URLSearchParams(window.location.search);
   customers = allCustomers();
   cers = allCER();
+
+  const prefillMembersParam = params.get('prefill_members');
+  let shouldScrollToForm = false;
+  if (prefillMembersParam) {
+    const ids = prefillMembersParam.split(',').map((id) => id.trim()).filter(Boolean);
+    if (ids.length) {
+      prefillMemberIds = new Set(ids);
+      shouldScrollToForm = true;
+    }
+  }
 
   if (form) {
     formSubmitBtn = form.querySelector('button[type="submit"]');
@@ -441,6 +467,9 @@ function init() {
     renderMembersPicker();
     renderCERList();
     if (searchEl) searchEl.oninput = renderCERList;
+    if (shouldScrollToForm) {
+      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 
   detailAddMemberBtn?.addEventListener('click', () => openMemberModal(detailCard?.dataset.cerId || ''));
@@ -499,7 +528,6 @@ function init() {
     syncEnergyAccess(identitySession);
   });
 
-  const params = new URLSearchParams(window.location.search);
   const cerId = params.get('cer_id');
   if (cerId) {
     loadCerDetail(cerId);
@@ -789,6 +817,7 @@ function bindCerForm() {
     }
 
     saveCER(cers);
+    emitCerChanged();
     renderCERList();
     showCerCard(normalizedCer.id, { scroll: !editingId });
     refreshCerOptions();
@@ -1040,6 +1069,9 @@ function renderMembersPicker() {
     if (cb && previous?.checked) {
       cb.checked = true;
     }
+    if (cb && prefillMemberIds?.has(customerId)) {
+      cb.checked = true;
+    }
     if (roleSel) {
       roleSel.value = defaultRole;
     }
@@ -1049,6 +1081,9 @@ function renderMembersPicker() {
       handleMemberChange();
     });
   });
+  if (prefillMemberIds) {
+    prefillMemberIds = null;
+  }
   handleMemberChange();
 }
 
@@ -1090,6 +1125,7 @@ function renderCERList() {
         if (!confirm('Eliminare la CER?')) return;
         cers = cers.filter(x => x.id !== cer.id);
         saveCER(cers);
+        emitCerChanged();
         renderCERList();
         refreshCerOptions();
       };
@@ -1528,6 +1564,7 @@ function updateCerRecord(cerId, updater) {
   const normalized = normalizeCerData(draft);
   cers[index] = normalized;
   saveCER(cers);
+  emitCerChanged();
   renderCERList();
   renderCerDetailCard(normalized, { skipHistory: true });
   if (form?.dataset.editing === normalized.id) {
