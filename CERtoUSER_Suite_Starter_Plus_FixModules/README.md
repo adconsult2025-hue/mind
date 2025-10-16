@@ -2,14 +2,25 @@
 
 Questa repository contiene la versione starter della suite MIND per la gestione integrata di CRM, CER, impianti e documentazione demo.
 
-## Netlify Functions e Identity
+## Autenticazione con Firebase
 
-La cartella `netlify/functions/` contiene tutte le funzioni serverless utilizzate dalla suite, inclusa `whoami.js` che restituisce i dati dell'utente autenticato tramite Netlify Identity. Dopo aver collegato il sito a Netlify ed abilitato Identity, puoi verificare che le sessioni vengano riconosciute visitando uno di questi endpoint:
+La suite utilizza ora Firebase Authentication per proteggere hub, moduli e API serverless. Ogni utente autenticato riceve i ruoli associati al proprio profilo (Superadmin, Admin, Agente, Resp. CER, Prosumer, Produttore, Consumer) e l'interfaccia abilita automaticamente le funzionalità pertinenti.
 
-* `/.netlify/functions/whoami`
-* `/api/whoami` (grazie alla rewrite definita in `_redirects`)
+1. **Configura il client** — compila `config/firebase-config.js` con le credenziali del progetto Firebase (apiKey, authDomain, projectId, appId). Il file fornisce l'oggetto `window.__FIREBASE_CONFIG__` consumato dai moduli front-end.
+2. **Configura le funzioni Netlify** — imposta la variabile d'ambiente `FIREBASE_SERVICE_ACCOUNT` con il JSON del service account (preferibilmente Base64-encoded) per permettere alle funzioni di verificare gli ID token (`firebase-admin` viene inizializzato automaticamente).
+3. **Assegna i ruoli** — utilizza i custom claims di Firebase per aggiungere l'array `roles` all'utente. I mapping supportano alias comuni (`resp_cer`, `cer_manager`, `producer`, `member`, ecc.) e gestiscono l'ereditarietà (es. il Superadmin eredita i permessi Admin/Agente).
 
-Entrambe le rotte risponderanno con un JSON che espone l'indirizzo email e i ruoli associati all'utente loggato. Se la risposta riporta `"auth": false`, significa che la chiamata non contiene un token valido e non è stata effettuata alcuna autenticazione.
+### Gestione utenti & ruoli
+
+I Superadmin possono amministrare gli account direttamente dall'interfaccia `/modules/utenti/`:
+
+- **Lista utenti** — la tabella mostra email, nome, ruoli e cabine autorizzate. Il pulsante "Aggiorna elenco" ricarica i dati tramite la funzione Netlify `admin-users`.
+- **Modifica profilo** — seleziona "Gestisci" per cambiare ruoli, territori, password iniziale o sospendere l'accesso. Solo i Superadmin (es. `adv.bg.david@gmail.com`) possono salvare le modifiche.
+- **Nuovo utente** — il form in fondo crea un utente Firebase con password iniziale e assegna i ruoli richiesti, applicando i custom claims `roles` e `territories`.
+
+Le chiamate alle API amministrative richiedono un ID token con ruolo `superadmin`; le modifiche propagano automaticamente i nuovi claims revocando i refresh token precedenti.
+
+L'endpoint `/.netlify/functions/whoami` restituisce le informazioni della sessione autenticata (email, ruoli e claims principali). Le pagine di login e le intestazioni mostrano lo stato della sessione e consentono il logout.
 
 ## Database Postgres
 

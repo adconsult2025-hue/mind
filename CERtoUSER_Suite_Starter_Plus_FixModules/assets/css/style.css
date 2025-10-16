@@ -173,6 +173,32 @@ img {
   padding: 0.35rem 0.75rem;
 }
 
+.session-controls .login-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+}
+
+.session-controls .login-status .session-info {
+  font-size: 0.8rem;
+  color: var(--brand-muted);
+}
+
+.session-controls .session-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.session-controls .session-actions .btn {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+}
+
 @media (max-width: 1024px) {
   .header-actions {
     flex-wrap: wrap;
@@ -1107,6 +1133,90 @@ body:not(.dark) .modal-panel {
 .toast-message.hide {
   opacity: 0;
   transform: translateY(8px);
+}
+
+.table-wrap.loading {
+  position: relative;
+  pointer-events: none;
+}
+
+.table-wrap.loading::after {
+  content: 'Caricamento…';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(11, 17, 20, 0.72);
+  backdrop-filter: blur(2px);
+  color: var(--brand-text);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.table-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.table-actions .btn {
+  padding: 0.35rem 0.85rem;
+  font-size: 0.8rem;
+}
+
+.info-banner {
+  margin-bottom: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border-left: 3px solid var(--brand-primary);
+}
+
+.role-options {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.role-option {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: rgba(12, 26, 31, 0.6);
+  border: 1px solid rgba(53, 201, 201, 0.18);
+}
+
+.role-option input[type='checkbox'] {
+  margin-top: 0.35rem;
+}
+
+.role-option strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.role-option small {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--brand-muted);
+}
+
+.role-options .role-option:hover {
+  border-color: rgba(53, 201, 201, 0.4);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.toggle input {
+  width: 1.1rem;
+  height: 1.1rem;
 }
 
 /* --- CT3 --- */

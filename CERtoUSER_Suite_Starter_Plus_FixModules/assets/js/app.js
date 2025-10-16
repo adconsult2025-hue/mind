@@ -1,3 +1,5 @@
+import { identityReady, getSessionSync, logout } from './identity.js';
+
 export const BRAND_NAME = 'MIND';
 
 const UNIVERSAL_PERMISSION_TOKENS = new Set([
@@ -28,6 +30,17 @@ const ADMIN_ROLE_TOKENS = new Set([
   'cer_manager'
 ]);
 
+const ROLE_LABELS = {
+  superadmin: 'Superadmin',
+  admin: 'Admin',
+  agente: 'Agente',
+  'resp-cer': 'Resp. CER',
+  prosumer: 'Prosumer',
+  produttore: 'Produttore',
+  consumer: 'Consumer',
+  authenticated: 'Autenticato'
+};
+
 if (typeof window !== 'undefined') {
   window.BRAND_NAME = BRAND_NAME;
   const safeModeFlag = (() => {
@@ -47,6 +60,10 @@ if (typeof window !== 'undefined') {
     preventivi: {
       label: 'PREVENTIVI',
       href: '/modules/preventivi/index.html'
+    },
+    utenti: {
+      label: 'UTENTI & RUOLI',
+      href: '/modules/utenti/index.html'
     }
   };
   const CORE_NAV_MODULES = Object.keys(NAV_MODULE_CONFIG);
@@ -55,10 +72,10 @@ if (typeof window !== 'undefined') {
     return typeof value === 'string' ? value.trim().toLowerCase() : '';
   }
 
-  function collectRoleTokens() {
+  function collectRoleTokens(sessionOverride) {
     const tokens = new Set();
     if (typeof window === 'undefined') return tokens;
-    const session = window.MIND_IDENTITY;
+    const session = sessionOverride || window.MIND_IDENTITY || (typeof getSessionSync === 'function' ? getSessionSync() : null);
     const user = session?.user;
     if (!user || typeof user !== 'object') return tokens;
     const sources = [
@@ -93,6 +110,8 @@ if (typeof window !== 'undefined') {
     return tokens;
   }
 
+  let sessionControlContainers = new Set();
+
   function collectTokensFromIterable(source) {
     const tokens = new Set();
     if (!source) return tokens;
@@ -112,6 +131,92 @@ if (typeof window !== 'undefined') {
       }
     }
     return tokens;
+  }
+
+  function formatRoleLabels(roleTokens) {
+    const labels = [];
+    if (!roleTokens) return labels;
+    const iterable = roleTokens instanceof Set ? roleTokens : new Set(roleTokens);
+    iterable.forEach((token) => {
+      const normalized = normalizeToken(token);
+      if (!normalized || normalized === 'authenticated') return;
+      const label = ROLE_LABELS[normalized] || token;
+      if (!labels.includes(label)) {
+        labels.push(label);
+      }
+    });
+    return labels;
+  }
+
+  function ensureSessionControls() {
+    if (typeof document === 'undefined') return [];
+    const containers = document.querySelectorAll('[data-session-controls]');
+    containers.forEach((container) => {
+      if (!(container instanceof HTMLElement)) return;
+      sessionControlContainers.add(container);
+      if (container.dataset.sessionBound === 'true') return;
+      container.dataset.sessionBound = 'true';
+      container.innerHTML = `
+        <div class="login-status" data-session-status>
+          <span class="badge muted" data-session-badge>Verifica accesso…</span>
+          <span class="session-info" data-session-info>Controllo credenziali in corso.</span>
+        </div>
+        <div class="session-actions">
+          <button type="button" class="btn ghost" data-action="logout" hidden>Esci</button>
+          <button type="button" class="btn" data-action="login">Accedi</button>
+        </div>
+      `;
+      const loginButton = container.querySelector('[data-action="login"]');
+      const logoutButton = container.querySelector('[data-action="logout"]');
+      if (loginButton) {
+        loginButton.addEventListener('click', () => {
+          const redirectTarget =
+            container.dataset.redirectTarget || `${window.location.pathname}${window.location.search || ''}`;
+          const url = `/login/index.html?redirect=${encodeURIComponent(redirectTarget || '/')}`;
+          window.location.assign(url);
+        });
+      }
+      if (logoutButton) {
+        logoutButton.addEventListener('click', () => {
+          logout().catch((error) => {
+            console.warn('[app] logout fallito:', error);
+          });
+        });
+      }
+    });
+    return Array.from(sessionControlContainers);
+  }
+
+  function updateSessionControls(session) {
+    const containers = ensureSessionControls();
+    if (!containers.length) return;
+    const roleTokens = collectRoleTokens(session);
+    const roleLabels = formatRoleLabels(roleTokens);
+
+    containers.forEach((container) => {
+      if (!(container instanceof HTMLElement)) return;
+      const badge = container.querySelector('[data-session-badge]');
+      const info = container.querySelector('[data-session-info]');
+      const loginButton = container.querySelector('[data-action="login"]');
+      const logoutButton = container.querySelector('[data-action="logout"]');
+      if (!badge || !info) return;
+
+      if (!session || !session.user) {
+        badge.className = 'badge warn';
+        badge.textContent = 'Accesso richiesto';
+        info.textContent = 'Accedi con le credenziali assegnate per proseguire.';
+        if (loginButton) loginButton.hidden = false;
+        if (logoutButton) logoutButton.hidden = true;
+      } else {
+        badge.className = 'badge green';
+        badge.textContent = 'Autenticato';
+        const displayName =
+          session.user.full_name || session.user.displayName || session.user.email || session.user.phone_number || 'Account';
+        info.textContent = roleLabels.length ? `${displayName} · ${roleLabels.join(', ')}` : displayName;
+        if (loginButton) loginButton.hidden = true;
+        if (logoutButton) logoutButton.hidden = false;
+      }
+    });
   }
 
   function buildModuleTokenSet(moduleName, permissionName) {
@@ -250,6 +355,13 @@ if (typeof window !== 'undefined') {
       el.textContent = BRAND_NAME;
     });
 
+    ensureSessionControls();
+    try {
+      updateSessionControls(getSessionSync?.());
+    } catch (error) {
+      console.warn('[app] impossibile inizializzare il pannello sessione:', error);
+    }
+
     navRootElement = document.querySelector('.main-nav');
     if (navRootElement) {
       CORE_NAV_MODULES.forEach((moduleName) => ensureNavItem(navRootElement, moduleName));
@@ -266,12 +378,18 @@ if (typeof window !== 'undefined') {
     initializeNavigation();
   }
 
-  const mindIdentityReady = window.MIND_IDENTITY_READY;
-  if (mindIdentityReady?.then) {
-    mindIdentityReady.then(() => runNavAccessEvaluation()).catch(() => {});
-  }
+  identityReady
+    .then((session) => {
+      updateSessionControls(session);
+      runNavAccessEvaluation();
+    })
+    .catch((error) => {
+      console.warn('[app] inizializzazione Identity fallita:', error);
+    });
 
-  window.addEventListener('mind:identity', () => {
+  window.addEventListener('mind:identity', (event) => {
+    const session = event?.detail?.session || (typeof getSessionSync === 'function' ? getSessionSync() : null);
+    updateSessionControls(session);
     runNavAccessEvaluation();
   });
 

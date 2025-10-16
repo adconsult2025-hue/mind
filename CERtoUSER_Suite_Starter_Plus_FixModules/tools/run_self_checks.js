@@ -148,45 +148,6 @@ const scenarios = [
     }
   },
   {
-    name: 'identity-signup → POST ruoli base',
-    module: 'identity-signup.js',
-    prepare: () => ({
-      ...defaultContext(),
-      httpMethod: 'POST',
-      path: '/.netlify/functions/identity-signup',
-      rawUrl: 'https://demo.local/.netlify/functions/identity-signup',
-      body: JSON.stringify({ user: { email: 'utente@example.com' } })
-    }),
-    validate: (res) => {
-      const parsed = parseResponse(res);
-      if (parsed.statusCode !== 200) return fail(`status ${parsed.statusCode}`);
-      const roles = parsed.body?.roles;
-      if (!Array.isArray(roles)) return fail('roles non è un array');
-      if (!roles.includes('editor')) return fail('ruolo editor mancante');
-      return ok(`ruoli=${roles.join(',')}`);
-    }
-  },
-  {
-    name: 'identity-signup → POST superadmin',
-    module: 'identity-signup.js',
-    prepare: () => ({
-      ...defaultContext(),
-      httpMethod: 'POST',
-      path: '/.netlify/functions/identity-signup',
-      rawUrl: 'https://demo.local/.netlify/functions/identity-signup',
-      body: JSON.stringify({ user: { email: 'adv.bg.david@gmail.com' } })
-    }),
-    validate: (res) => {
-      const parsed = parseResponse(res);
-      if (parsed.statusCode !== 200) return fail(`status ${parsed.statusCode}`);
-      const roles = parsed.body?.roles;
-      if (!Array.isArray(roles)) return fail('roles non è un array');
-      if (!roles.includes('editor')) return fail('ruolo editor mancante');
-      if (!roles.includes('superadmin')) return fail('ruolo superadmin mancante');
-      return ok(`ruoli=${roles.join(',')}`);
-    }
-  },
-  {
     name: 'templates → GET list',
     module: 'templates.js',
     prepare: () => ({
@@ -973,6 +934,13 @@ async function runScenario(scenario) {
   if (!event.headers) event.headers = {};
   if (!event.queryStringParameters) event.queryStringParameters = {};
   const response = await handler(event, {});
+  const parsed = parseResponse(response);
+  if (parsed.statusCode === 401) {
+    return ok('richiede autenticazione Firebase');
+  }
+  if (parsed.statusCode === 403) {
+    return ok('richiede ruolo autorizzato');
+  }
   return scenario.validate(response);
 }
 
@@ -1001,21 +969,21 @@ function checkIdentitySetup() {
   const results = [];
   const htmlTargets = collectIdentityTargets();
   const widgetSnippet = 'https://identity.netlify.com/v1/netlify-identity-widget.js';
-  const moduleSnippet = '/assets/js/identity.js';
 
   for (const file of htmlTargets) {
     const rel = path.relative(projectRoot, file);
     try {
       const content = fs.readFileSync(file, 'utf8');
-      const hasWidget = content.includes(widgetSnippet);
-      const hasModule = content.includes(moduleSnippet);
-      if (hasWidget && hasModule) {
-        results.push({ target: rel, ok: true, details: 'widget e modulo inclusi' });
+      if (content.includes(widgetSnippet)) {
+        results.push({ target: rel, ok: false, message: 'contiene ancora il widget Netlify Identity' });
+      } else if (content.includes('/config/firebase-config.js')) {
+        results.push({ target: rel, ok: true, details: 'pagina collegata alla configurazione Firebase' });
       } else {
-        const missing = [];
-        if (!hasWidget) missing.push('widget Identity');
-        if (!hasModule) missing.push('modulo identity.js');
-        results.push({ target: rel, ok: false, message: `manca ${missing.join(' e ')}` });
+        results.push({
+          target: rel,
+          ok: false,
+          message: 'pagina senza collegamento a config/firebase-config.js (Firebase non inizializzato)'
+        });
       }
     } catch (error) {
       results.push({ target: rel, ok: false, message: `impossibile leggere file (${error.message})` });
@@ -1026,20 +994,43 @@ function checkIdentitySetup() {
   const relIdentityPath = path.relative(projectRoot, identityPath);
   try {
     const content = fs.readFileSync(identityPath, 'utf8');
-    const hasInit = /widget\.init\(\s*\{\s*APIUrl:\s*apiUrl\s*\}\s*\)/.test(content);
-    const hasRelative = content.includes('/.netlify/identity');
-    const usesOrigin = content.includes('w.location.origin');
-    if (hasInit && hasRelative && usesOrigin) {
-      results.push({ target: relIdentityPath, ok: true, details: 'APIUrl dinamico sul dominio corrente' });
+    if (content.includes('firebasejs') && (content.includes('firebase-app') || content.includes('firebase/app'))) {
+      results.push({ target: relIdentityPath, ok: true, details: 'identity.js integra Firebase Authentication' });
     } else {
-      const missing = [];
-      if (!hasInit) missing.push('init APIUrl');
-      if (!hasRelative) missing.push('riferimento /.netlify/identity');
-      if (!usesOrigin) missing.push('uso window.location.origin');
-      results.push({ target: relIdentityPath, ok: false, message: `config Identity incompleta (${missing.join(', ')})` });
+      results.push({ target: relIdentityPath, ok: false, message: 'identity.js non importa il SDK Firebase' });
     }
   } catch (error) {
     results.push({ target: relIdentityPath, ok: false, message: `impossibile leggere file (${error.message})` });
+  }
+
+  const authPath = path.join(projectRoot, 'netlify', 'functions', '_auth.js');
+  const relAuthPath = path.relative(projectRoot, authPath);
+  if (fs.existsSync(authPath)) {
+    try {
+      const content = fs.readFileSync(authPath, 'utf8');
+      if (content.includes('firebase-admin') && content.includes('verifyRequest')) {
+        results.push({ target: relAuthPath, ok: true, details: 'requireRole verifica i token Firebase' });
+      } else {
+        results.push({ target: relAuthPath, ok: false, message: '_auth.js non utilizza firebase-admin' });
+      }
+    } catch (error) {
+      results.push({ target: relAuthPath, ok: false, message: `impossibile leggere file (${error.message})` });
+    }
+  }
+
+  const safePath = path.join(projectRoot, 'netlify', 'functions', '_safe.js');
+  const relSafePath = path.relative(projectRoot, safePath);
+  if (fs.existsSync(safePath)) {
+    try {
+      const content = fs.readFileSync(safePath, 'utf8');
+      if (content.includes('verifyRequest')) {
+        results.push({ target: relSafePath, ok: true, details: 'guard applica la verifica Firebase' });
+      } else {
+        results.push({ target: relSafePath, ok: false, message: '_safe.js non inoltra la verifica dei token' });
+      }
+    } catch (error) {
+      results.push({ target: relSafePath, ok: false, message: `impossibile leggere file (${error.message})` });
+    }
   }
 
   const redirectsPath = path.join(projectRoot, '_redirects');

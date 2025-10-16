@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>MIND — Gestione Utenti</title>
+  <link rel="icon" href="/assets/img/mind.png">
+  <link rel="stylesheet" href="/assets/css/style.css?v=42"/>
+  <script src="/config/firebase-config.js"></script>
+  <script type="module" src="/assets/js/identity.js?v=2"></script>
+  <script type="module" src="/assets/js/identity-gate.js?v=2"></script>
+  <script type="module" src="/assets/js/app.js?v=42"></script>
+  <script type="module" src="/assets/js/admin-users.js?v=1"></script>
+</head>
+<body class="dark">
+  <header class="app-header">
+    <div class="brand">
+      <a href="/" class="brand-link">
+        <img class="logo" src="/assets/img/mind.png" alt="MIND">
+      </a>
+      <div class="titles">
+        <h1>Gestione utenti &amp; ruoli</h1>
+        <p class="subtitle">Solo i Superadmin possono modificare l&apos;accesso</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <nav class="toolbar main-nav">
+        <a class="btn nav-item" data-module="crm" href="/modules/crm/index.html">CRM</a>
+        <a class="btn nav-item" data-module="cer" href="/modules/cer/index.html">CER</a>
+        <a class="btn nav-item" data-module="impianti" href="/modules/impianti/index.html">IMPIANTI</a>
+        <a class="btn nav-item" data-module="modelli" href="/modules/modelli/index.html">MODELLI &amp; CONTRATTI</a>
+        <a class="btn nav-item" data-module="preventivi" href="/modules/preventivi/index.html">PREVENTIVI</a>
+        <a class="btn nav-item" data-module="ct3" href="/modules/ct3/index.html">CT 3.0</a>
+        <a class="btn nav-item" data-module="simulatori" href="/modules/simulatori/index.html">SIMULATORI</a>
+        <a class="btn nav-item" data-module="utenti" href="/modules/utenti/index.html">UTENTI &amp; RUOLI</a>
+        <a class="btn ghost" href="/">HUB</a>
+      </nav>
+      <div class="session-controls" aria-live="polite" data-session-controls></div>
+    </div>
+  </header>
+
+  <main class="container wide" data-requires-any-role="utenti">
+    <section class="card">
+      <div class="row-between">
+        <div>
+          <h2>Utenti abilitati</h2>
+          <p class="info-text">
+            Le modifiche sono consentite solo ai Superadmin, a partire da <strong>adv.bg.david@gmail.com</strong>.
+          </p>
+        </div>
+        <div class="actions">
+          <button class="btn ghost" type="button" id="btn-reload-users">Aggiorna elenco</button>
+        </div>
+      </div>
+      <div class="toolbar">
+        <input id="user-search" class="search" type="search" placeholder="Cerca per email, nome o UID" autocomplete="off"/>
+        <span class="badge" id="user-count-badge" hidden></span>
+      </div>
+      <div class="table-wrap" id="users-table-wrap">
+        <table class="data-table" id="users-table">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Nome</th>
+              <th>Ruoli</th>
+              <th>Territori</th>
+              <th>Ultimo accesso</th>
+              <th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p class="info-text" id="users-empty" hidden>Nessun utente trovato.</p>
+        <p class="error-text" id="users-error" hidden></p>
+      </div>
+    </section>
+
+    <section class="card" id="user-editor" hidden>
+      <form id="user-form" class="stack">
+        <header class="row-between">
+          <div>
+            <h2 id="user-form-title">Modifica utente</h2>
+            <p class="info-text" id="user-form-email"></p>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn ghost" id="user-form-close">Chiudi</button>
+          </div>
+        </header>
+
+        <div class="grid-2">
+          <label>Nome visualizzato
+            <input type="text" name="displayName" id="user-display-name" placeholder="Nome e Cognome" autocomplete="off"/>
+          </label>
+          <label>Nuova password (opzionale)
+            <input type="password" name="password" id="user-password" placeholder="Almeno 6 caratteri" autocomplete="new-password"/>
+          </label>
+        </div>
+
+        <fieldset class="card soft">
+          <legend>Ruoli attivi</legend>
+          <div class="role-options" id="user-role-options"></div>
+        </fieldset>
+
+        <label>Cabine/territori autorizzati
+          <input type="text" name="territories" id="user-territories" placeholder="CP-001, CP-002" autocomplete="off"/>
+          <small class="hint">Separa i codici con virgole. Lascia vuoto per nessun vincolo.</small>
+        </label>
+
+        <label class="toggle">
+          <input type="checkbox" name="disabled" id="user-disabled"/>
+          <span>Disabilita l&apos;accesso</span>
+        </label>
+
+        <div class="actions">
+          <button type="submit" class="btn" id="user-save-btn">Salva modifiche</button>
+          <button type="button" class="btn ghost" id="user-reset-btn">Annulla modifiche</button>
+        </div>
+        <p class="error-text" id="user-form-error" hidden></p>
+      </form>
+    </section>
+
+    <section class="card" id="user-create">
+      <form id="create-user-form" class="stack">
+        <header>
+          <h2>Crea nuovo utente</h2>
+          <p class="info-text">Compila email, password iniziale e ruoli da assegnare.</p>
+        </header>
+
+        <div class="grid-3">
+          <label>Email
+            <input type="email" name="email" required placeholder="utente@example.com" autocomplete="off"/>
+          </label>
+          <label>Password iniziale
+            <input type="password" name="password" required minlength="6" placeholder="Minimo 6 caratteri" autocomplete="new-password"/>
+          </label>
+          <label>Nome visualizzato (opzionale)
+            <input type="text" name="displayName" placeholder="Nome e Cognome" autocomplete="off"/>
+          </label>
+        </div>
+
+        <fieldset class="card soft">
+          <legend>Ruoli</legend>
+          <div class="role-options" id="create-role-options"></div>
+        </fieldset>
+
+        <label>Cabine/territori autorizzati
+          <input type="text" name="territories" placeholder="CP-001, CP-002" autocomplete="off"/>
+        </label>
+
+        <div class="actions">
+          <button type="submit" class="btn">Crea utente</button>
+          <button type="reset" class="btn ghost">Reset</button>
+        </div>
+        <p class="error-text" id="create-user-error" hidden></p>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

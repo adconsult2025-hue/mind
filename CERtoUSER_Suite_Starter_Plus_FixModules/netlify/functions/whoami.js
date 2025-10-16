@@ -1,16 +1,21 @@
-exports.handler = async (_event, context) => {
-  const user = context?.clientContext?.user ?? null;
+const { json } = require('./_cors');
+const { verifyRequest } = require('./_auth');
 
-  return {
-    statusCode: 200,
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      ok: true,
-      auth: Boolean(user),
-      email: user?.email ?? null,
-      roles: user?.app_metadata?.roles ?? [],
-    }),
-  };
+exports.handler = async (event) => {
+  const result = await verifyRequest(event);
+  if (!result.ok) {
+    return result.response;
+  }
+
+  const territories = result.claims?.territories || result.claims?.territori || result.claims?.cabine || [];
+
+  return json(200, {
+    ok: true,
+    auth: true,
+    uid: result.user.uid,
+    email: result.user.email,
+    name: result.user.name,
+    roles: result.roles,
+    territories
+  });
 };
