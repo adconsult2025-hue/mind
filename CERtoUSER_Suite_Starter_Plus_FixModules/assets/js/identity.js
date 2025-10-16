@@ -1,4 +1,4 @@
-import { initializeApp, getApp, getApps } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { initializeApp, getApp, getApps } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js';
 import {
   getAuth,
   onAuthStateChanged,
@@ -7,7 +7,7 @@ import {
   setPersistence,
   browserLocalPersistence,
   browserSessionPersistence
-} from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+} from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js';
 
 const IDENTITY_EVENT = 'mind:identity';
 const PERSISTENCE_FALLBACKS = [browserLocalPersistence, browserSessionPersistence];
@@ -309,6 +309,32 @@ function isFirebaseConfigValid(config) {
   return requiredKeys.every((key) => isConfigValueValid(config[key]));
 }
 
+function extractConfigFromApp(app) {
+  if (!app || typeof app !== 'object') return null;
+  const options = app.options || app._options;
+  if (isFirebaseConfigValid(options)) {
+    return { ...options };
+  }
+  return null;
+}
+
+function resolveProvidedFirebase() {
+  if (typeof window === 'undefined') return null;
+  const providedAuth = window.firebaseAuth || null;
+  const providedApp = window.firebaseApp || providedAuth?.app || null;
+  const config = extractConfigFromApp(providedApp);
+
+  if (providedApp || providedAuth || config) {
+    return {
+      app: providedApp || null,
+      auth: providedAuth || null,
+      config: config || null
+    };
+  }
+
+  return null;
+}
+
 function resolveFirebaseConfig() {
   if (typeof window === 'undefined') return null;
   const directConfig = window.__FIREBASE_CONFIG__ || window.firebaseConfig || window._firebaseConfig;
@@ -328,6 +354,11 @@ function resolveFirebaseConfig() {
     }
   }
 
+  const provided = resolveProvidedFirebase();
+  if (provided?.config) {
+    return provided.config;
+  }
+
   return null;
 }
 
@@ -342,8 +373,44 @@ function initializeFirebase() {
       return false;
     }
 
-    const config = resolveFirebaseConfig();
-    if (!config) {
+    let config = resolveFirebaseConfig();
+    const provided = resolveProvidedFirebase();
+
+    if (!firebaseApp && provided?.app) {
+      firebaseApp = provided.app;
+    }
+    if (!firebaseAuth && provided?.auth) {
+      firebaseAuth = provided.auth;
+    }
+    if (!config && provided?.config) {
+      config = provided.config;
+    }
+    if (!firebaseApp && firebaseAuth?.app) {
+      firebaseApp = firebaseAuth.app;
+    }
+    if (config && typeof window !== 'undefined' && !isFirebaseConfigValid(window.__FIREBASE_CONFIG__)) {
+      window.__FIREBASE_CONFIG__ = { ...config };
+    }
+    if (!firebaseApp) {
+      if (getApps().length) {
+        firebaseApp = getApp();
+      } else if (config) {
+        firebaseApp = initializeApp(config);
+      }
+    }
+    if (!firebaseAuth && firebaseApp) {
+      firebaseAuth = getAuth(firebaseApp);
+    }
+    if (!firebaseApp && firebaseAuth?.app) {
+      firebaseApp = firebaseAuth.app;
+    }
+    if (firebaseApp && typeof window !== 'undefined') {
+      window.firebaseApp = firebaseApp;
+    }
+    if (firebaseAuth && typeof window !== 'undefined') {
+      window.firebaseAuth = firebaseAuth;
+    }
+    if (!firebaseAuth) {
       console.warn('[identity] configurazione Firebase mancante o incompleta. Accesso disabilitato finché non viene fornita.');
       clearSession('firebase-config-missing');
       settleReady(currentSession);
@@ -351,12 +418,6 @@ function initializeFirebase() {
     }
 
     try {
-      if (getApps().length) {
-        firebaseApp = getApp();
-      } else {
-        firebaseApp = initializeApp(config);
-      }
-      firebaseAuth = getAuth(firebaseApp);
       void configurePersistence(firebaseAuth);
 
       onAuthStateChanged(
