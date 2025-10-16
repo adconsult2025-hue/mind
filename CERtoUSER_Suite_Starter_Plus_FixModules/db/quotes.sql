@@ -24,15 +24,17 @@ create table if not exists quotes (
 
 create table if not exists quote_items (
   id uuid primary key default gen_random_uuid(),
-  quote_id uuid references quotes(id) on delete cascade,
-  sku text,
-  name text,
+  quote_id uuid not null references quotes(id) on delete cascade,
+  sku text not null,
+  name text not null,
   category text,
-  qty numeric,
+  qty numeric default 1,
   unit text,
-  price numeric,
-  discount numeric,
+  price numeric default 0,
+  discount numeric default 0,
   cost numeric,
   iva_perc numeric,
   metadata jsonb default '{}'::jsonb
 );
+
+create index if not exists idx_quote_items_quote_id on quote_items(quote_id);
