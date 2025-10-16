@@ -244,22 +244,39 @@ function mergeCustomerLists(existing, incoming) {
   return result;
 }
 
+function extractClientsPayload(payload) {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.clients)) return payload.clients;
+  if (Array.isArray(payload.results)) return payload.results;
+  if (Array.isArray(payload.items)) return payload.items;
+  return [];
+}
+
 async function syncCustomersFromApi() {
   try {
     const res = await fetch(`${API_BASE}/clients`);
-    if (!res.ok) return;
-    const payload = await res.json();
-    if (!payload?.ok || !Array.isArray(payload.data)) return;
-    const normalized = payload.data.map(normalizeApiCustomer).filter(Boolean);
-    if (!normalized.length) return;
-    const merged = mergeCustomerLists(allCustomers(), normalized);
-    customers = merged;
-    saveCustomers(customers);
+    const payload = await res.json().catch(() => null);
+    if (!res.ok || payload?.ok === false) {
+      throw new Error(payload?.error || payload?.message || 'Errore caricamento clienti CRM');
+    }
+    const records = extractClientsPayload(payload);
+    if (records.length) {
+      const normalized = records.map(normalizeApiCustomer).filter(Boolean);
+      if (normalized.length) {
+        const merged = mergeCustomerLists(allCustomers(), normalized);
+        customers = merged;
+        saveCustomers(customers);
+      }
+    }
+  } catch (err) {
+    console.warn('Impossibile sincronizzare i clienti dal CRM remoto', err);
+    toast(err?.message ? `CRM: ${err.message}` : 'Impossibile sincronizzare i clienti dal CRM remoto');
+  } finally {
     renderMembersPicker();
     updatePlantOwnerOptions();
     updateCerValidationUI();
-  } catch (err) {
-    console.warn('Impossibile sincronizzare i clienti dal CRM remoto', err);
   }
 }
 
@@ -1321,6 +1338,15 @@ function submitCerPlantModal(event) {
   }
 }
 
+if (typeof window !== 'undefined') {
+  window.openCerPlantModal = openCerPlantModal;
+  window.closeCerPlantModal = closeCerPlantModal;
+  window.submitCerPlantModal = submitCerPlantModal;
+  if (!window.openPlantModal) window.openPlantModal = openCerPlantModal;
+  if (!window.closePlantModal) window.closePlantModal = closeCerPlantModal;
+  if (!window.submitPlantModal) window.submitPlantModal = submitCerPlantModal;
+}
+
 function updateCerRecord(cerId, updater) {
   if (!cerId || typeof updater !== 'function') return null;
   const index = cers.findIndex(c => c.id === cerId);
@@ -2279,7 +2305,7 @@ function initPlantsModule() {
   modalEls.energy = document.getElementById('plant-modal-energy');
   modalEls.saveBtn = document.getElementById('plant-modal-save');
   modalEls.recalcBtn = document.getElementById('plant-modal-recalc');
-  modalEls.closeBtns = document.querySelectorAll('[data-close-modal]');
+  modalEls.closeBtns = modalEls.root ? modalEls.root.querySelectorAll('[data-close-modal]') : [];
 
   if (!plantsCerSelect || !plantsPeriodInput || !plantsTableBody) return;
 
@@ -2529,6 +2555,11 @@ function closePlantConfigModal() {
   modalEls.root?.setAttribute('aria-hidden', 'true');
   modalEls.error?.classList.add('hidden');
   plantState.modalPlantId = null;
+}
+
+if (typeof window !== 'undefined') {
+  window.openPlantConfigModal = openPlantConfigModal;
+  window.closePlantConfigModal = closePlantConfigModal;
 }
 
 function syncPercentages(source) {
