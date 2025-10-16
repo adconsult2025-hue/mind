@@ -15,21 +15,49 @@ function normalizeEmail(email) {
   return typeof email === 'string' ? email.trim().toLowerCase() : '';
 }
 
+function toArray(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    return value
+      .split(/[\s,]+/)
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+  return Object.values(value)
+    .map((item) => (typeof item === 'string' ? item.trim() : item))
+    .filter((item) => typeof item === 'string' && item.length > 0);
+}
+
+function buildRoles(user, email) {
+  const normalizedEmail = normalizeEmail(email);
+  const inherited = toArray(user.app_metadata?.roles || user.roles);
+  const nextRoles = new Set(inherited.map((role) => String(role).trim()).filter(Boolean));
+
+  nextRoles.add(DEFAULT_ROLE);
+
+  if (SUPERADMIN_EMAILS.has(normalizedEmail)) {
+    nextRoles.add('superadmin');
+  }
+
+  return Array.from(nextRoles);
+}
+
 exports.handler = async (event) => {
   const payload = parseBody(event);
   const user = payload.user || {};
-  const email = normalizeEmail(user.email);
 
-  let roles = [DEFAULT_ROLE];
-  if (SUPERADMIN_EMAILS.has(email)) {
-    roles = ['superadmin'];
-  }
+  const roles = buildRoles(user, user.email);
+  const appMetadata = {
+    ...(user.app_metadata || {}),
+    roles
+  };
 
   const body = {
-    app_metadata: {
-      ...(user.app_metadata || {}),
-      roles
-    }
+    app_metadata: appMetadata,
+    roles
   };
 
   return {
