@@ -10,16 +10,20 @@ if (typeof window !== 'undefined') {
   window.__SAFE_MODE__ = safeModeFlag;
   let toastContainer;
   const SIMULATORI_MODULE = 'simulatori';
+  const PREVENTIVI_MODULE = 'preventivi';
+  const CORE_NAV_MODULES = [SIMULATORI_MODULE, PREVENTIVI_MODULE];
 
   ['DEFAULT_VISIBLE_MODULES', 'VISIBLE_MODULES'].forEach((prop) => {
     const list = window[prop];
-    if (Array.isArray(list)) {
-      if (!list.includes(SIMULATORI_MODULE)) {
-        list.push(SIMULATORI_MODULE);
+    CORE_NAV_MODULES.forEach((moduleName) => {
+      if (Array.isArray(list)) {
+        if (!list.includes(moduleName)) {
+          list.push(moduleName);
+        }
+      } else if (list instanceof Set) {
+        list.add(moduleName);
       }
-    } else if (list instanceof Set) {
-      list.add(SIMULATORI_MODULE);
-    }
+    });
   });
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -30,40 +34,16 @@ if (typeof window !== 'undefined') {
     const navItems = document.querySelectorAll('.nav-item');
     if (navItems.length) {
       const featureFlags = window.FEATURE_FLAGS || {};
-      const simulatoriNavItems = document.querySelectorAll(`[data-module="${SIMULATORI_MODULE}"]`);
-
-      const simulatoriPermission = `${SIMULATORI_MODULE}:view`;
-      let hasPermission = true;
-      const permissions = window.USER_PERMISSIONS;
-      if (Array.isArray(permissions)) {
-        hasPermission = permissions.includes(simulatoriPermission);
-      } else if (permissions instanceof Set) {
-        hasPermission = permissions.has(simulatoriPermission);
-      } else if (permissions && typeof permissions === 'object') {
-        if (typeof permissions.can === 'function') {
-          try {
-            hasPermission = !!permissions.can(simulatoriPermission);
-          } catch (error) {
-            hasPermission = true;
-          }
-        } else if (permissions[simulatoriPermission] === true) {
-          hasPermission = true;
-        } else if (permissions.simulatori) {
-          const simulatoriPerm = permissions.simulatori;
-          if (Array.isArray(simulatoriPerm)) {
-            hasPermission = simulatoriPerm.includes('view');
-          } else if (simulatoriPerm instanceof Set) {
-            hasPermission = simulatoriPerm.has('view');
-          } else if (typeof simulatoriPerm === 'object') {
-            hasPermission = simulatoriPerm.view !== false;
-          }
+      CORE_NAV_MODULES.forEach((moduleName) => {
+        const navElements = document.querySelectorAll(`[data-module="${moduleName}"]`);
+        if (!navElements.length) return;
+        const permissionName = `${moduleName}:view`;
+        const allowed = hasModuleAccess(permissionName, moduleName);
+        const disabled = featureFlags[moduleName] === false || !allowed;
+        if (disabled) {
+          navElements.forEach((el) => el.remove());
         }
-      }
-
-      const simulatoriDisabled = featureFlags[SIMULATORI_MODULE] === false || !hasPermission;
-      if (simulatoriDisabled) {
-        simulatoriNavItems.forEach((el) => el.remove());
-      }
+      });
 
       const path = window.location.pathname;
       navItems.forEach((link) => {
@@ -103,5 +83,50 @@ if (typeof window !== 'undefined') {
       toast.classList.add('hide');
       setTimeout(() => toast.remove(), 300);
     }, 4000);
+  }
+
+  function hasModuleAccess(permissionName, moduleName) {
+    const permissions = window.USER_PERMISSIONS;
+    if (Array.isArray(permissions)) {
+      return permissions.includes(permissionName) || permissions.includes(moduleName);
+    }
+    if (permissions instanceof Set) {
+      return permissions.has(permissionName) || permissions.has(moduleName);
+    }
+    if (permissions && typeof permissions === 'object') {
+      if (typeof permissions.can === 'function') {
+        try {
+          return !!permissions.can(permissionName);
+        } catch (error) {
+          return true;
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(permissions, permissionName)) {
+        const value = permissions[permissionName];
+        if (value === true) return true;
+        if (value === false) return false;
+      }
+      let modulePermissions = moduleName ? permissions[moduleName] : undefined;
+      if (!modulePermissions && permissions.modules && typeof permissions.modules === 'object') {
+        modulePermissions = permissions.modules[moduleName];
+      }
+      if (Array.isArray(modulePermissions)) {
+        return modulePermissions.includes('view') || modulePermissions.includes(permissionName);
+      }
+      if (modulePermissions instanceof Set) {
+        return modulePermissions.has('view') || modulePermissions.has(permissionName);
+      }
+      if (modulePermissions && typeof modulePermissions === 'object') {
+        if (Object.prototype.hasOwnProperty.call(modulePermissions, 'view')) {
+          return modulePermissions.view !== false;
+        }
+        if (Object.prototype.hasOwnProperty.call(modulePermissions, permissionName)) {
+          const value = modulePermissions[permissionName];
+          if (value === true) return true;
+          if (value === false) return false;
+        }
+      }
+    }
+    return true;
   }
 }
