@@ -10,3 +10,8 @@
 
 [[plugins]]
   package = "@netlify/plugin-functions-install-core"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://www.gstatic.com https://www.googleapis.com; script-src-elem 'self' https://www.gstatic.com https://www.googleapis.com; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firestore.googleapis.com https://firebaseinstallations.googleapis.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-src https://*.firebaseapp.com https://*.google.com;"
