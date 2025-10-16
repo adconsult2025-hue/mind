@@ -1,7 +1,7 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": process.env.ALLOWED_ORIGIN || "*",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
-  "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS"
+  "Access-Control-Allow-Methods": "GET,POST,PATCH,PUT,DELETE,OPTIONS"
 };
 
 const preflight = () => ({ statusCode: 204, headers: corsHeaders, body: "" });
