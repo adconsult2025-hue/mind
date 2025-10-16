@@ -37,6 +37,8 @@ if (typeof window !== 'undefined') {
   })();
   window.__SAFE_MODE__ = safeModeFlag;
   let toastContainer;
+  let navRootElement;
+  let navItemsCache = [];
   const NAV_MODULE_CONFIG = {
     simulatori: {
       label: 'SIMULATORI',
@@ -158,45 +160,119 @@ if (typeof window !== 'undefined') {
     });
   });
 
-  document.addEventListener('DOMContentLoaded', () => {
+  function gatherNavItems() {
+    const root = navRootElement || document.querySelector('.main-nav');
+    if (root) {
+      navRootElement = root;
+      navItemsCache = Array.from(root.querySelectorAll('.nav-item'));
+    } else {
+      navItemsCache = Array.from(document.querySelectorAll('.nav-item'));
+    }
+    navItemsCache.forEach((item) => {
+      const moduleName = item.getAttribute('data-module');
+      if (moduleName && !item.hasAttribute('data-requires-any-role')) {
+        item.setAttribute('data-requires-any-role', moduleName);
+      }
+    });
+    return navItemsCache;
+  }
+
+  function parseRequiredRolesAttribute(value) {
+    if (!value) return [];
+    return value
+      .split(',')
+      .map((token) => normalizeToken(token))
+      .filter(Boolean);
+  }
+
+  async function evaluateNavAccess() {
+    const navItems = navItemsCache.length ? navItemsCache : gatherNavItems();
+    if (!navItems.length) return;
+    const featureFlags = window.FEATURE_FLAGS || {};
+
+    let normalizedIdentityRoles = null;
+    if (window.IdentityGate?.getRoles) {
+      try {
+        const roles = await window.IdentityGate.getRoles();
+        normalizedIdentityRoles = new Set(roles.map((role) => normalizeToken(role)));
+      } catch (error) {
+        console.warn('[app] impossibile leggere i ruoli IdentityGate:', error);
+        normalizedIdentityRoles = new Set();
+      }
+    }
+
+    navItems.forEach((link) => {
+      const moduleName = link.getAttribute('data-module');
+      if (!moduleName) return;
+      const permissionName = `${moduleName}:view`;
+      let allowed = hasModuleAccess(permissionName, moduleName);
+      if (!allowed && normalizedIdentityRoles?.size) {
+        const required = parseRequiredRolesAttribute(link.getAttribute('data-requires-any-role'));
+        if (required.length) {
+          allowed = required.some((role) => normalizedIdentityRoles.has(role));
+        }
+      }
+      const featureDisabled = featureFlags[moduleName] === false;
+      const isCoreModule = CORE_NAV_MODULES.includes(moduleName);
+      const shouldDisable = !allowed || (featureDisabled && !isCoreModule);
+      const defaultReason = 'Sezione non abilitata per il tuo profilo.';
+      const reason = !allowed
+        ? link.getAttribute('data-gate-message') || defaultReason
+        : (featureDisabled && !isCoreModule)
+          ? 'Modulo disattivato per questa istanza.'
+          : '';
+      setNavItemDisabled(link, shouldDisable, reason);
+    });
+  }
+
+  function runNavAccessEvaluation() {
+    evaluateNavAccess().catch((error) => {
+      console.warn('[app] aggiornamento permessi di navigazione fallito:', error);
+    });
+  }
+
+  function highlightActiveNavItem() {
+    const navItems = navItemsCache.length ? navItemsCache : gatherNavItems();
+    if (!navItems.length) return;
+    const path = window.location.pathname || '';
+    navItems.forEach((link) => {
+      const moduleName = link.getAttribute('data-module');
+      if (!moduleName) return;
+      const modulePath = `/modules/${moduleName}`;
+      if (path.includes(`${modulePath}/`) || path.endsWith(modulePath)) {
+        link.classList.add('active');
+      }
+    });
+  }
+
+  function initializeNavigation() {
     document.querySelectorAll('[data-brand-name]').forEach((el) => {
       el.textContent = BRAND_NAME;
     });
 
-    const navRoot = document.querySelector('.main-nav');
-    if (navRoot) {
-      CORE_NAV_MODULES.forEach((moduleName) => ensureNavItem(navRoot, moduleName));
+    navRootElement = document.querySelector('.main-nav');
+    if (navRootElement) {
+      CORE_NAV_MODULES.forEach((moduleName) => ensureNavItem(navRootElement, moduleName));
     }
 
-    const navItems = (navRoot || document).querySelectorAll('.nav-item');
-    if (navItems.length) {
-      const featureFlags = window.FEATURE_FLAGS || {};
-      navItems.forEach((link) => {
-        const moduleName = link.getAttribute('data-module');
-        if (!moduleName) return;
-        const permissionName = `${moduleName}:view`;
-        const allowed = hasModuleAccess(permissionName, moduleName);
-        const featureDisabled = featureFlags[moduleName] === false;
-        const isCoreModule = CORE_NAV_MODULES.includes(moduleName);
-        const shouldDisable = !allowed || (featureDisabled && !isCoreModule);
-        const reason = !allowed
-          ? 'Sezione non abilitata per il tuo profilo.'
-          : (featureDisabled && !isCoreModule)
-            ? 'Modulo disattivato per questa istanza.'
-            : '';
-        setNavItemDisabled(link, shouldDisable, reason);
-      });
+    gatherNavItems();
+    runNavAccessEvaluation();
+    highlightActiveNavItem();
+  }
 
-      const path = window.location.pathname || '';
-      navItems.forEach((link) => {
-        const moduleName = link.getAttribute('data-module');
-        if (!moduleName) return;
-        const modulePath = `/modules/${moduleName}`;
-        if (path.includes(`${modulePath}/`) || path.endsWith(modulePath)) {
-          link.classList.add('active');
-        }
-      });
-    }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeNavigation, { once: true });
+  } else {
+    initializeNavigation();
+  }
+
+  const mindIdentityReady = window.MIND_IDENTITY_READY;
+  if (mindIdentityReady?.then) {
+    mindIdentityReady.then(() => runNavAccessEvaluation()).catch(() => {});
+  }
+
+  window.addEventListener('mind:identity', () => {
+    runNavAccessEvaluation();
   });
 
   window.addEventListener('cer:notify', (event) => {
@@ -236,6 +312,7 @@ if (typeof window !== 'undefined') {
     const link = document.createElement('a');
     link.className = 'btn nav-item';
     link.setAttribute('data-module', moduleName);
+    link.setAttribute('data-requires-any-role', moduleName);
     link.href = config.href;
     link.textContent = config.label;
     const hubLink = navRoot.querySelector('.btn.ghost');

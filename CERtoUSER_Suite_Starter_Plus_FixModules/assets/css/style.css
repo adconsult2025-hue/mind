@@ -2250,6 +2250,53 @@ body.login-page {
   justify-content: center;
 }
 
+/* ---------------------------- */
+/* Identity Gate                */
+/* ---------------------------- */
+
+[data-requires-any-role] {
+  position: relative;
+}
+
+.identity-gate-message {
+  position: absolute;
+  inset: clamp(0.5rem, 1.5vw, 1.25rem);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-md);
+  background: rgba(17, 24, 39, 0.92);
+  border: 1px solid rgba(55, 65, 81, 0.65);
+  color: #e5e7eb;
+  text-align: center;
+  box-shadow: var(--shadow-soft);
+  z-index: 20;
+  pointer-events: auto;
+}
+
+.identity-gate-message span {
+  max-width: 36ch;
+}
+
+.identity-gate-message[hidden] {
+  display: none !important;
+}
+
+.gate-locked {
+  pointer-events: none;
+}
+
+.gate-locked > :not(.identity-gate-message) {
+  opacity: 0.2;
+  filter: blur(1px);
+  transition: opacity 160ms ease;
+}
+
+.gate-locked .identity-gate-message {
+  display: flex;
+}
+
 .login-status {
   border-radius: var(--radius-sm);
   padding: 0.75rem 0.9rem;
