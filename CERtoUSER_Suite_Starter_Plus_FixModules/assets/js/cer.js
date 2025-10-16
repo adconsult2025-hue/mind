@@ -1,5 +1,6 @@
 import { allCustomers, allCER, saveCER, uid, progressCERs, saveProgressCERs, saveCustomers } from './storage.js';
 import { saveDocFile, statutoTemplate, regolamentoTemplate, attoCostitutivoTemplate, adesioneTemplate, delegaGSETemplate, contrattoTraderTemplate, informativaGDPRTemplate, accordoProduttoreProsumerTemplate } from './docs.js';
+import { identityReady, getSessionSync } from './identity.js';
 import { STATE as CRONO_STATE, initCronoprogrammaUI, renderCronoprogramma } from './cronoprogramma.js?v=36';
 
 const API_BASE = '/api';
@@ -166,6 +167,17 @@ const energyState = {
   selectedCerId: '',
   period: '',
 };
+
+const energyFormState = new Map();
+const energyDrafts = new Map();
+
+const energyAccess = {
+  mode: 'admin',
+  email: '',
+  membersByCer: new Map()
+};
+
+let identitySession = null;
 
 const DOC_TEMPLATE_UPLOADS = [
   { key: 'statuto', label: 'Modello Statuto (HTML)', displayName: 'lo Statuto' },
@@ -463,6 +475,17 @@ function init() {
     if (!document.hidden) loadCerTemplates();
   });
 
+  identitySession = getSessionSync();
+  identityReady.then((session) => {
+    identitySession = session || getSessionSync();
+    syncEnergyAccess(identitySession);
+  });
+  window.addEventListener('mind:identity', (event) => {
+    const detailSession = event?.detail?.session;
+    identitySession = detailSession || getSessionSync();
+    syncEnergyAccess(identitySession);
+  });
+
   const params = new URLSearchParams(window.location.search);
   const cerId = params.get('cer_id');
   if (cerId) {
@@ -672,7 +695,15 @@ function bindCerForm() {
       if (!id) return null;
       const c = customers.find(x => String(x.id) === id);
       if (!c) return null;
-      return { id: String(c.id), nome: c.nome, pod: c.pod, comune: c.comune, ruolo: role, cabina: c.cabina || '' };
+      return {
+        id: String(c.id),
+        nome: c.nome,
+        pod: c.pod,
+        comune: c.comune,
+        ruolo: role,
+        cabina: c.cabina || '',
+        email: c.email || ''
+      };
     }).filter(Boolean);
     if (picks.length < 3) {
       toast('Per creare la CER servono almeno 3 clienti selezionati.');
@@ -1355,6 +1386,7 @@ function submitMemberModal() {
           comune: source.comune || '',
           ruolo: pick.ruolo,
           cabina: source.cabina || '',
+          email: source.email || '',
           contratto_stato: DEFAULT_MEMBER_CONTRACT_STATUS
         });
       }
@@ -1521,21 +1553,7 @@ function normalizeCerData(cer) {
   const plantMap = new Map(plants.map(p => [p.id, p]));
   const consumi = Array.isArray(cer.consumi)
     ? cer.consumi
-        .map(entry => {
-          const memberId = String(entry.memberId || entry.member_id || '').trim();
-          const period = String(entry.period || '').trim();
-          const kwhValue = entry.kwh ?? entry.kwh_total ?? entry.value;
-          const kwh = Number(kwhValue);
-          if (!memberId || !period) return null;
-          if (!memberMap.has(memberId)) return null;
-          if (!Number.isFinite(kwh) || kwh < 0) return null;
-          return {
-            id: entry.id || uid('cer-consumo'),
-            memberId,
-            period,
-            kwh: Number(kwh.toFixed(2))
-          };
-        })
+        .map(entry => normalizeConsumptionEntry(entry, memberMap))
         .filter(Boolean)
     : [];
   const produzione = Array.isArray(cer.produzione)
@@ -1563,6 +1581,83 @@ function normalizeCerData(cer) {
   cer.consumi = consumi;
   cer.produzione = produzione;
   return cer;
+}
+
+function normalizeConsumptionEntry(entry, memberMap) {
+  if (!entry) return null;
+  const memberId = String(entry.memberId || entry.member_id || '').trim();
+  if (!memberId || !memberMap.has(memberId)) return null;
+
+  const frequencyRaw = String(entry.frequency || entry.freq || entry.mode || entry.tipo || '').toLowerCase();
+  const frequency = frequencyRaw.includes('ann') ? 'annual' : 'monthly';
+
+  let period = String(entry.period || '').trim();
+  if (frequency === 'annual') {
+    const year = sanitizeEnergyYear(period)
+      || sanitizeEnergyYear(entry.year)
+      || sanitizeEnergyYear(entry.anno)
+      || sanitizeEnergyYear(entry.periodo);
+    if (!year) return null;
+    period = year;
+  } else {
+    let monthPeriod = sanitizeEnergyPeriod(period);
+    if (!monthPeriod) {
+      const year = entry.year ?? entry.anno ?? entry.periodo;
+      const month = entry.month ?? entry.mese ?? entry.mese_riferimento;
+      if (year != null && month != null) {
+        const composed = `${year}-${String(month).padStart(2, '0')}`;
+        monthPeriod = sanitizeEnergyPeriod(composed);
+      }
+    }
+    if (!monthPeriod) return null;
+    period = monthPeriod;
+  }
+
+  const componentKeys = [
+    ['f1', 'F1', 'fascia1', 'fascia_1', 'kwh_f1', 'kwh_fascia1'],
+    ['f2', 'F2', 'fascia2', 'fascia_2', 'kwh_f2', 'kwh_fascia2'],
+    ['f3', 'F3', 'fascia3', 'fascia_3', 'kwh_f3', 'kwh_fascia3']
+  ];
+
+  const components = componentKeys.map(keys => {
+    for (const key of keys) {
+      if (key in entry) {
+        const normalized = normalizeEnergyComponent(entry[key]);
+        if (normalized != null) return normalized;
+      }
+    }
+    return null;
+  });
+
+  if (components.every(value => value == null)) {
+    const total = normalizeEnergyComponent(entry.kwh ?? entry.kwh_total ?? entry.kwh_totali ?? entry.value ?? entry.totale);
+    if (total == null) return null;
+    components[0] = total;
+    components[1] = 0;
+    components[2] = 0;
+  }
+
+  const sanitizedComponents = components.map(value => (value == null ? 0 : value));
+  const kwh = Number((sanitizedComponents[0] + sanitizedComponents[1] + sanitizedComponents[2]).toFixed(2));
+  if (!Number.isFinite(kwh) || kwh < 0) return null;
+
+  return {
+    id: entry.id || uid('cer-consumo'),
+    memberId,
+    period,
+    frequency,
+    f1: sanitizedComponents[0],
+    f2: sanitizedComponents[1],
+    f3: sanitizedComponents[2],
+    kwh
+  };
+}
+
+function normalizeEnergyComponent(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) return null;
+  return Number(num.toFixed(2));
 }
 
 function populateCerForm(target) {
@@ -2418,6 +2513,871 @@ function activateTab(tab) {
   });
 }
 
+function collectIdentityRoles(user) {
+  const roles = new Set();
+  if (!user || typeof user !== 'object') return roles;
+  const sources = [
+    user.roles,
+    user.role,
+    user.app_metadata?.roles,
+    user.app_metadata?.role,
+    user.user_metadata?.roles,
+    user.user_metadata?.role,
+    user.metadata?.roles,
+    user.metadata?.role,
+    user.data?.roles,
+    user.data?.role
+  ];
+  sources.forEach((value) => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        if (typeof item === 'string' && item.trim()) {
+          roles.add(item.trim().toLowerCase());
+        }
+      });
+    } else if (typeof value === 'string') {
+      if (value.trim()) roles.add(value.trim().toLowerCase());
+    }
+  });
+  return roles;
+}
+
+function hasEnergyManagePermission(session) {
+  const managerTokens = ['cer:manage', 'cer:write', 'cer:admin', 'admin', 'manage:cer'];
+  const permissions = window.USER_PERMISSIONS;
+  if (Array.isArray(permissions)) {
+    if (permissions.some(token => managerTokens.includes(String(token).toLowerCase()))) return true;
+  } else if (permissions instanceof Set) {
+    for (const token of managerTokens) {
+      if (permissions.has(token) || permissions.has(token.toLowerCase())) return true;
+    }
+  } else if (permissions && typeof permissions === 'object') {
+    if (typeof permissions.can === 'function') {
+      for (const token of managerTokens) {
+        try {
+          if (permissions.can(token) || permissions.can(token.toLowerCase())) return true;
+        } catch (error) {
+          // ignore and continue
+        }
+      }
+    }
+    for (const token of managerTokens) {
+      if (permissions[token] === true || permissions[token.toLowerCase?.()] === true) return true;
+      const [scope, action] = token.split(':');
+      if (scope && action) {
+        const scoped = permissions[scope] || permissions[scope.toLowerCase?.()];
+        if (scoped === true) return true;
+        if (scoped && typeof scoped === 'object') {
+          if (scoped[action] === true || scoped[action.toLowerCase?.()] === true) return true;
+          if (scoped.manage === true || scoped.write === true) return true;
+        }
+      }
+    }
+  }
+
+  const roles = collectIdentityRoles(session?.user);
+  const adminRoles = new Set(['admin', 'manager', 'staff', 'editor', 'operator', 'backoffice', 'cer_manager', 'cer-admin']);
+  for (const role of roles) {
+    if (adminRoles.has(role)) return true;
+  }
+  return false;
+}
+
+function computeConsumerMembers(email) {
+  const map = new Map();
+  if (!email) return map;
+  const normalized = String(email).trim().toLowerCase();
+  if (!normalized) return map;
+  cers.forEach(cer => {
+    const members = Array.isArray(cer.membri) ? cer.membri : [];
+    const matches = members
+      .filter(member => String(member.email || '').trim().toLowerCase() === normalized)
+      .map(member => String(member.id));
+    if (matches.length) {
+      map.set(cer.id, new Set(matches));
+    }
+  });
+  return map;
+}
+
+function syncEnergyAccess(session) {
+  const manage = hasEnergyManagePermission(session);
+  const email = session?.user?.email || session?.user?.login || '';
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const membersByCer = manage ? new Map() : computeConsumerMembers(normalizedEmail);
+  const nextMode = manage || !session ? 'admin' : (membersByCer.size ? 'consumer' : 'admin');
+  const modeChanged = energyAccess.mode !== nextMode;
+  const emailChanged = energyAccess.email !== normalizedEmail;
+  const membersChanged = !compareMemberMaps(energyAccess.membersByCer, membersByCer);
+
+  if (modeChanged || emailChanged || membersChanged) {
+    energyAccess.mode = nextMode;
+    energyAccess.email = normalizedEmail;
+    energyAccess.membersByCer = membersByCer;
+    pruneEnergySelectionAccess();
+    refreshCerOptions();
+  }
+}
+
+function compareMemberMaps(prevMap, nextMap) {
+  if (prevMap === nextMap) return true;
+  if (!(prevMap instanceof Map) || !(nextMap instanceof Map)) return false;
+  if (prevMap.size !== nextMap.size) return false;
+  for (const [key, prevSet] of prevMap.entries()) {
+    const nextSet = nextMap.get(key);
+    if (!(nextSet instanceof Set) || prevSet.size !== nextSet.size) return false;
+    for (const value of prevSet.values()) {
+      if (!nextSet.has(value)) return false;
+    }
+  }
+  return true;
+}
+
+function pruneEnergySelectionAccess() {
+  if (energyAccess.mode !== 'consumer') return;
+  const allowed = [...energyAccess.membersByCer.keys()];
+  if (!allowed.length) {
+    energyState.selectedCerId = '';
+    return;
+  }
+  if (!allowed.includes(energyState.selectedCerId)) {
+    energyState.selectedCerId = allowed[0];
+  }
+}
+
+function makeFormKey(cerId, memberId) {
+  return `${cerId || ''}::${memberId || ''}`;
+}
+
+function getMemberFormState(cerId, memberId) {
+  const key = makeFormKey(cerId, memberId);
+  if (!energyFormState.has(key)) {
+    energyFormState.set(key, {});
+  }
+  return energyFormState.get(key);
+}
+
+function setMemberFormState(cerId, memberId, patch = {}) {
+  if (!cerId || !memberId) return;
+  const key = makeFormKey(cerId, memberId);
+  const current = energyFormState.get(key) || {};
+  const next = { ...current, ...patch };
+  energyFormState.set(key, next);
+  return next;
+}
+
+function makeDraftKey(cerId, memberId, frequency, period) {
+  return `${cerId || ''}::${memberId || ''}::${frequency || 'monthly'}::${period || ''}`;
+}
+
+function setEnergyDraft(cerId, memberId, frequency, period, values) {
+  if (!cerId || !memberId) return;
+  const key = makeDraftKey(cerId, memberId, frequency, period);
+  if (!values) {
+    energyDrafts.delete(key);
+    return;
+  }
+  energyDrafts.set(key, {
+    f1: values.f1 ?? values.F1 ?? values.fascia1 ?? '',
+    f2: values.f2 ?? values.F2 ?? values.fascia2 ?? '',
+    f3: values.f3 ?? values.F3 ?? values.fascia3 ?? ''
+  });
+}
+
+function getEnergyDraft(cerId, memberId, frequency, period) {
+  if (!cerId || !memberId) return null;
+  const exactKey = makeDraftKey(cerId, memberId, frequency, period);
+  if (energyDrafts.has(exactKey)) return energyDrafts.get(exactKey);
+  const fallbackKey = makeDraftKey(cerId, memberId, frequency, '__draft__');
+  return energyDrafts.get(fallbackKey) || null;
+}
+
+function clearEnergyDraft(cerId, memberId, frequency, period) {
+  if (!cerId || !memberId) return;
+  const exactKey = makeDraftKey(cerId, memberId, frequency, period);
+  energyDrafts.delete(exactKey);
+  if (period !== '__draft__') {
+    const fallbackKey = makeDraftKey(cerId, memberId, frequency, '__draft__');
+    energyDrafts.delete(fallbackKey);
+  }
+}
+
+function sanitizeEnergyPeriod(value) {
+  if (value === undefined || value === null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const normalized = raw.replace(/[./]/g, '-');
+  if (/^\d{4}-\d{2}$/.test(normalized)) {
+    const [yearStr, monthStr] = normalized.split('-');
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    if (!Number.isFinite(year) || !Number.isFinite(month)) return null;
+    if (year < 2000 || year > 2100) return null;
+    if (month < 1 || month > 12) return null;
+    return `${year}-${String(month).padStart(2, '0')}`;
+  }
+  if (/^\d{4}-\d{1}$/.test(normalized)) {
+    const [yearStr, monthStr] = normalized.split('-');
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    if (!Number.isFinite(year) || !Number.isFinite(month)) return null;
+    if (year < 2000 || year > 2100) return null;
+    if (month < 1 || month > 12) return null;
+    return `${year}-${String(month).padStart(2, '0')}`;
+  }
+  return null;
+}
+
+function sanitizeEnergyYear(value) {
+  if (value === undefined || value === null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  if (/^\d{4}$/.test(raw)) {
+    const year = Number(raw);
+    if (year < 2000 || year > 2100) return null;
+    return String(year);
+  }
+  if (/^\d{4}-\d{1,2}$/.test(raw)) {
+    return sanitizeEnergyYear(raw.slice(0, 4));
+  }
+  return null;
+}
+
+function canViewCer(cerId) {
+  if (!cerId) return false;
+  if (energyAccess.mode !== 'consumer') return true;
+  return energyAccess.membersByCer.has(cerId);
+}
+
+function canEditConsumption(memberId) {
+  const cerId = energyState.selectedCerId;
+  if (!cerId) return false;
+  if (energyAccess.mode !== 'consumer') return true;
+  const allowed = energyAccess.membersByCer.get(cerId);
+  return allowed ? allowed.has(String(memberId)) : false;
+}
+
+function formatEnergyInputValue(value) {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return value;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '';
+  return Number(num.toFixed(2)).toString();
+}
+
+function setConsumptionInputs(row, memberId, frequency, values) {
+  const prefix = frequency === 'annual' ? 'annual' : 'monthly';
+  const keys = ['f1', 'f2', 'f3'];
+  keys.forEach((key, idx) => {
+    const selector = `[data-input-consumo-${prefix}-${key}="${CSS.escape(memberId)}"]`;
+    const input = row.querySelector(selector);
+    if (!input) return;
+    const altKeys = [key, key.toUpperCase(), `fascia${idx + 1}`];
+    let value = '';
+    for (const alt of altKeys) {
+      if (values && values[alt] !== undefined && values[alt] !== null) {
+        value = values[alt];
+        break;
+      }
+    }
+    input.value = formatEnergyInputValue(value);
+  });
+}
+
+function applyConsumptionRowFrequency(row, frequency, { cerId, memberId, skipState } = {}) {
+  const mode = frequency === 'annual' ? 'annual' : 'monthly';
+  if (!skipState && cerId && memberId) {
+    setMemberFormState(cerId, memberId, { frequency: mode });
+  }
+  row.dataset.frequency = mode;
+  row.querySelectorAll('[data-consumo-monthly]').forEach(el => {
+    el.hidden = mode !== 'monthly';
+  });
+  row.querySelectorAll('[data-consumo-annual]').forEach(el => {
+    el.hidden = mode !== 'annual';
+  });
+  const monthlyLabel = row.querySelector('[data-consumo-period-monthly]');
+  if (monthlyLabel) monthlyLabel.hidden = mode !== 'monthly';
+  const annualLabel = row.querySelector('[data-consumo-period-annual]');
+  if (annualLabel) annualLabel.hidden = mode !== 'annual';
+  const select = row.querySelector('[data-consumo-frequency]');
+  if (select) select.value = mode;
+  updateConsumptionTotal(row);
+}
+
+function applyConsumptionAccess(row, canEdit) {
+  row.querySelectorAll('input, select').forEach((el) => {
+    el.disabled = !canEdit;
+  });
+  const saveBtn = row.querySelector('[data-save-consumo]');
+  if (saveBtn) {
+    saveBtn.disabled = !canEdit;
+    saveBtn.classList.toggle('disabled', !canEdit);
+    if (!canEdit) saveBtn.title = 'Accesso in sola lettura';
+    else saveBtn.removeAttribute('title');
+  }
+  row.classList.toggle('readonly', !canEdit);
+}
+
+function updateConsumptionTotal(row) {
+  if (!row) return;
+  const memberId = row.dataset.memberId;
+  const select = row.querySelector('[data-consumo-frequency]');
+  const mode = select?.value === 'annual' || row.dataset.frequency === 'annual' ? 'annual' : 'monthly';
+  const inputs = ['f1', 'f2', 'f3'].map(key => row.querySelector(`[data-input-consumo-${mode}-${key}="${CSS.escape(memberId)}"]`));
+  let total = 0;
+  let hasValue = false;
+  inputs.forEach(input => {
+    if (!input) return;
+    const raw = input.value.trim();
+    if (!raw) return;
+    const num = Number(raw);
+    if (!Number.isFinite(num)) return;
+    total += num;
+    hasValue = true;
+  });
+  const cell = row.querySelector(`[data-consumo-total="${CSS.escape(memberId)}"]`);
+  if (cell) {
+    cell.textContent = hasValue ? `${formatKwh(total)} kWh` : '0 kWh';
+  }
+}
+
+function captureConsumptionDraft(row) {
+  if (!row) return;
+  const memberId = row.dataset.memberId;
+  const cerId = energyState.selectedCerId;
+  if (!memberId || !cerId) return;
+  const select = row.querySelector('[data-consumo-frequency]');
+  const frequency = select?.value === 'annual' ? 'annual' : 'monthly';
+  let periodKey = sanitizeEnergyPeriod(energyState.period || currentPeriod()) || energyState.period || currentPeriod();
+  if (frequency === 'annual') {
+    const yearInput = row.querySelector(`[data-input-consumo-year="${CSS.escape(memberId)}"]`);
+    const rawYear = yearInput?.value?.trim() || '';
+    const sanitizedYear = sanitizeEnergyYear(rawYear);
+    if (sanitizedYear) {
+      periodKey = sanitizedYear;
+    } else if (rawYear) {
+      periodKey = rawYear;
+    } else {
+      periodKey = '__draft__';
+    }
+  }
+  if (!periodKey) periodKey = '__draft__';
+  const values = {
+    f1: row.querySelector(`[data-input-consumo-${frequency}-f1="${CSS.escape(memberId)}"]`)?.value || '',
+    f2: row.querySelector(`[data-input-consumo-${frequency}-f2="${CSS.escape(memberId)}"]`)?.value || '',
+    f3: row.querySelector(`[data-input-consumo-${frequency}-f3="${CSS.escape(memberId)}"]`)?.value || ''
+  };
+  if (values.f1 || values.f2 || values.f3) {
+    setEnergyDraft(cerId, memberId, frequency, periodKey, values);
+  } else {
+    clearEnergyDraft(cerId, memberId, frequency, periodKey);
+  }
+}
+
+// -----------------------------
+// Energy management
+// -----------------------------
+function initEnergyModule() {
+  energyCerSelect = document.getElementById('energy-cer-select');
+  energyPeriodInput = document.getElementById('energy-period');
+  energyFeedback = document.getElementById('energy-feedback');
+  energyPeriodLabel = document.getElementById('energy-period-label');
+  energyProductionPeriod = document.getElementById('energy-production-period');
+  energyConsumiWrap = document.getElementById('energy-consumi-table-wrap');
+  energyConsumiTableBody = document.querySelector('#energy-consumi-table tbody');
+  energyConsumiEmpty = document.getElementById('energy-consumi-empty');
+  energyProductionWrap = document.getElementById('energy-production-table-wrap');
+  energyProductionTableBody = document.querySelector('#energy-production-table tbody');
+  energyProductionEmpty = document.getElementById('energy-production-empty');
+
+  if (energyPeriodInput) {
+    energyState.period = energyPeriodInput.value || currentPeriod();
+    energyPeriodInput.value = energyState.period;
+    energyPeriodInput.addEventListener('change', () => {
+      energyState.period = energyPeriodInput.value || currentPeriod();
+      renderEnergyTables();
+    });
+  } else {
+    energyState.period = currentPeriod();
+  }
+
+  energyCerSelect?.addEventListener('change', () => {
+    energyState.selectedCerId = energyCerSelect.value || '';
+    renderEnergyTables();
+  });
+
+  energyConsumiTableBody?.addEventListener('click', onEnergyConsumiClick);
+  energyConsumiTableBody?.addEventListener('input', onEnergyConsumiInput);
+  energyConsumiTableBody?.addEventListener('change', onEnergyConsumiChange);
+  energyProductionTableBody?.addEventListener('click', onEnergyProductionClick);
+
+  renderEnergyTables();
+}
+
+function onEnergyConsumiClick(event) {
+  const btn = event.target.closest('[data-save-consumo]');
+  if (!btn) return;
+  const memberId = btn.dataset.saveConsumo;
+  if (memberId) {
+    saveConsumptionForMember(memberId);
+  }
+}
+
+function onEnergyConsumiInput(event) {
+  const input = event.target;
+  if (!input || !input.closest('tr[data-member-id]')) return;
+  if (
+    !input.matches(
+      '[data-input-consumo-monthly-f1], [data-input-consumo-monthly-f2], [data-input-consumo-monthly-f3], [data-input-consumo-annual-f1], [data-input-consumo-annual-f2], [data-input-consumo-annual-f3]'
+    )
+  ) {
+    return;
+  }
+  const row = input.closest('tr[data-member-id]');
+  updateConsumptionTotal(row);
+  captureConsumptionDraft(row);
+}
+
+function onEnergyConsumiChange(event) {
+  const target = event.target;
+  if (!target) return;
+  const row = target.closest('tr[data-member-id]');
+  if (!row) return;
+  const memberId = row.dataset.memberId;
+  const cerId = energyState.selectedCerId;
+  if (target.matches('[data-consumo-frequency]')) {
+    const frequency = target.value === 'annual' ? 'annual' : 'monthly';
+    applyConsumptionRowFrequency(row, frequency, { cerId, memberId });
+    captureConsumptionDraft(row);
+    return;
+  }
+  if (target.matches('[data-input-consumo-year]')) {
+    const rawYear = target.value.trim();
+    const sanitizedYear = sanitizeEnergyYear(rawYear);
+    if (sanitizedYear) {
+      target.value = sanitizedYear;
+      setMemberFormState(cerId, memberId, { annualYear: sanitizedYear });
+      const cer = cers.find(item => item.id === cerId);
+      const records = Array.isArray(cer?.consumi) ? cer.consumi : [];
+      const record = records.find(item => String(item.memberId) === memberId && item.frequency === 'annual' && item.period === sanitizedYear);
+      setConsumptionInputs(row, memberId, 'annual', record || { f1: '', f2: '', f3: '' });
+      const fallbackDraft = getEnergyDraft(cerId, memberId, 'annual', '__draft__');
+      if (fallbackDraft && !getEnergyDraft(cerId, memberId, 'annual', sanitizedYear)) {
+        setEnergyDraft(cerId, memberId, 'annual', sanitizedYear, fallbackDraft);
+      }
+      clearEnergyDraft(cerId, memberId, 'annual', '__draft__');
+      const storedDraft = getEnergyDraft(cerId, memberId, 'annual', sanitizedYear);
+      if (storedDraft) {
+        setConsumptionInputs(row, memberId, 'annual', storedDraft);
+      }
+    } else {
+      setMemberFormState(cerId, memberId, { annualYear: rawYear });
+    }
+    captureConsumptionDraft(row);
+    updateConsumptionTotal(row);
+  }
+}
+
+function onEnergyProductionClick(event) {
+  const btn = event.target.closest('[data-save-produzione]');
+  if (!btn) return;
+  const plantId = btn.dataset.saveProduzione;
+  if (plantId) {
+    saveProductionForPlant(plantId);
+  }
+}
+
+function renderEnergyTables() {
+  if (!energyPeriodLabel) energyPeriodLabel = document.getElementById('energy-period-label');
+  if (!energyProductionPeriod) energyProductionPeriod = document.getElementById('energy-production-period');
+  setEnergyFeedback('');
+  const period = energyState.period || currentPeriod();
+  if (energyPeriodInput && energyPeriodInput.value !== period) {
+    energyPeriodInput.value = period;
+  }
+  if (energyPeriodLabel) {
+    energyPeriodLabel.textContent = period ? `Periodo ${period}` : '';
+  }
+  if (energyProductionPeriod) {
+    energyProductionPeriod.textContent = period ? `Periodo ${period}` : '';
+  }
+
+  const availableIds = energyAccess.mode === 'consumer'
+    ? cers.filter(c => energyAccess.membersByCer.has(c.id)).map(c => c.id)
+    : cers.map(c => c.id);
+  if (energyState.selectedCerId && !availableIds.includes(energyState.selectedCerId)) {
+    energyState.selectedCerId = '';
+  }
+  if (!energyState.selectedCerId && availableIds.length) {
+    energyState.selectedCerId = availableIds[0];
+  }
+  if (energyCerSelect && energyCerSelect.value !== energyState.selectedCerId) {
+    energyCerSelect.value = energyState.selectedCerId || '';
+  }
+
+  const cer = cers.find(c => c.id === energyState.selectedCerId) || null;
+  if (energyAccess.mode === 'consumer' && !energyAccess.membersByCer.size) {
+    setEnergyFeedback('Il tuo account non è associato ad alcuna CER. Contatta l’amministratore per l’abilitazione.', true);
+  }
+  renderEnergyConsumi(cer, period);
+  renderEnergyProduzione(cer, period);
+}
+
+function renderEnergyConsumi(cer, period) {
+  if (!energyConsumiTableBody || !energyConsumiEmpty) return;
+  energyConsumiTableBody.innerHTML = '';
+  if (!cer) {
+    if (energyConsumiWrap) energyConsumiWrap.hidden = true;
+    energyConsumiEmpty.textContent = cers.length
+      ? 'Seleziona una CER per visualizzare i partecipanti.'
+      : 'Crea una CER per iniziare a registrare i consumi.';
+    energyConsumiEmpty.hidden = false;
+    return;
+  }
+
+  if (!canViewCer(cer.id)) {
+    if (energyConsumiWrap) energyConsumiWrap.hidden = true;
+    energyConsumiEmpty.textContent = 'Non hai accesso ai consumi di questa CER.';
+    energyConsumiEmpty.hidden = false;
+    return;
+  }
+
+  const members = Array.isArray(cer.membri) ? cer.membri : [];
+  if (!members.length) {
+    if (energyConsumiWrap) energyConsumiWrap.hidden = true;
+    energyConsumiEmpty.textContent = 'Aggiungi partecipanti alla CER per registrare i consumi.';
+    energyConsumiEmpty.hidden = false;
+    return;
+  }
+
+  const records = Array.isArray(cer.consumi) ? cer.consumi : [];
+  const displayPeriod = sanitizeEnergyPeriod(period) || period || '-';
+  if (energyConsumiWrap) energyConsumiWrap.hidden = false;
+  energyConsumiEmpty.hidden = true;
+
+  members.forEach(member => {
+    const memberId = String(member.id);
+    const monthlyRecord = records.find(item => String(item.memberId) === memberId && item.period === period && item.frequency !== 'annual');
+    const annualRecords = records
+      .filter(item => String(item.memberId) === memberId && item.frequency === 'annual')
+      .sort((a, b) => Number(b.period) - Number(a.period));
+
+    const formState = getMemberFormState(cer.id, memberId);
+    let frequency = formState.frequency;
+    if (frequency !== 'monthly' && frequency !== 'annual') {
+      frequency = monthlyRecord ? 'monthly' : (annualRecords.length ? 'annual' : 'monthly');
+    }
+    if (!monthlyRecord && !annualRecords.length) {
+      frequency = 'monthly';
+    }
+
+    let annualYear = sanitizeEnergyYear(formState.annualYear);
+    if (!annualYear) {
+      annualYear = annualRecords[0]?.period || String(new Date().getFullYear() - 1);
+    }
+    setMemberFormState(cer.id, memberId, { frequency, annualYear });
+
+    const monthlyDraft = getEnergyDraft(cer.id, memberId, 'monthly', period);
+    const annualDraft = getEnergyDraft(cer.id, memberId, 'annual', annualYear);
+    const monthlyValues = monthlyDraft || monthlyRecord || { f1: '', f2: '', f3: '' };
+    const annualRecord = annualRecords.find(item => item.period === annualYear) || null;
+    const annualValues = annualDraft || annualRecord || { f1: '', f2: '', f3: '' };
+    const savedYears = annualRecords.map(item => item.period).join(', ');
+
+    const tr = document.createElement('tr');
+    tr.dataset.memberId = memberId;
+    const emailLabel = member.email ? `<br/><small class="muted">${escapeHtml(member.email)}</small>` : '';
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(member.nome || 'Partecipante')}</strong><br/><small>${escapeHtml(member.pod || '')}</small>${emailLabel}</td>
+      <td>${escapeHtml(member.ruolo || '-')}</td>
+      <td>
+        <select class="input" data-consumo-frequency="${escapeHtml(memberId)}">
+          <option value="monthly">Mensile</option>
+          <option value="annual">Annuale</option>
+        </select>
+        <div data-consumo-period-monthly class="muted">Periodo ${escapeHtml(displayPeriod)}</div>
+        <label data-consumo-period-annual hidden class="muted">
+          Anno
+          <input class="input" type="number" min="2000" max="2100" step="1" data-input-consumo-year="${escapeHtml(memberId)}" placeholder="${escapeHtml(String(new Date().getFullYear() - 1))}"/>
+        </label>
+        ${savedYears ? `<small class="muted" data-consumo-annual-years>Salvati: ${escapeHtml(savedYears)}</small>` : ''}
+      </td>
+      <td>
+        <div data-consumo-monthly>
+          <input class="input" type="number" min="0" step="0.01" data-input-consumo-monthly-f1="${escapeHtml(memberId)}" placeholder="0"/>
+        </div>
+        <div data-consumo-annual hidden>
+          <input class="input" type="number" min="0" step="0.01" data-input-consumo-annual-f1="${escapeHtml(memberId)}" placeholder="0"/>
+        </div>
+      </td>
+      <td>
+        <div data-consumo-monthly>
+          <input class="input" type="number" min="0" step="0.01" data-input-consumo-monthly-f2="${escapeHtml(memberId)}" placeholder="0"/>
+        </div>
+        <div data-consumo-annual hidden>
+          <input class="input" type="number" min="0" step="0.01" data-input-consumo-annual-f2="${escapeHtml(memberId)}" placeholder="0"/>
+        </div>
+      </td>
+      <td>
+        <div data-consumo-monthly>
+          <input class="input" type="number" min="0" step="0.01" data-input-consumo-monthly-f3="${escapeHtml(memberId)}" placeholder="0"/>
+        </div>
+        <div data-consumo-annual hidden>
+          <input class="input" type="number" min="0" step="0.01" data-input-consumo-annual-f3="${escapeHtml(memberId)}" placeholder="0"/>
+        </div>
+      </td>
+      <td data-consumo-total="${escapeHtml(memberId)}">0 kWh</td>
+      <td class="actions">
+        <button class="btn ghost" type="button" data-save-consumo="${escapeHtml(memberId)}">Salva</button>
+      </td>
+    `;
+
+    energyConsumiTableBody.appendChild(tr);
+
+    const frequencySelect = tr.querySelector(`[data-consumo-frequency="${CSS.escape(memberId)}"]`);
+    if (frequencySelect) frequencySelect.value = frequency;
+    const yearInput = tr.querySelector(`[data-input-consumo-year="${CSS.escape(memberId)}"]`);
+    if (yearInput) yearInput.value = annualYear;
+
+    setConsumptionInputs(tr, memberId, 'monthly', monthlyValues);
+    setConsumptionInputs(tr, memberId, 'annual', annualValues);
+
+    applyConsumptionRowFrequency(tr, frequency, { cerId: cer.id, memberId, skipState: true });
+    applyConsumptionAccess(tr, canEditConsumption(memberId));
+    updateConsumptionTotal(tr);
+  });
+}
+
+function renderEnergyProduzione(cer, period) {
+  if (!energyProductionTableBody || !energyProductionEmpty) return;
+  energyProductionTableBody.innerHTML = '';
+  if (!cer) {
+    if (energyProductionWrap) energyProductionWrap.hidden = true;
+    energyProductionEmpty.textContent = cers.length
+      ? 'Seleziona una CER per visualizzare gli impianti.'
+      : 'Crea una CER e collega impianti per gestire la produzione.';
+    energyProductionEmpty.hidden = false;
+    return;
+  }
+
+  const plants = Array.isArray(cer.impianti) ? cer.impianti.filter(plant => isProductionAllowedRole(plant.titolareRuolo)) : [];
+  if (!plants.length) {
+    if (energyProductionWrap) energyProductionWrap.hidden = true;
+    energyProductionEmpty.textContent = 'Nessun impianto con titolare Prosumer/Consumer disponibile.';
+    energyProductionEmpty.hidden = false;
+    return;
+  }
+
+  const records = Array.isArray(cer.produzione) ? cer.produzione : [];
+  if (energyProductionWrap) energyProductionWrap.hidden = false;
+  energyProductionEmpty.hidden = true;
+
+  plants.forEach(plant => {
+    const record = records.find(item => String(item.plantId) === String(plant.id) && item.period === period);
+    const value = record && record.kwh != null ? Number(record.kwh) : null;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(plant.nome || 'Impianto')}</strong></td>
+      <td>${escapeHtml(plant.titolareNome || '')} · ${escapeHtml(plant.titolareRuolo || '')}</td>
+      <td>
+        <input class="input" type="number" min="0" step="0.01" data-input-produzione="${escapeHtml(plant.id)}" value="${value != null ? value : ''}" placeholder="0"/>
+      </td>
+      <td class="actions">
+        <button class="btn ghost" type="button" data-save-produzione="${escapeHtml(plant.id)}">Salva</button>
+      </td>
+    `;
+    energyProductionTableBody.appendChild(tr);
+  });
+}
+
+function saveConsumptionForMember(memberId) {
+  const cerId = energyState.selectedCerId;
+  if (!cerId) {
+    setEnergyFeedback('Seleziona una CER per salvare i consumi.', true);
+    return;
+  }
+  if (!canEditConsumption(memberId)) {
+    setEnergyFeedback('Non hai i permessi per aggiornare questo consumo.', true);
+    return;
+  }
+  const row = energyConsumiTableBody?.querySelector(`tr[data-member-id="${CSS.escape(memberId)}"]`);
+  if (!row) return;
+  const select = row.querySelector('[data-consumo-frequency]');
+  const frequency = select?.value === 'annual' ? 'annual' : 'monthly';
+  let period = energyState.period || currentPeriod();
+  if (frequency === 'annual') {
+    const yearInput = row.querySelector(`[data-input-consumo-year="${CSS.escape(memberId)}"]`);
+    const rawYear = yearInput?.value?.trim() || '';
+    const sanitizedYear = sanitizeEnergyYear(rawYear);
+    if (!sanitizedYear) {
+      setEnergyFeedback('Inserisci un anno valido (es. 2023).', true);
+      yearInput?.focus();
+      return;
+    }
+    period = sanitizedYear;
+    if (yearInput) yearInput.value = sanitizedYear;
+    setMemberFormState(cerId, memberId, { annualYear: sanitizedYear, frequency: 'annual' });
+  } else {
+    const sanitizedPeriod = sanitizeEnergyPeriod(period) || period;
+    if (!sanitizedPeriod) {
+      setEnergyFeedback('Periodo non valido. Seleziona un mese corretto.', true);
+      return;
+    }
+    period = sanitizedPeriod;
+    setMemberFormState(cerId, memberId, { frequency: 'monthly' });
+  }
+
+  const inputs = ['f1', 'f2', 'f3'].map((key) => {
+    const input = row.querySelector(`[data-input-consumo-${frequency}-${key}="${CSS.escape(memberId)}"]`);
+    return input || null;
+  });
+
+  let hasValues = false;
+  let invalidInput = null;
+  const components = inputs.map((input) => {
+    if (!input) return 0;
+    const raw = input.value.trim();
+    if (!raw) return null;
+    const num = Number(raw);
+    if (!Number.isFinite(num) || num < 0) {
+      invalidInput = input;
+      return null;
+    }
+    hasValues = true;
+    return Number(num.toFixed(2));
+  });
+
+  if (invalidInput) {
+    setEnergyFeedback('Inserisci valori kWh validi (>= 0).', true);
+    invalidInput.focus();
+    return;
+  }
+
+  if (!hasValues) {
+    const updated = updateCerRecord(cerId, (draft) => {
+      const members = Array.isArray(draft.membri) ? draft.membri : [];
+      if (!members.some(m => String(m.id) === String(memberId))) {
+        setEnergyFeedback('Il partecipante non appartiene più alla CER.', true);
+        return false;
+      }
+      const list = Array.isArray(draft.consumi) ? draft.consumi.map(item => ({ ...item })) : [];
+      const idx = list.findIndex(item => String(item.memberId || item.member_id) === String(memberId)
+        && (item.frequency || 'monthly') === frequency
+        && item.period === period);
+      if (idx !== -1) list.splice(idx, 1);
+      draft.consumi = list;
+      return true;
+    });
+    if (updated) {
+      clearEnergyDraft(cerId, memberId, frequency, frequency === 'annual' ? period : energyState.period || period);
+      if (frequency === 'annual') {
+        clearEnergyDraft(cerId, memberId, frequency, '__draft__');
+      }
+      setEnergyFeedback('Consumo rimosso.');
+      renderEnergyTables();
+    }
+    return;
+  }
+
+  const normalizedComponents = components.map(value => (value == null ? 0 : value));
+  const total = Number((normalizedComponents[0] + normalizedComponents[1] + normalizedComponents[2]).toFixed(2));
+
+  const updated = updateCerRecord(cerId, (draft) => {
+    const members = Array.isArray(draft.membri) ? draft.membri : [];
+    if (!members.some(m => String(m.id) === String(memberId))) {
+      setEnergyFeedback('Il partecipante non appartiene più alla CER.', true);
+      return false;
+    }
+    const list = Array.isArray(draft.consumi) ? draft.consumi.map(item => ({ ...item })) : [];
+    const idx = list.findIndex(item => String(item.memberId || item.member_id) === String(memberId)
+      && (item.frequency || 'monthly') === frequency
+      && item.period === period);
+    const entry = idx !== -1 ? list[idx] : { id: uid('cer-consumo'), memberId, period };
+    entry.memberId = memberId;
+    entry.period = period;
+    entry.frequency = frequency;
+    entry.f1 = normalizedComponents[0];
+    entry.f2 = normalizedComponents[1];
+    entry.f3 = normalizedComponents[2];
+    entry.kwh = total;
+    if (idx === -1) list.push(entry);
+    else list[idx] = entry;
+    draft.consumi = list;
+    return true;
+  });
+
+  if (updated) {
+    clearEnergyDraft(cerId, memberId, frequency, frequency === 'annual' ? period : energyState.period || period);
+    if (frequency === 'annual') {
+      clearEnergyDraft(cerId, memberId, frequency, '__draft__');
+    }
+    setEnergyFeedback('Consumo aggiornato.');
+    renderEnergyTables();
+  }
+}
+
+function saveProductionForPlant(plantId) {
+  const cerId = energyState.selectedCerId;
+  if (!cerId) {
+    setEnergyFeedback('Seleziona una CER per salvare la produzione.', true);
+    return;
+  }
+  const period = energyState.period || currentPeriod();
+  const input = energyProductionTableBody?.querySelector(`[data-input-produzione="${CSS.escape(plantId)}"]`);
+  if (!input) return;
+  const rawValue = input.value.trim();
+  const value = rawValue === '' ? null : Number(rawValue);
+  if (rawValue !== '' && (!Number.isFinite(value) || value < 0)) {
+    setEnergyFeedback('Inserisci un valore kWh valido (>= 0).', true);
+    input.focus();
+    return;
+  }
+
+  const updated = updateCerRecord(cerId, (draft) => {
+    const plants = Array.isArray(draft.impianti) ? draft.impianti : [];
+    const plant = plants.find(p => String(p.id) === String(plantId));
+    if (!plant) {
+      setEnergyFeedback('Impianto non trovato nella CER.', true);
+      return false;
+    }
+    if (!isProductionAllowedRole(plant.titolareRuolo)) {
+      setEnergyFeedback('La produzione è registrabile solo per impianti intestati a Prosumer o Consumer.', true);
+      return false;
+    }
+    const list = Array.isArray(draft.produzione) ? draft.produzione.map(item => ({ ...item })) : [];
+    const idx = list.findIndex(item => String(item.plantId || item.plant_id) === String(plantId) && item.period === period);
+    if (rawValue === '') {
+      if (idx !== -1) list.splice(idx, 1);
+    } else {
+      const entry = idx !== -1 ? list[idx] : { id: uid('cer-produzione'), plantId, period };
+      entry.plantId = plantId;
+      entry.period = period;
+      entry.kwh = Number(value.toFixed(2));
+      if (idx === -1) list.push(entry);
+      else list[idx] = entry;
+    }
+    draft.produzione = list;
+    return true;
+  });
+
+  if (updated) {
+    setEnergyFeedback(rawValue === '' ? 'Produzione rimossa.' : 'Produzione aggiornata.');
+    renderEnergyTables();
+  }
+}
+
+function isProductionAllowedRole(role) {
+  return ENERGY_ALLOWED_ROLES.has(String(role || '').toLowerCase());
+}
+
+function setEnergyFeedback(message, isError = false) {
+  if (!energyFeedback) return;
+  energyFeedback.textContent = message || '';
+  energyFeedback.classList.toggle('error-text', Boolean(isError && message));
+}
+
 // -----------------------------
 // Energy management
 // -----------------------------
@@ -2809,6 +3769,14 @@ async function refreshCerOptions() {
     }
   }
 
+  if (energyAccess.mode === 'consumer') {
+    const updatedMembers = computeConsumerMembers(energyAccess.email);
+    if (!compareMemberMaps(energyAccess.membersByCer, updatedMembers)) {
+      energyAccess.membersByCer = updatedMembers;
+      pruneEnergySelectionAccess();
+    }
+  }
+
   const options = new Map();
   cers.forEach(cer => options.set(cer.id, cer.nome));
   if (Array.isArray(plantState.rawPlants)) {
@@ -2822,7 +3790,10 @@ async function refreshCerOptions() {
   if (energyCerSelect) {
     const previousEnergy = energyState.selectedCerId || energyCerSelect.value || '';
     energyCerSelect.innerHTML = '';
-    if (!hasOptions) {
+    const visibleOptions = energyAccess.mode === 'consumer'
+      ? [...options.entries()].filter(([id]) => energyAccess.membersByCer.has(id))
+      : [...options.entries()];
+    if (!visibleOptions.length) {
       const opt = document.createElement('option');
       opt.value = '';
       opt.textContent = 'Nessuna CER disponibile';
@@ -2831,21 +3802,31 @@ async function refreshCerOptions() {
       energyState.selectedCerId = '';
     } else {
       energyCerSelect.disabled = false;
-      options.forEach((label, id) => {
+      visibleOptions.forEach(([id, label]) => {
         const opt = document.createElement('option');
         opt.value = id;
         opt.textContent = label;
         energyCerSelect.appendChild(opt);
       });
-      const nextEnergy = previousEnergy && options.has(previousEnergy) ? previousEnergy : options.keys().next().value;
+      const allowedIds = visibleOptions.map(([id]) => id);
+      const nextEnergy = previousEnergy && allowedIds.includes(previousEnergy) ? previousEnergy : allowedIds[0];
       energyState.selectedCerId = nextEnergy;
       energyCerSelect.value = nextEnergy;
     }
   } else {
+    const allowedIds = energyAccess.mode === 'consumer'
+      ? new Set([...energyAccess.membersByCer.keys()])
+      : null;
     if (energyState.selectedCerId && !options.has(energyState.selectedCerId)) {
       energyState.selectedCerId = '';
     }
-    if (!energyState.selectedCerId && hasOptions) {
+    if (energyAccess.mode === 'consumer') {
+      if (!energyState.selectedCerId && allowedIds && allowedIds.size) {
+        energyState.selectedCerId = allowedIds.values().next().value;
+      } else if (energyState.selectedCerId && allowedIds && !allowedIds.has(energyState.selectedCerId)) {
+        energyState.selectedCerId = allowedIds.values().next().value || '';
+      }
+    } else if (!energyState.selectedCerId && hasOptions) {
       energyState.selectedCerId = options.keys().next().value;
     }
   }
