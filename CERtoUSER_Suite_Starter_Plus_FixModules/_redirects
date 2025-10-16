@@ -20,3 +20,4 @@
 /api2/templates/manifest   /.netlify/functions/templates-manifest   200
 /api2/documents/generate   /.netlify/functions/documents2           200
 /api2/*                   /.netlify/functions/:splat               200
+/*                       /index.html                              200
