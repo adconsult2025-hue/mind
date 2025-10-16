@@ -1,6 +1,8 @@
 const admin = require('firebase-admin');
 const { json } = require('./_cors');
 
+const DEV_NO_AUTH = String(process.env.DEV_NO_AUTH || '').toLowerCase() === 'true';
+
 const ROLE_ALIASES = new Map([
   ['superadmin', 'superadmin'],
   ['super-admin', 'superadmin'],
@@ -189,6 +191,31 @@ function serverError(message) {
 }
 
 async function verifyRequest(event, options = {}) {
+  if (DEV_NO_AUTH) {
+    const roles = ['superadmin', 'admin', 'agente', 'resp-cer', 'prosumer', 'produttore', 'consumer', 'authenticated'];
+    const claims = {
+      devNoAuth: true,
+      role: 'superadmin',
+      roles,
+      territories: ['ALL'],
+      cerIds: []
+    };
+    return {
+      ok: true,
+      roles,
+      claims,
+      user: {
+        uid: 'dev-superadmin',
+        email: 'dev@certouser.it',
+        name: 'Dev Superadmin',
+        roles,
+        territories: claims.territories,
+        cerIds: claims.cerIds
+      },
+      token: null
+    };
+  }
+
   const token = extractAuthToken(event);
   if (!token) {
     return { ok: false, response: unauthorized('Intestazione Authorization mancante.') };
