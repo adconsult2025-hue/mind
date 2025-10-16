@@ -281,6 +281,12 @@ main.container {
   grid-template-columns: 1.15fr 1fr;
 }
 
+.column-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
 @media (max-width: 1200px) {
   .grid-2 {
     grid-template-columns: 1fr;
