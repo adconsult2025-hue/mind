@@ -2,6 +2,15 @@
 
 Questa repository contiene la versione starter della suite MIND per la gestione integrata di CRM, CER, impianti e documentazione demo.
 
+## Netlify Functions e Identity
+
+La cartella `netlify/functions/` contiene tutte le funzioni serverless utilizzate dalla suite, inclusa `whoami.js` che restituisce i dati dell'utente autenticato tramite Netlify Identity. Dopo aver collegato il sito a Netlify ed abilitato Identity, puoi verificare che le sessioni vengano riconosciute visitando uno di questi endpoint:
+
+* `/.netlify/functions/whoami`
+* `/api/whoami` (grazie alla rewrite definita in `_redirects`)
+
+Entrambe le rotte risponderanno con un JSON che espone l'indirizzo email e i ruoli associati all'utente loggato. Se la risposta riporta `"auth": false`, significa che la chiamata non contiene un token valido e non è stata effettuata alcuna autenticazione.
+
 ## Database Postgres
 
 La suite utilizza Neon/Postgres per persistere dati operativi come anagrafiche CER e documenti. Nella cartella `db/` trovi gli
