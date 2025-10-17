@@ -1,5 +1,6 @@
 const { upsertWorkflow } = require('./_data');
 const { guard } = require('./_safe');
+const { parseBody } = require('./_http');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -22,7 +23,7 @@ exports.handler = guard(async function handler(event) {
   }
 
   try {
-    const body = JSON.parse(event.body || '{}');
+    const body = parseBody(event);
     const { entity_type, entity_id, phase, status, owner, due_date, notes } = body;
     if (!entity_type || !entity_id || phase === undefined || !status) {
       return {

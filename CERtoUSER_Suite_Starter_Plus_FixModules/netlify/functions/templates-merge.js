@@ -4,6 +4,7 @@ const PizZip = require("pizzip");
 const Docxtemplater = require("docxtemplater");
 
 const { corsHeaders, preflight, json } = require("./_cors");
+const { parseBody } = require("./_http");
 
 const DATA_FILE = path.join(__dirname, "../data/templates.json");
 
@@ -79,7 +80,7 @@ exports.handler = async (event) => {
   if (event.httpMethod !== "POST") return json(405, { ok: false, error: "METHOD_NOT_ALLOWED" });
 
   try {
-    const { templateCode, payload, filename } = JSON.parse(event.body || "{}");
+    const { templateCode, payload, filename } = parseBody(event);
     const normalizedCode = typeof templateCode === 'string' ? templateCode.trim().toUpperCase() : '';
     if (!normalizedCode) return json(400, { ok: false, error: "MISSING templateCode" });
 

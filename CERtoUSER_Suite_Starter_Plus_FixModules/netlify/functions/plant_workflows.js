@@ -1,4 +1,5 @@
 const { getDocsByPhase } = require('./plant_docs');
+const { parseBody } = require('./_http');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -128,7 +129,7 @@ async function handler(event) {
       };
     }
     try {
-      const body = JSON.parse(event.body || '{}');
+      const body = parseBody(event);
       const { plant_id, phase, status, owner, due_date } = body;
       if (!plant_id || !phase || !status) {
         return {

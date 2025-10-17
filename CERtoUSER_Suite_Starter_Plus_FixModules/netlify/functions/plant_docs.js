@@ -1,3 +1,5 @@
+const { parseBody } = require('./_http');
+
 const headers = () => ({
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || '*',
@@ -153,7 +155,7 @@ async function handler(event) {
   }
 
   try {
-    const body = JSON.parse(event.body || '{}');
+    const body = parseBody(event);
     const { plant_id, type } = body;
     if (!plant_id || !type) {
       return {

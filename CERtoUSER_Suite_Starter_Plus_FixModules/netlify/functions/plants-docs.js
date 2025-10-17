@@ -1,5 +1,6 @@
 const { listPlantDocs, applyPlantDocPreset } = require('./_plant_store');
 const { guard } = require('./_safe');
+const { parseBody } = require('./_http');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -33,7 +34,7 @@ exports.handler = guard(async function handler(event) {
     }
 
     if (event.httpMethod === 'POST' && (event.path.endsWith('/preset') || event.rawUrl?.includes('/preset'))) {
-      const body = JSON.parse(event.body || '{}');
+      const body = parseBody(event);
       const { plant_id, type } = body;
       if (!plant_id || !type) {
         return respond(400, { ok: false, error: { code: 'BAD_REQUEST', message: 'plant_id e type sono obbligatori' } });

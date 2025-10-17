@@ -2,6 +2,7 @@ const { listWorkflows, upsertWorkflow, getPlants } = require('./_data');
 const plantWorkflows = require('./plant_workflows');
 const plantDocs = require('./plant_docs');
 const { guard } = require('./_safe');
+const { parseBody } = require('./_http');
 
 const SAFE_MODE = String(process.env.SAFE_MODE || '').toLowerCase() === 'true';
 
@@ -39,7 +40,7 @@ exports.handler = guard(async function handler(event) {
     }
 
     if (event.httpMethod === 'POST') {
-      const body = JSON.parse(event.body || '{}');
+      const body = parseBody(event);
       const { entity_type, entity_id, phase, status, owner, due_date, notes } = body;
       if (!entity_type || !entity_id || phase === undefined) {
         return {

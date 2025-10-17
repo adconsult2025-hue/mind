@@ -1,5 +1,6 @@
 const { guard } = require('./_safe');
 const { json, preflight } = require('./_cors');
+const { parseBody } = require('./_http');
 const { listQuotes, getQuote, createQuote, updateQuote, deleteQuote } = require('./_quotes');
 
 function parseId(event) {
@@ -14,19 +15,6 @@ function parseId(event) {
   }
   const params = event.queryStringParameters || {};
   return params.id || params.quote_id || null;
-}
-
-function readBody(event) {
-  if (!event.body) return {};
-  const raw = event.isBase64Encoded ? Buffer.from(event.body, 'base64').toString('utf8') : event.body;
-  try {
-    return JSON.parse(raw);
-  } catch (error) {
-    const err = new Error('Payload JSON non valido');
-    err.statusCode = 400;
-    err.code = 'BAD_REQUEST';
-    throw err;
-  }
 }
 
 exports.handler = guard(async function handler(event) {
@@ -50,7 +38,7 @@ exports.handler = guard(async function handler(event) {
   }
 
   if (event.httpMethod === 'POST') {
-    const payload = readBody(event);
+    const payload = parseBody(event);
     const created = await createQuote(payload, { userEmail: event.clientContext?.user?.email });
     return json(201, { ok: true, data: created });
   }
@@ -60,7 +48,7 @@ exports.handler = guard(async function handler(event) {
     if (!id) {
       return json(400, { ok: false, error: { code: 'BAD_REQUEST', message: 'ID preventivo mancante' } });
     }
-    const payload = readBody(event);
+    const payload = parseBody(event);
     const updated = await updateQuote(id, payload);
     if (!updated) {
       return json(404, { ok: false, error: { code: 'NOT_FOUND', message: 'Preventivo non trovato' } });
