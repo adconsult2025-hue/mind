@@ -1,4 +1,5 @@
 const { guard } = require('./_safe');
+const { parseBody } = require('./_http');
 const { listClients, createClient, updateClient, deleteClient } = require('./_data');
 const { uid } = require('./_store');
 
@@ -54,7 +55,7 @@ exports.handler = guard(async function handler(event) {
     }
 
     if (event.httpMethod === 'POST') {
-      const body = JSON.parse(event.body || '{}');
+      const body = parseBody(event);
       const payload = sanitizePayload(body);
       if (!payload.id) payload.id = uid('client');
       const created = createClient(payload);
@@ -70,7 +71,7 @@ exports.handler = guard(async function handler(event) {
           body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'ID cliente mancante' } })
         };
       }
-      const body = JSON.parse(event.body || '{}');
+      const body = parseBody(event);
       const payload = sanitizePayload(body);
       const updated = updateClient(id, payload);
       if (!updated) {

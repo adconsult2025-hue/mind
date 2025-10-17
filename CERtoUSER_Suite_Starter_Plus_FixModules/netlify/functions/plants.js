@@ -7,6 +7,7 @@ const {
   getInverterStatus
 } = require('./_data');
 const { guard } = require('./_safe');
+const { parseBody } = require('./_http');
 
 const SAFE_MODE = String(process.env.SAFE_MODE || '').toLowerCase() === 'true';
 
@@ -134,7 +135,7 @@ exports.handler = guard(async function handler(event) {
     }
 
     if (event.httpMethod === 'POST' && productionPlantId) {
-      const body = JSON.parse(event.body || '{}');
+      const body = parseBody(event);
       const date = body.date || body.ts || '';
       const kwh = Number(body.kwh);
       if (!date || Number.isNaN(new Date(date).getTime())) {
@@ -194,7 +195,7 @@ exports.handler = guard(async function handler(event) {
           body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'ID impianto mancante' } })
         };
       }
-      const body = JSON.parse(event.body || '{}');
+      const body = parseBody(event);
       const { tipologia, pct_cer, pct_contra } = body;
       if (!['A', 'B'].includes(tipologia)) {
         return {

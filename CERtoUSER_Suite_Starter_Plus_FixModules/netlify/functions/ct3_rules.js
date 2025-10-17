@@ -1,4 +1,5 @@
 const { guard } = require('./_safe');
+const { parseBody } = require('./_http');
 
 const HEADERS = {
   'Content-Type': 'application/json',
@@ -300,7 +301,7 @@ exports.handler = guard(async function handler(event) {
     }
 
     if (event.httpMethod === 'POST' && isCheckRequest(event)) {
-      const body = JSON.parse(event.body || '{}');
+      const body = parseBody(event);
       const payload = body.case || body;
       const evaluation = evaluateEligibility(payload);
       const requiredDocs = composeDocs(payload?.subject_type, payload?.intervention?.type);

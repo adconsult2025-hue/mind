@@ -4,6 +4,7 @@ const {
   setInverterStatus
 } = require('./_data');
 const { guard } = require('./_safe');
+const { parseBody } = require('./_http');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -27,7 +28,7 @@ exports.handler = guard(async function handler(event) {
 
   try {
     const apiKey = event.headers['x-api-key'] || event.headers['X-API-Key'];
-    const body = JSON.parse(event.body || '{}');
+    const body = parseBody(event);
     const { plant_id, ts, kwh } = body;
 
     if (!plant_id) {

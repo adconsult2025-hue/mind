@@ -1,6 +1,7 @@
 const { getPlants, findAllocation, ensureAllocation, saveAllocationResult } = require('./_data');
 const { splitPlant, aggregateCER } = require('./_calc');
 const { guard } = require('./_safe');
+const { parseBody } = require('./_http');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -31,7 +32,7 @@ exports.handler = guard(async function handler(event) {
     }
 
     if (event.httpMethod === 'POST') {
-      const body = JSON.parse(event.body || '{}');
+      const body = parseBody(event);
       const { cer_id, period, confirm } = body;
       if (!cer_id || !period) {
         return { statusCode: 400, headers: headers(), body: JSON.stringify({ ok: false, error: 'cer_id e period sono obbligatori' }) };
