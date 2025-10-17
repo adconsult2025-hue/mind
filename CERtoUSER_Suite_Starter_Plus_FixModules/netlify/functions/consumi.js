@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { consumiStore, clientPods, logs, uid } = require('./_store');
 const { guard } = require('./_safe');
+const { parseBody } = require('./_http');
 
 const SAFE_MODE = String(process.env.SAFE_MODE || '').toLowerCase() === 'true';
 
@@ -89,7 +90,7 @@ exports.handler = guard(async function handler(event) {
     }
 
     if (event.httpMethod === 'POST') {
-      const body = JSON.parse(event.body || '{}');
+      const body = parseBody(event);
       const clientId = body.client_id;
       const podInput = sanitizePod(body.pod_id);
       const period = body.period;

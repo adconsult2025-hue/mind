@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const { parseBody } = require('./_http');
 
 const SAFE_MODE = String(process.env.SAFE_MODE || '').toLowerCase() === 'true';
 
@@ -341,7 +342,7 @@ async function updateTemplate(event) {
     return safeModeDryRunResponse('SAFE_MODE: aggiornamento simulato (nessun salvataggio eseguito).');
   }
 
-  const body = safeJson(event.body);
+  const body = parseBody(event);
   const { id } = body || {};
 
   if (!id) {
@@ -433,7 +434,7 @@ async function mutateTemplates(event, pathSuffix = '') {
       return deleteTemplate(id);
     }
 
-    const body = safeJson(event.body);
+    const body = parseBody(event);
     const action = typeof body.action === 'string' ? body.action.trim().toLowerCase() : null;
 
     if (action === 'activate' && body.id) {
@@ -456,7 +457,7 @@ async function mutateTemplates(event, pathSuffix = '') {
 
 async function uploadTemplate(event) {
   const templates = refreshTemplates();
-  const body = safeJson(event.body);
+  const body = parseBody(event);
   const {
     name,
     code,
@@ -605,7 +606,7 @@ function formatStoredPath(targetPath, uploadsLocation) {
 
 async function activateTemplate(event) {
   const templates = refreshTemplates();
-  const body = safeJson(event.body);
+  const body = parseBody(event);
   const { id } = body;
   if (!id) {
     return {
@@ -690,11 +691,6 @@ function coercePlaceholders(value, fallback = []) {
     .map((entry) => (typeof entry === 'string' ? entry : String(entry ?? '')))
     .map((entry) => entry.trim())
     .filter(Boolean);
-}
-
-function safeJson(raw) {
-  if (!raw) return {};
-  try { return JSON.parse(raw); } catch { return {}; }
 }
 
 function normalizeTemplate(raw) {

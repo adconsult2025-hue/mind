@@ -2,6 +2,7 @@ const { Client } = require('pg');
 const { guard } = require('./_safe');
 const { preflight, json } = require('./_cors');
 const { requireRole } = require('./_auth');
+const { parseBody } = require('./_http');
 
 const CONNECTION_STRING = process.env.NEON_DATABASE_URL;
 
@@ -30,14 +31,6 @@ async function withClient(run) {
     return await run(client);
   } finally {
     await client.end();
-  }
-}
-
-function parseBody(body) {
-  try {
-    return JSON.parse(body || '{}');
-  } catch {
-    return {};
   }
 }
 
@@ -107,7 +100,7 @@ exports.handler = guard(async function handler(event) {
     }
 
     if (method === 'POST') {
-      const payload = parseBody(event.body);
+      const payload = parseBody(event);
       const required = ['cerId', 'phase', 'docType', 'filename', 'url'];
       const missing = required.filter((key) => !payload[key]);
       if (missing.length) {
@@ -137,7 +130,7 @@ exports.handler = guard(async function handler(event) {
     }
 
     if (method === 'PATCH') {
-      const payload = parseBody(event.body);
+      const payload = parseBody(event);
       if (!payload.id) {
         return json(400, { ok: false, error: { code: 'BAD_REQUEST', message: 'id is required' } });
       }

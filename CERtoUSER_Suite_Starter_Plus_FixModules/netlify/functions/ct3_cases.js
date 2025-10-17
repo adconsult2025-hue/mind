@@ -1,5 +1,6 @@
 const { uid } = require('./_store');
 const { guard } = require('./_safe');
+const { parseBody } = require('./_http');
 
 const CT3_CASES = [];
 
@@ -201,7 +202,7 @@ exports.handler = guard(async function handler(event) {
             body: JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'Pratica CT3 non trovata' } })
           };
         }
-        const body = JSON.parse(event.body || '{}');
+        const body = parseBody(event);
         const status = body.status;
         if (!VALID_STATUSES.has(status)) {
           return {
@@ -214,7 +215,7 @@ exports.handler = guard(async function handler(event) {
         item.updated_at = new Date().toISOString();
         return { statusCode: 200, headers: headers(), body: JSON.stringify({ ok: true, data: cloneCase(item) }) };
       }
-      const body = JSON.parse(event.body || '{}');
+      const body = parseBody(event);
       const normalized = normalizeCasePayload(body);
       const error = validateCasePayload(normalized);
       if (error) {

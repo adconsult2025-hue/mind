@@ -5,6 +5,7 @@ const path = require('path');
 const { listDocs, addDoc, updateDocStatus, listCER, getPlantById } = require('./_data');
 const { listPlantDocs, uploadPlantDoc, markPlantDoc, findPlantDoc } = require('./plant_docs');
 const { guard } = require('./_safe');
+const { parseBody } = require('./_http');
 
 const SAFE_MODE = String(process.env.SAFE_MODE || '').toLowerCase() === 'true';
 
@@ -91,16 +92,7 @@ exports.handler = guard(async function handler(event) {
     }
 
     if (event.httpMethod === 'POST') {
-      let body;
-      try {
-        body = JSON.parse(event.body || '{}');
-      } catch (parseErr) {
-        return {
-          statusCode: 400,
-          headers: headers(),
-          body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'Payload non valido' } })
-        };
-      }
+      const body = parseBody(event);
       const isUpload = event.path.endsWith('/upload') || event.rawUrl?.includes('/upload');
       const isMark = event.path.endsWith('/mark') || event.rawUrl?.includes('/mark');
       const isGenerate = event.path.endsWith('/generate') || event.rawUrl?.includes('/generate');

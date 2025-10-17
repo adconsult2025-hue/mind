@@ -5,6 +5,7 @@ const Docxtemplater = require("docxtemplater");
 const { nanoid } = require("nanoid");
 const fs = require("fs");
 const path = require("path");
+const { parseBody } = require("./_http");
 
 const connStr = process.env.NEON_DATABASE_URL;
 
@@ -85,7 +86,7 @@ async function buildContext(refType, refId) {
 exports.handler = async (event) => {
   try {
     if (event.httpMethod.toUpperCase() !== "POST") return err(405, "POST only");
-    const body = JSON.parse(event.body || "{}");
+    const body = parseBody(event);
     const { templateSlug, refType, refId } = body;
     if (!templateSlug || !refType || !refId) return err(400, "Missing templateSlug/refType/refId");
 

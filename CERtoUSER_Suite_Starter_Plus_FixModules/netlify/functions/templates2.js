@@ -1,4 +1,5 @@
 const { Client } = require("pg");
+const { parseBody } = require("./_http");
 const connStr = process.env.NEON_DATABASE_URL;
 
 async function db() {
@@ -82,7 +83,7 @@ exports.handler = async (event) => {
 
     // POST /api2/templates/upload
     if (method === "POST" && /\/(api2|api)\/templates\/upload(\/)?$/.test(path)) {
-      const body = JSON.parse(event.body || "{}");
+      const body = parseBody(event);
       const { name, slug, type, changelog, content_text, file, code, module } = body;
       if (!name || !slug || !type) return err(400, "Missing name/slug/type");
 
@@ -135,7 +136,7 @@ exports.handler = async (event) => {
 
     // POST /api2/templates/update
     if (method === "POST" && /\/(api2|api)\/templates\/update(\/)?$/.test(path)) {
-      const body = JSON.parse(event.body || "{}");
+      const body = parseBody(event);
       const { templateId, changelog, content_text, file } = body;
       if (!templateId) return err(400, "Missing templateId");
 

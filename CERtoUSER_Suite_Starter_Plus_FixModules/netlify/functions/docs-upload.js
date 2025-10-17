@@ -1,4 +1,5 @@
 const { guard } = require('./_safe');
+const { parseBody } = require('./_http');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -21,7 +22,7 @@ exports.handler = guard(async function handler(event) {
   }
 
   try {
-    const body = JSON.parse(event.body || '{}');
+    const body = parseBody(event);
     const { entity_type, entity_id, phase, filename } = body;
     if (!entity_type || !entity_id) {
       return {

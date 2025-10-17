@@ -1,5 +1,6 @@
 const { json, preflight } = require('./_cors');
 const { requireRole, getFirebaseAdmin, canonicalizeRole } = require('./_auth');
+const { parseBody } = require('./_http');
 
 const ALLOWED_ROLE_VALUES = ['superadmin', 'admin', 'agente', 'resp-cer', 'prosumer', 'produttore', 'consumer'];
 const ROLE_ORDER = new Map(ALLOWED_ROLE_VALUES.map((role, index) => [role, index]));
@@ -181,7 +182,7 @@ exports.handler = async (event) => {
         });
       }
 
-      const payload = JSON.parse(event.body);
+      const payload = parseBody(event);
       const email = typeof payload.email === 'string' ? payload.email.trim() : '';
       if (!email) {
         return json(400, {
@@ -227,7 +228,7 @@ exports.handler = async (event) => {
         });
       }
 
-      const payload = JSON.parse(event.body);
+      const payload = parseBody(event);
       const identifier = typeof payload.uid === 'string' && payload.uid.trim()
         ? payload.uid.trim()
         : null;

@@ -1,5 +1,6 @@
 const { billsStore, uid } = require('./_store');
 const { guard } = require('./_safe');
+const { parseBody } = require('./_http');
 
 const headers = () => ({
   'Content-Type': 'application/json',
@@ -88,7 +89,7 @@ exports.handler = guard(async function handler(event) {
 
   try {
     if (method === 'POST' && subPath === '/upload') {
-      const body = JSON.parse(event.body || '{}');
+      const body = parseBody(event);
       const { client_id: clientId, filename } = body;
       if (!clientId || !filename) {
         return response(400, { ok: false, error: 'client_id e filename sono obbligatori' });
@@ -106,7 +107,7 @@ exports.handler = guard(async function handler(event) {
     }
 
     if (method === 'POST' && subPath === '/parse') {
-      const body = JSON.parse(event.body || '{}');
+      const body = parseBody(event);
       const { bill_id: billId } = body;
       if (!billId) {
         return response(400, { ok: false, error: 'bill_id mancante' });
