@@ -34,7 +34,7 @@ exports.handler = async (event) => {
     const rawUrl = event.rawUrl || `https://local${event.path || ''}`;
     const path = new URL(rawUrl).pathname;
 
-    // GET /api2/templates (compatibile con /api/templates)
+    // GET /api/templates (compatibile con /api/templates)
     if (method === "GET" && /\/(api2|api)\/templates(\/)?$/.test(path)) {
       const client = await db();
       try {
@@ -81,7 +81,7 @@ exports.handler = async (event) => {
       }
     }
 
-    // POST /api2/templates/upload
+    // POST /api/templates/upload
     if (method === "POST" && /\/(api2|api)\/templates\/upload(\/)?$/.test(path)) {
       const body = parseBody(event);
       const { name, slug, type, changelog, content_text, file, code, module } = body;
@@ -134,7 +134,7 @@ exports.handler = async (event) => {
       }
     }
 
-    // POST /api2/templates/update
+    // POST /api/templates/update
     if (method === "POST" && /\/(api2|api)\/templates\/update(\/)?$/.test(path)) {
       const body = parseBody(event);
       const { templateId, changelog, content_text, file } = body;

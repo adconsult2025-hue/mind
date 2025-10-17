@@ -1,9 +1,9 @@
 import { safeGuardAction, isDryRunResult } from './safe.js';
 
-const API_BASE = '/api2/templates';
+const API_BASE = '/api/templates';
 const MANIFEST_ENDPOINTS = [
   '/api/templates/manifest',
-  '/api2/templates/manifest',
+  '/api/templates/manifest',
   '/config/templates/models.manifest.json'
 ];
 
@@ -92,7 +92,7 @@ async function fetchTemplates() {
     const isHtml404 =
       err?.status === 404 && typeof err?.body === 'string' && err.body.trim().startsWith('<');
     const message = isHtml404
-      ? 'Endpoint /api2/templates non trovato (404): il server ha risposto con HTML. Verifica la configurazione o i redirect.'
+      ? 'Endpoint /api/templates non trovato (404): il server ha risposto con HTML. Verifica la configurazione o i redirect.'
       : err?.message || 'Errore durante il caricamento dei modelli';
     toast(message);
   }

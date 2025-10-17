@@ -543,7 +543,7 @@ async function loadCerTemplates(options = {}) {
 }
 
 function getCerTemplateEndpoints() {
-  const endpoints = ['/api2/templates'];
+  const endpoints = ['/api/templates'];
   const apiEndpoint = `${API_BASE}/templates`;
   if (!endpoints.includes(apiEndpoint)) {
     endpoints.push(apiEndpoint);
