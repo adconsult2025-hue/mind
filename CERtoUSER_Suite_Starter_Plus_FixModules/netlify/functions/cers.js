@@ -8,6 +8,37 @@ const headers = () => ({
   'Access-Control-Allow-Headers': 'Content-Type'
 });
 
+function parseBody(event) {
+  try {
+    let raw = event.body || '';
+    if (event.isBase64Encoded && raw) {
+      raw = Buffer.from(raw, 'base64').toString('utf8');
+    }
+
+    const ct = (event.headers?.['content-type'] || event.headers?.['Content-Type'] || '').toLowerCase();
+    if (ct.includes('application/json')) {
+      return raw ? JSON.parse(raw) : {};
+    }
+    if (ct.includes('application/x-www-form-urlencoded')) {
+      const params = new URLSearchParams(raw);
+      return Object.fromEntries(params.entries());
+    }
+
+    // fallback: prova a interpretare come JSON, altrimenti restituisce oggetto vuoto
+    try {
+      return raw ? JSON.parse(raw) : {};
+    } catch (err) {
+      return {};
+    }
+  } catch (error) {
+    console.error('CER body parse error:', error, {
+      headers: event.headers,
+      snippet: typeof event.body === 'string' ? event.body.slice(0, 200) : null
+    });
+    return {};
+  }
+}
+
 function parseId(event) {
   const patterns = [/\/api\/cers\/([^/?#]+)/, /\/\.netlify\/functions\/cers\/([^/?#]+)/];
   const sources = [event.path, event.rawUrl];
@@ -95,7 +126,7 @@ exports.handler = guard(async function handler(event) {
     }
 
     if (event.httpMethod === 'POST') {
-      const body = JSON.parse(event.body || '{}');
+      const body = parseBody(event);
       const validation = validateCerPayload(body);
       if (!validation.ok) {
         return {
@@ -132,7 +163,7 @@ exports.handler = guard(async function handler(event) {
           body: JSON.stringify({ ok: false, error: { code: 'BAD_REQUEST', message: 'ID CER mancante' } })
         };
       }
-      const body = JSON.parse(event.body || '{}');
+      const body = parseBody(event);
       const validation = validateCerPayload(body);
       if (!validation.ok) {
         return {
