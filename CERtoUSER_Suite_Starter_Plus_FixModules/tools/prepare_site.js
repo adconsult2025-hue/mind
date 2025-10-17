@@ -75,6 +75,7 @@ async function main() {
 
   await copyFile(path.join(ROOT, "index.html"), path.join(SITE_DIR, "index.html"));
   await copyFile(path.join(ROOT, "_redirects"), path.join(SITE_DIR, "_redirects"));
+  await copyFile(path.join(ROOT, "_headers"), path.join(SITE_DIR, "_headers"));
 
   await syncDir(path.join(ROOT, "assets"), path.join(SITE_DIR, "assets"), { preserve: ["models"] });
   await syncDir(path.join(ROOT, "modules"), path.join(SITE_DIR, "modules"));
