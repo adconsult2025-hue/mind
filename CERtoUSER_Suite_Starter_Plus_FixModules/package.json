@@ -6,7 +6,8 @@
   "scripts": {
     "build": "node tools/prepare_site.js",
     "prepare:site": "node tools/prepare_site.js",
-    "test": "node tools/run_self_checks.js"
+    "test": "node tools/run_self_checks.js",
+    "check:db": "node tools/check_database.js"
   },
   "keywords": [],
   "author": "",
