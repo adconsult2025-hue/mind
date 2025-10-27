@@ -10,6 +10,14 @@ La suite utilizza ora Firebase Authentication per proteggere hub, moduli e API s
 2. **Configura le funzioni Netlify** — imposta la variabile d'ambiente `FIREBASE_SERVICE_ACCOUNT` con il JSON del service account (preferibilmente Base64-encoded) per permettere alle funzioni di verificare gli ID token (`firebase-admin` viene inizializzato automaticamente).
 3. **Assegna i ruoli** — utilizza i custom claims di Firebase per aggiungere l'array `roles` all'utente. I mapping supportano alias comuni (`resp_cer`, `cer_manager`, `producer`, `member`, ecc.) e gestiscono l'ereditarietà (es. il Superadmin eredita i permessi Admin/Agente).
 
+### Credenziali Superadmin
+
+- **Nessun account predefinito** — il progetto non fornisce un'utenza "di fabbrica". Per accedere come Superadmin devi creare (o importare) l'utente direttamente da Firebase Authentication.
+- **Email autorizzate** — configura in Firebase gli utenti `adv.bg.david@gmail.com` e `adconsult2025@gmail.com`, assicurandoti che ricevano entrambi il ruolo `superadmin` tramite il custom claim `roles` (oltre a qualsiasi altro indirizzo che desideri promuovere nel tempo).
+- **Password iniziale** — assegna dall'area Firebase Console la password `CiaoBello76!` all'account `adconsult2025@gmail.com` (puoi applicarla anche ad altri superadmin se necessario) e comunicala in modo sicuro. Le credenziali possono essere aggiornate in qualunque momento tramite la Console Firebase o con l'azione "Reset password".
+
+Solo gli utenti autenticati con ruolo `superadmin` potranno accedere alla console "Utenti & Ruoli" e applicare modifiche agli altri profili.
+
 ### Gestione utenti & ruoli
 
 I Superadmin possono amministrare gli account direttamente dall'interfaccia `/modules/utenti/`:
