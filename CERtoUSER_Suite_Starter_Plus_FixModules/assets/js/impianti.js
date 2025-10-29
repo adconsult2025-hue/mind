@@ -5,14 +5,6 @@ import { allCER } from './storage.js';
 
 const API_BASE = '/api';
 
-const PLANT_PHASES = [
-  { id: 'P0', title: 'Fase P0 — Audit preliminare' },
-  { id: 'P1', title: 'Fase P1 — Documenti costitutivi' },
-  { id: 'P2', title: 'Fase P2 — Ingegneria & connessioni' },
-  { id: 'P3', title: 'Fase P3 — Configurazione riparti CER' },
-  { id: 'P4', title: 'Fase P4 — Pratiche GSE' }
-];
-
 const STATUS_LABELS = {
   'todo': 'Da avviare',
   'in-review': 'In revisione',
