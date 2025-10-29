@@ -157,6 +157,4 @@ exports.handler = guard(async function handler(event) {
     const message = error.message || 'Unexpected error';
     return json(statusCode, { ok: false, error: { code, message } });
   }
-
-  return json(405, { ok: false, error: 'METHOD_NOT_ALLOWED' });
-};
+});
