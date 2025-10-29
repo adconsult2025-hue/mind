@@ -67,11 +67,11 @@ Suite web multi-tenant per la gestione end-to-end di progetti CER (Comunità Ene
 
 ## 9. Variabili d’ambiente (esempio)
 ```
-ALLOWED_ORIGIN=https://suite.certouser.it
-NEON_DATABASE_URL=postgres://...
-GCS_BUCKET=certouser-suite
-SSO_VERIFY_ENDPOINT=https://appsecurity.certouser.it/...
-TOKEN_SIGNING_KEY=...
+ALLOWED_ORIGIN=<https://example.com>
+NEON_DATABASE_URL=postgres://<user>:<password>@<host>/<db>
+GCS_BUCKET=<bucket-name>
+SSO_VERIFY_ENDPOINT=<https://auth.example.com/verify>
+TOKEN_SIGNING_KEY=<random-secret>
 NETLIFY_IDENTITY_ENABLED=true
 LOG_LEVEL=info
 ```
