@@ -104,7 +104,19 @@ let detailPlantsEmpty;
 let detailAddMemberBtn;
 let detailAddPlantBtn;
 let detailEditBtn;
+let detailDocsBtn;
+let detailDocsSecondaryBtn;
+let detailDeleteBtn;
 let detailCloseBtn;
+let detailDocLinks;
+let detailReferenteSelect;
+let detailTitolareSelect;
+let detailClearGovBtn;
+let detailCabina;
+let detailComune;
+let detailQuota;
+let detailTemplate;
+let detailTrader;
 
 let memberModal;
 let memberModalList;
@@ -434,7 +446,19 @@ function init() {
   detailAddMemberBtn = document.getElementById('cer-detail-add-member');
   detailAddPlantBtn = document.getElementById('cer-detail-add-plant');
   detailEditBtn = document.getElementById('cer-detail-edit');
+  detailDocsBtn = document.getElementById('cer-detail-docs');
+  detailDocsSecondaryBtn = document.getElementById('cer-detail-docs-secondary');
+  detailDeleteBtn = document.getElementById('cer-detail-delete');
   detailCloseBtn = document.getElementById('cer-detail-close');
+  detailDocLinks = document.getElementById('cer-detail-doc-links');
+  detailReferenteSelect = document.getElementById('cer-detail-referente');
+  detailTitolareSelect = document.getElementById('cer-detail-titolare');
+  detailClearGovBtn = document.getElementById('cer-detail-clear-governance');
+  detailCabina = document.getElementById('cer-detail-cabina');
+  detailComune = document.getElementById('cer-detail-comune');
+  detailQuota = document.getElementById('cer-detail-quota');
+  detailTemplate = document.getElementById('cer-detail-template');
+  detailTrader = document.getElementById('cer-detail-trader');
   memberModal = document.getElementById('cer-member-modal');
   memberModalList = document.getElementById('cer-member-modal-list');
   memberModalFeedback = document.getElementById('cer-member-modal-feedback');
@@ -479,10 +503,50 @@ function init() {
     loadCerDetail(detailCard.dataset.cerId);
     form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
+  const docsHandler = () => {
+    if (!detailCard?.dataset.cerId) return;
+    focusDocumentsTab(detailCard.dataset.cerId);
+    document.getElementById('cer-docs-empty')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  detailDocsBtn?.addEventListener('click', docsHandler);
+  detailDocsSecondaryBtn?.addEventListener('click', docsHandler);
+  detailDeleteBtn?.addEventListener('click', () => {
+    if (!detailCard?.dataset.cerId) return;
+    if (!confirm('Eliminare definitivamente la CER?')) return;
+    cers = cers.filter((item) => item.id !== detailCard.dataset.cerId);
+    saveCER(cers);
+    emitCerChanged();
+    renderCERList();
+    refreshCerOptions();
+    hideCerCard();
+    toast('CER eliminata.');
+  });
   detailCloseBtn?.addEventListener('click', hideCerCard);
   detailMembersTable?.addEventListener('change', onDetailMembersChange);
   detailMembersTable?.addEventListener('click', onDetailMembersClick);
   detailPlantsTable?.addEventListener('click', onDetailPlantsClick);
+  detailPlantsTable?.addEventListener('change', onDetailPlantsChange);
+  detailDocLinks?.addEventListener('click', (event) => {
+    const link = event.target.closest('[data-doc-link]');
+    if (!link || !detailCard?.dataset.cerId) return;
+    focusDocumentsTab(detailCard.dataset.cerId);
+    document.getElementById('cer-docs-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  detailReferenteSelect?.addEventListener('change', (event) => {
+    if (!detailCard?.dataset.cerId) return;
+    handleSetReferente(detailCard.dataset.cerId, event.target.value, event.target);
+  });
+  detailTitolareSelect?.addEventListener('change', (event) => {
+    if (!detailCard?.dataset.cerId) return;
+    handleSetTitolare(detailCard.dataset.cerId, event.target.value, event.target);
+  });
+  detailClearGovBtn?.addEventListener('click', () => {
+    if (!detailCard?.dataset.cerId) return;
+    handleSetReferente(detailCard.dataset.cerId, '');
+    handleSetTitolare(detailCard.dataset.cerId, '');
+    if (detailReferenteSelect) detailReferenteSelect.value = '';
+    if (detailTitolareSelect) detailTitolareSelect.value = '';
+  });
 
   memberModal?.querySelectorAll('[data-close-modal]')?.forEach(btn => {
     btn.addEventListener('click', closeMemberModal);
@@ -1168,6 +1232,9 @@ function renderCerDetailCard(cer, { scroll = false, skipHistory = false } = {}) 
     }
     detailMeta.textContent = parts.length ? parts.join(' · ') : 'Configura la CER per abilitare le funzioni avanzate.';
   }
+  renderCerOverview(normalized);
+  renderCerDocLinks(normalized);
+  renderCerGovernance(normalized);
   renderCerMembersDetail(normalized);
   renderCerPlantsDetail(normalized);
   detailCard.removeAttribute('hidden');
@@ -1191,6 +1258,66 @@ function updateCerUrlParam(cerId = '') {
   }
 }
 
+function renderCerOverview(cer) {
+  if (!detailCabina || !detailComune || !detailQuota || !detailTemplate || !detailTrader) return;
+  detailCabina.textContent = cer.cabina || '-';
+  detailComune.textContent = cer.comune || '-';
+  detailQuota.textContent = cer.quota != null ? `${cer.quota}%` : '-';
+  if (cer.template_code) {
+    const tpl = cerTemplates.find((tpl) => matchesTemplateValue(tpl, cer.template_code));
+    detailTemplate.textContent = tpl ? formatTemplateDisplayName(tpl) : cer.template_code;
+  } else {
+    detailTemplate.textContent = 'Nessun modello attivo';
+  }
+  const traderParts = [];
+  if (cer.trader) traderParts.push(`Trader: ${cer.trader}`);
+  if (cer.note) traderParts.push(cer.note);
+  detailTrader.textContent = traderParts.join(' · ') || 'Non specificato';
+}
+
+function renderCerDocLinks(cer) {
+  if (!detailDocLinks) return;
+  detailDocLinks.innerHTML = '';
+  const keys = ['statuto', 'regolamento', 'atto_costitutivo', 'adesione', 'delega_gse'];
+  keys.forEach((key) => {
+    const template = DOC_TEMPLATE_UPLOADS.find((tpl) => tpl.key === key);
+    const label = template?.displayName || template?.label || key;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chip';
+    btn.dataset.docLink = key;
+    btn.textContent = label;
+    detailDocLinks.appendChild(btn);
+  });
+  const customBtn = document.createElement('button');
+  customBtn.type = 'button';
+  customBtn.className = 'chip ghost';
+  customBtn.dataset.docLink = 'uploads';
+  customBtn.textContent = 'File caricati';
+  detailDocLinks.appendChild(customBtn);
+}
+
+function renderCerGovernance(cer) {
+  if (!detailReferenteSelect || !detailTitolareSelect) return;
+  const members = Array.isArray(cer.membri) ? cer.membri : [];
+  const renderOptions = (selectEl, currentId, allowProsumerOnly = false) => {
+    const previous = selectEl.value;
+    selectEl.innerHTML = '<option value="">Seleziona dalla lista membri</option>';
+    members
+      .filter((member) => !allowProsumerOnly || isProducerRole(member.ruolo))
+      .forEach((member) => {
+        const opt = document.createElement('option');
+        opt.value = member.id;
+        opt.textContent = `${member.nome || 'Membro'}${member.ruolo ? ` · ${member.ruolo}` : ''}`;
+        opt.selected = member.id === currentId;
+        selectEl.appendChild(opt);
+      });
+    if (currentId && !selectEl.value) selectEl.value = previous || '';
+  };
+  renderOptions(detailReferenteSelect, cer.referenteId || '', false);
+  renderOptions(detailTitolareSelect, cer.titolareCerId || '', true);
+}
+
 function renderCerMembersDetail(cer) {
   if (!detailMembersTable) return;
   const members = Array.isArray(cer.membri) ? cer.membri : [];
@@ -1211,6 +1338,8 @@ function renderCerMembersDetail(cer) {
       <td><select class="input" data-member-role="${escapeHtml(member.id)}">${roleOptions}</select></td>
       <td><select class="input" data-member-contract="${escapeHtml(member.id)}">${contractOptions}</select></td>
       <td class="actions">
+        <button class="btn ghost" type="button" data-set-referente="${escapeHtml(member.id)}">Imposta referente</button>
+        <button class="btn ghost" type="button" data-set-titolare="${escapeHtml(member.id)}">Imposta titolare</button>
         <button class="btn ghost" type="button" data-remove-member="${escapeHtml(member.id)}">Rimuovi</button>
       </td>
     `;
@@ -1225,17 +1354,25 @@ function renderCerPlantsDetail(cer) {
   if (detailPlantsEmpty) detailPlantsEmpty.hidden = plants.length > 0;
   if (!plants.length) return;
   const cerId = cer.id;
+  const producerMembers = (cer.membri || []).filter((m) => isProducerRole(m.ruolo));
   plants.forEach(plant => {
     const ownerName = plant.titolareNome || (cer.membri || []).find(m => m.id === plant.titolareId)?.nome || '';
     const ownerRole = plant.titolareRuolo || (cer.membri || []).find(m => m.id === plant.titolareId)?.ruolo || '';
     const ownerLabel = ownerName ? `${ownerName}${ownerRole ? ` · ${ownerRole}` : ''}` : '-';
     const kwp = plant.potenza_kwp != null ? `${Number(plant.potenza_kwp).toFixed(2)} kWp` : '-';
     const link = `/modules/impianti/index.html?plant_id=${encodeURIComponent(plant.id)}&cer_id=${encodeURIComponent(cerId)}&tab=cronoprogramma`;
+    const ownerOptions = ['<option value="">Seleziona titolare</option>', ...producerMembers.map((member) => {
+      const selected = member.id === plant.titolareId ? 'selected' : '';
+      return `<option value="${escapeHtml(member.id)}" ${selected}>${escapeHtml(member.nome || 'Membro')} · ${escapeHtml(member.ruolo || '')}</option>`;
+    })].join('');
     const tr = document.createElement('tr');
     tr.dataset.plantId = plant.id;
     tr.innerHTML = `
       <td><strong>${escapeHtml(plant.nome || 'Impianto')}</strong></td>
-      <td>${escapeHtml(ownerLabel)}</td>
+      <td>
+        <select class="input" data-plant-owner="${escapeHtml(plant.id)}">${ownerOptions}</select>
+        <small class="hint">Attivo: ${escapeHtml(ownerLabel)}</small>
+      </td>
       <td>${escapeHtml(kwp)}</td>
       <td class="actions">
         <a class="btn ghost" href="${link}" target="_blank" rel="noopener">Apri scheda impianto</a>
@@ -1263,8 +1400,21 @@ function onDetailMembersChange(event) {
 }
 
 function onDetailMembersClick(event) {
+  if (!detailCard?.dataset.cerId) return;
+  const referentBtn = event.target.closest('[data-set-referente]');
+  if (referentBtn) {
+    event.preventDefault();
+    handleSetReferente(detailCard.dataset.cerId, referentBtn.getAttribute('data-set-referente'));
+    return;
+  }
+  const titolareBtn = event.target.closest('[data-set-titolare]');
+  if (titolareBtn) {
+    event.preventDefault();
+    handleSetTitolare(detailCard.dataset.cerId, titolareBtn.getAttribute('data-set-titolare'));
+    return;
+  }
   const btn = event.target.closest('[data-remove-member]');
-  if (!btn || !detailCard?.dataset.cerId) return;
+  if (!btn) return;
   event.preventDefault();
   const memberId = btn.getAttribute('data-remove-member');
   if (!memberId) return;
@@ -1287,6 +1437,14 @@ function onDetailPlantsClick(event) {
     draft.impianti = remaining;
     return true;
   });
+}
+
+function onDetailPlantsChange(event) {
+  if (!detailCard?.dataset.cerId) return;
+  const select = event.target.closest('select[data-plant-owner]');
+  if (!select) return;
+  const plantId = select.getAttribute('data-plant-owner');
+  handlePlantOwnerChange(detailCard.dataset.cerId, plantId, select.value, select);
 }
 
 function handleMemberRoleChange(cerId, memberId, newRole, selectEl) {
@@ -1339,6 +1497,80 @@ function handleMemberContractChange(cerId, memberId, newStatus, selectEl) {
   }
 }
 
+function handleSetReferente(cerId, memberId, selectEl) {
+  const updated = updateCerRecord(cerId, (draft) => {
+    if (!memberId) {
+      draft.referenteId = '';
+      draft.referenteNome = '';
+      draft.referente = '';
+      return true;
+    }
+    const member = draft.membri.find((m) => m.id === memberId);
+    if (!member) {
+      toast('Seleziona un membro valido come referente.');
+      return false;
+    }
+    draft.referenteId = member.id;
+    draft.referenteNome = member.nome || '';
+    draft.referente = member.nome || '';
+    return true;
+  });
+  if (!updated && selectEl) {
+    const cer = cers.find((c) => c.id === cerId);
+    if (cer) selectEl.value = cer.referenteId || '';
+  }
+}
+
+function handleSetTitolare(cerId, memberId, selectEl) {
+  const updated = updateCerRecord(cerId, (draft) => {
+    if (!memberId) {
+      draft.titolareCerId = '';
+      draft.titolareCerNome = '';
+      draft.titolareCer = '';
+      return true;
+    }
+    const member = draft.membri.find((m) => m.id === memberId);
+    if (!member) {
+      toast('Seleziona un membro valido come titolare.');
+      return false;
+    }
+    if (!isProducerRole(member.ruolo)) {
+      toast('Il titolare deve essere Prosumer o Produttore.');
+      return false;
+    }
+    draft.titolareCerId = member.id;
+    draft.titolareCerNome = member.nome || '';
+    draft.titolareCer = member.nome || '';
+    return true;
+  });
+  if (!updated && selectEl) {
+    const cer = cers.find((c) => c.id === cerId);
+    if (cer) selectEl.value = cer.titolareCerId || '';
+  }
+}
+
+function handlePlantOwnerChange(cerId, plantId, ownerId, selectEl) {
+  if (!cerId || !plantId) return;
+  const updated = updateCerRecord(cerId, (draft) => {
+    const plant = draft.impianti.find((p) => p.id === plantId);
+    if (!plant) return false;
+    const owner = draft.membri.find((m) => m.id === ownerId);
+    if (!owner || !isProducerRole(owner.ruolo)) {
+      toast('Il titolare dell\'impianto deve essere Prosumer o Produttore.');
+      return false;
+    }
+    plant.titolareId = owner.id;
+    plant.titolareNome = owner.nome;
+    plant.titolareRuolo = owner.ruolo;
+    return true;
+  });
+  if (!updated && selectEl) {
+    const cer = cers.find((c) => c.id === cerId);
+    const plant = cer?.impianti?.find((p) => p.id === plantId);
+    if (plant) selectEl.value = plant.titolareId || '';
+  }
+}
+
 function handleRemoveMember(cerId, memberId) {
   updateCerRecord(cerId, (draft) => {
     const members = Array.isArray(draft.membri) ? draft.membri : [];
@@ -1356,6 +1588,16 @@ function handleRemoveMember(cerId, memberId) {
     if (!remaining.some(m => isProducerRole(m.ruolo))) {
       toast('La CER deve avere almeno un Prosumer o Produttore.');
       return false;
+    }
+    if (draft.referenteId === memberId) {
+      draft.referenteId = '';
+      draft.referenteNome = '';
+      draft.referente = '';
+    }
+    if (draft.titolareCerId === memberId) {
+      draft.titolareCerId = '';
+      draft.titolareCerNome = '';
+      draft.titolareCer = '';
     }
     draft.membri = remaining;
     return true;
@@ -1584,6 +1826,16 @@ function normalizeCerData(cer) {
     }))
     : [];
   const memberMap = new Map(members.map(m => [m.id, m]));
+  const referente = cer.referenteId || cer.referente_id || '';
+  const referenteMember = referente ? memberMap.get(referente) : null;
+  cer.referenteId = referenteMember?.id || referente || '';
+  cer.referenteNome = referenteMember?.nome || cer.referenteNome || cer.referente || '';
+  cer.referente = cer.referenteNome || '';
+  const titolareCer = cer.titolareCerId || cer.titolareCer_id || cer.titolareId || '';
+  const titolareMember = titolareCer ? memberMap.get(titolareCer) : null;
+  cer.titolareCerId = titolareMember?.id || titolareCer || '';
+  cer.titolareCerNome = titolareMember?.nome || cer.titolareCerNome || cer.titolareCer || '';
+  cer.titolareCer = cer.titolareCerNome || '';
   const plants = Array.isArray(cer.impianti)
     ? cer.impianti.map(plant => {
       const owner = plant.titolareId ? memberMap.get(plant.titolareId) : null;

@@ -1077,6 +1077,34 @@ function checkIdentitySetup() {
   return results;
 }
 
+function checkCerDetailUI() {
+  const results = [];
+  const filePath = path.join(projectRoot, 'modules', 'cer', 'index.html');
+  try {
+    const html = fs.readFileSync(filePath, 'utf8');
+    const requiredIds = [
+      'cer-detail-card',
+      'cer-detail-docs',
+      'cer-detail-delete',
+      'cer-detail-referente',
+      'cer-detail-titolare',
+      'cer-detail-doc-links',
+      'cer-detail-add-member',
+      'cer-detail-add-plant',
+    ];
+    requiredIds.forEach((id) => {
+      if (html.includes(`id="${id}"`)) {
+        results.push({ target: id, ok: true });
+      } else {
+        results.push({ target: id, ok: false, message: 'Elemento non trovato nella scheda CER' });
+      }
+    });
+  } catch (error) {
+    results.push({ target: path.relative(projectRoot, filePath), ok: false, message: `lettura fallita (${error.message})` });
+  }
+  return results;
+}
+
 async function main() {
   const jsonResults = validateJsonFiles();
   const jsonFailures = jsonResults.filter((item) => !item.ok);
@@ -1100,9 +1128,11 @@ async function main() {
   }
 
   const identityResults = checkIdentitySetup();
+  const uiResults = checkCerDetailUI();
   const totalFailures = jsonFailures.length
     + apiResults.filter((item) => !item.ok).length
-    + identityResults.filter((item) => !item.ok).length;
+    + identityResults.filter((item) => !item.ok).length
+    + uiResults.filter((item) => !item.ok).length;
 
   console.log('JSON files check:');
   jsonResults.forEach((item) => {
@@ -1126,6 +1156,15 @@ async function main() {
   identityResults.forEach((item) => {
     if (item.ok) {
       console.log(`  ✓ ${item.target}${item.details ? ` → ${item.details}` : ''}`);
+    } else {
+      console.log(`  ✗ ${item.target} → ${item.message}`);
+    }
+  });
+
+  console.log('\nUI detail check:');
+  uiResults.forEach((item) => {
+    if (item.ok) {
+      console.log(`  ✓ ${item.target}`);
     } else {
       console.log(`  ✗ ${item.target} → ${item.message}`);
     }

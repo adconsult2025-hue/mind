@@ -139,15 +139,80 @@
       </section>
 
       <section class="card" id="cer-detail-card" hidden>
-        <div class="row-between">
+        <div class="row-between" style="align-items:flex-start; gap:1rem;">
           <div>
-            <h2 id="cer-detail-title">Scheda CER</h2>
+            <p class="eyebrow">Scheda CER</p>
+            <h2 id="cer-detail-title">-</h2>
             <p class="info-text" id="cer-detail-meta"></p>
           </div>
-          <div class="actions">
+          <div class="actions stack">
+            <button class="btn ghost" type="button" id="cer-detail-docs">Apri documenti</button>
             <button class="btn ghost" type="button" id="cer-detail-edit">Modifica anagrafica</button>
+            <button class="btn danger" type="button" id="cer-detail-delete">Elimina CER</button>
             <button class="btn ghost" type="button" id="cer-detail-close">Chiudi scheda</button>
           </div>
+        </div>
+
+        <div class="card soft">
+          <div class="grid-3" id="cer-detail-overview">
+            <div>
+              <p class="hint">Cabina primaria</p>
+              <p class="h3" id="cer-detail-cabina">-</p>
+            </div>
+            <div>
+              <p class="hint">Comune</p>
+              <p class="h3" id="cer-detail-comune">-</p>
+            </div>
+            <div>
+              <p class="hint">Quota energia condivisa</p>
+              <p class="h3" id="cer-detail-quota">-</p>
+            </div>
+          </div>
+          <div class="helper-grid" id="cer-detail-quick">
+            <div>
+              <p class="hint">Modello documenti</p>
+              <p id="cer-detail-template">-</p>
+            </div>
+            <div>
+              <p class="hint">Trader / Note</p>
+              <p id="cer-detail-trader">-</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="card soft">
+          <div class="row-between">
+            <div>
+              <h3>Documentazione</h3>
+              <p class="info-text">Collegamenti rapidi ai modelli e ai file caricati per la CER.</p>
+            </div>
+            <div class="actions">
+              <button class="btn ghost" type="button" id="cer-detail-docs-secondary">Vai alla sezione Documenti</button>
+            </div>
+          </div>
+          <div class="chip-row" id="cer-detail-doc-links"></div>
+          <p class="hint">Usa i collegamenti per aprire la sezione Documenti e gestire i template (Statuto, Regolamento, Atto costitutivo, Adesioni...)</p>
+        </div>
+
+        <div class="card soft">
+          <div class="row-between">
+            <div>
+              <h3>Referente e titolare CER</h3>
+              <p class="info-text">Seleziona i nominativi tra i membri già iscritti alla comunità.</p>
+            </div>
+            <div class="actions">
+              <button class="btn ghost" type="button" id="cer-detail-clear-governance">Azzera selezioni</button>
+            </div>
+          </div>
+          <div class="grid-2">
+            <label>Referente operativo
+              <select id="cer-detail-referente"></select>
+            </label>
+            <label>Titolare della CER
+              <select id="cer-detail-titolare"></select>
+            </label>
+          </div>
+          <p class="hint">Il referente è usato nei documenti (deleghe GSE, contatti operativi). Il titolare coincide con il soggetto rappresentante della comunità.</p>
         </div>
 
         <div class="card soft">
