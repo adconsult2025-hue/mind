@@ -1,77 +1,142 @@
-const { withClient, ok, err, corsHeaders } = require('./_db');
+const fs = require('fs');
+const path = require('path');
 
-function parseBody(event) {
-  try {
-    let raw = event.body || '';
-    if (event.isBase64Encoded && raw) {
-      raw = Buffer.from(raw, 'base64').toString('utf8');
-    }
-    const ct = (event.headers?.['content-type'] || event.headers?.['Content-Type'] || '').toLowerCase();
-    if (ct.includes('application/json')) {
-      return raw ? JSON.parse(raw) : {};
-    }
-    if (ct.includes('application/x-www-form-urlencoded')) {
-      return Object.fromEntries(new URLSearchParams(raw).entries());
-    }
-    try {
-      return raw ? JSON.parse(raw) : {};
-    } catch {
-      return {};
-    }
-  } catch (e) {
-    console.error('Body parse error:', e, {
-      headers: event.headers,
-      sample: (event.body || '').slice(0, 200)
-    });
-    return {};
+const { preflight, corsHeaders, json } = require('./_cors');
+const { parseBody } = require('./_http');
+
+const DATA_PATH = path.join(__dirname, '../data/templates.json');
+const UPLOADS_DIR = path.join(__dirname, '../data/templates_uploads');
+
+function ensureDataFile() {
+  fs.mkdirSync(path.dirname(DATA_PATH), { recursive: true });
+  if (!fs.existsSync(DATA_PATH)) {
+    fs.writeFileSync(DATA_PATH, '[]');
   }
 }
 
-exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: corsHeaders() };
+function loadTemplates() {
   try {
-    const op = new URL(event.rawUrl).searchParams.get('op') || 'list';
-    if (event.httpMethod === 'GET' && op === 'list') {
-      return await withClient(async (c) => {
-        const { rows } = await c.query(`select id, slug, title, content, active, created_at from templates order by created_at desc`);
-        return ok(rows);
-      });
-    }
-    if (event.httpMethod === 'POST' && op === 'create') {
-      const b = parseBody(event);
-      if (!b.slug || !b.title) return err(new Error('Missing slug or title'), 400);
-      return await withClient(async (c) => {
-        const { rows } = await c.query(
-          `insert into templates (slug, title, content, active)
-           values ($1,$2,$3,$4)
-           returning id, slug, title, content, active, created_at`,
-          [b.slug, b.title, b.content || {}, b.active ?? true]
-        );
-        return ok(rows[0]);
-      });
-    }
-    if (event.httpMethod === 'POST' && op === 'update') {
-      const b = parseBody(event);
-      if (!b.id) return err(new Error('Missing id'), 400);
-      return await withClient(async (c) => {
-        const { rows } = await c.query(
-          `update templates set slug=$2, title=$3, content=$4, active=$5 where id=$1
-           returning id, slug, title, content, active, created_at`,
-          [b.id, b.slug, b.title, b.content || {}, b.active ?? true]
-        );
-        return ok(rows[0]);
-      });
-    }
-    if (event.httpMethod === 'POST' && op === 'delete') {
-      const b = parseBody(event);
-      if (!b.id) return err(new Error('Missing id'), 400);
-      return await withClient(async (c) => {
-        await c.query(`delete from templates where id=$1`, [b.id]);
-        return ok({ deleted: b.id });
-      });
-    }
-    return err(new Error('Unsupported operation'), 404);
-  } catch (e) {
-    return err(e);
+    ensureDataFile();
+    const raw = fs.readFileSync(DATA_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error('[templates] lettura data file fallita:', error);
+    return [];
   }
+}
+
+function saveTemplates(list) {
+  try {
+    ensureDataFile();
+    fs.writeFileSync(DATA_PATH, JSON.stringify(list, null, 2));
+  } catch (error) {
+    console.error('[templates] salvataggio data file fallito:', error);
+  }
+}
+
+function sanitizeFileName(name, fallback) {
+  if (typeof name !== 'string' || !name.trim()) return fallback;
+  return name
+    .trim()
+    .replace(/[^a-zA-Z0-9_.-]+/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^_+|_+$/g, '')
+    || fallback;
+}
+
+function persistUpload({ fileContent, fileName, fileType }) {
+  if (!fileContent) return null;
+
+  try {
+    const buffer = Buffer.from(fileContent, 'base64');
+    const safeName = sanitizeFileName(fileName, `template_${Date.now()}.bin`);
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    const targetPath = path.join(UPLOADS_DIR, safeName);
+    fs.writeFileSync(targetPath, buffer);
+
+    const relativePath = path.relative(path.join(__dirname, '..'), targetPath).replace(/\\/g, '/');
+
+    return {
+      original_name: fileName || safeName,
+      path: relativePath,
+      size: buffer.length,
+      type: fileType || 'application/octet-stream',
+      storage_scope: 'local'
+    };
+  } catch (error) {
+    console.error('[templates] salvataggio file fallito:', error);
+    return null;
+  }
+}
+
+function buildTemplatePayload(body) {
+  const now = new Date().toISOString();
+  const code = String(body.code || body.slug || body.name || `TPL-${Date.now()}`)
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '-');
+
+  const fileMeta = persistUpload({
+    fileContent: body.fileContent || body.file,
+    fileName: body.fileName || body.filename,
+    fileType: body.fileType
+  });
+
+  const entry = {
+    id: body.id || code.toLowerCase(),
+    name: body.name || body.title || code,
+    code,
+    module: (body.module || 'cer').toString().trim().toLowerCase() || 'cer',
+    status: body.status || 'active',
+    version: Number(body.version) || 1,
+    placeholders: Array.isArray(body.placeholders) ? body.placeholders : [],
+    content: body.content || body.content_text || null,
+    fileName: body.fileName || body.filename || null,
+    uploaded_at: now,
+  };
+
+  if (fileMeta) {
+    entry.file_meta = fileMeta;
+    entry.fileName = entry.fileName || fileMeta.original_name;
+    entry.url = `/${fileMeta.path}`;
+  }
+
+  return entry;
+}
+
+function listResponse() {
+  const templates = loadTemplates();
+  return json(200, { ok: true, data: templates });
+}
+
+exports.handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') return preflight();
+
+  if (event.httpMethod === 'GET') {
+    return listResponse();
+  }
+
+  if (event.httpMethod === 'POST') {
+    const body = parseBody(event) || {};
+    const templates = loadTemplates();
+    const payload = buildTemplatePayload(body);
+
+    const existingIdx = templates.findIndex((tpl) => tpl.code === payload.code || tpl.id === payload.id);
+    if (existingIdx >= 0) {
+      templates[existingIdx] = { ...templates[existingIdx], ...payload, uploaded_at: new Date().toISOString() };
+    } else {
+      templates.unshift(payload);
+    }
+
+    saveTemplates(templates);
+    return json(200, { ok: true, data: templates });
+  }
+
+  return {
+    statusCode: 405,
+    headers: corsHeaders,
+    body: JSON.stringify({ ok: false, error: { code: 'METHOD_NOT_ALLOWED', message: 'Operazione non supportata' } })
+  };
 };
+
