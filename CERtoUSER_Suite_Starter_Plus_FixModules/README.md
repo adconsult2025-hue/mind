@@ -36,6 +36,14 @@ psql "$NEON_DATABASE_URL" -f db/cer_documents.sql
 Lo script abilita l'estensione `pgcrypto` (usata per generare UUID) e crea le tabelle `cer` e `cer_documents` con i relativi
 indici.
 
+Per verificare rapidamente che la variabile `NEON_DATABASE_URL` sia impostata e che le tabelle principali siano raggiungibili puoi usare lo script di diagnostica:
+
+```bash
+npm run check:db
+```
+
+Il comando prova la connessione, elenca le tabelle presenti nello schema `public` e conteggia i record nelle tabelle chiave (`quotes`, `quote_items`, `cer`, `cer_documents`). In caso di problemi restituisce messaggi chiari sull'assenza della variabile d'ambiente o delle tabelle richieste.
+
 ## Backup locale
 
 Per generare rapidamente un archivio zip del progetto (escludendo le cartelle pesanti come `node_modules` e la cronologia Git):
